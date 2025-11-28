@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 # Current schema version
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -130,12 +130,19 @@ CREATE INDEX IF NOT EXISTS idx_notes_external ON notes(external);
 CREATE INDEX IF NOT EXISTS idx_notes_source_alias ON notes(source_alias);
 """
 
+# Phase 4 additions: mtime column for fast change detection
+SCHEMA_V5 = """
+-- Add mtime column to notes table for fast change detection
+ALTER TABLE notes ADD COLUMN mtime REAL;
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
     2: SCHEMA_V2,
     3: SCHEMA_V3,
     4: SCHEMA_V4,
+    5: SCHEMA_V5,
 }
 
 
@@ -256,3 +263,34 @@ def reset_db() -> None:
     if _db is not None:
         _db.close()
         _db = None
+
+
+def rebuild_db(db: Database) -> None:
+    """Drop all tables and recreate the schema from scratch.
+
+    This is useful when the data format has changed and a clean
+    reindex is needed.
+    """
+    # Drop all tables in reverse dependency order
+    tables = [
+        "todo_tags",
+        "note_tags",
+        "note_links",
+        "attachments",
+        "todos",
+        "notes",
+        "linked_files",
+        "linked_notes",
+        "schema_version",
+    ]
+
+    for table in tables:
+        try:
+            db.execute(f"DROP TABLE IF EXISTS {table}")
+        except Exception:
+            pass
+
+    db.commit()
+
+    # Recreate schema from scratch
+    apply_migrations(db)

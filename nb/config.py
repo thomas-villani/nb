@@ -15,7 +15,14 @@ class NotebookConfig:
     """Configuration for a notebook."""
 
     name: str
-    date_based: bool = False  # If True, uses YYYY/MM/YYYY-MM-DD.md structure
+    date_based: bool = False  # If True, uses YYYY/Week/YYYY-MM-DD.md structure
+    todo_exclude: bool = False  # If True, exclude from `nb todo` by default
+    path: Path | None = None  # External path (None = inside notes_root)
+
+    @property
+    def is_external(self) -> bool:
+        """Check if this notebook is external (outside notes_root)."""
+        return self.path is not None
 
 
 @dataclass
@@ -78,6 +85,28 @@ class Config:
         """Get list of notebook names."""
         return [nb.name for nb in self.notebooks]
 
+    def excluded_notebooks(self) -> list[str]:
+        """Get list of notebooks excluded from todo by default."""
+        return [nb.name for nb in self.notebooks if nb.todo_exclude]
+
+    def get_notebook_path(self, name: str) -> Path | None:
+        """Get the filesystem path for a notebook.
+
+        For internal notebooks, returns notes_root/name.
+        For external notebooks, returns the configured path.
+        Returns None if notebook doesn't exist.
+        """
+        nb = self.get_notebook(name)
+        if nb is None:
+            return None
+        if nb.path is not None:
+            return nb.path
+        return self.notes_root / name
+
+    def external_notebooks(self) -> list[NotebookConfig]:
+        """Get list of external notebooks."""
+        return [nb for nb in self.notebooks if nb.is_external]
+
     @property
     def nb_dir(self) -> Path:
         """Return path to .nb configuration directory."""
@@ -119,7 +148,9 @@ notes_root: ~/notes
 editor: micro
 
 # Notebook directories (created under notes_root)
-# Set date_based: true to use YYYY/MM/YYYY-MM-DD.md structure
+# Set date_based: true to use YYYY/Week/YYYY-MM-DD.md structure
+# Set todo_exclude: true to exclude from `nb todo` by default
+# Set path: to use an external directory as a notebook
 notebooks:
   - name: daily
     date_based: true     # Uses date-organized structure
@@ -129,6 +160,11 @@ notebooks:
     date_based: false    # Set to true for daily work logs
   - name: personal
     date_based: false
+    todo_exclude: true  # Uncomment to hide from `nb todo` by default
+  # External notebook example:
+  # - name: obsidian
+  #   path: ~/Documents/Obsidian/vault
+  #   date_based: false
 
 # Linked external todo files (optional)
 # linked_todos:
@@ -187,6 +223,7 @@ def _parse_notebooks(data: list[Any]) -> list[NotebookConfig]:
     """Parse notebooks configuration.
 
     Supports both old format (list of strings) and new format (list of dicts).
+    External notebooks can specify a path outside notes_root.
     """
     result = []
     for item in data:
@@ -195,11 +232,16 @@ def _parse_notebooks(data: list[Any]) -> list[NotebookConfig]:
             # "daily" is date-based by default for backwards compatibility
             result.append(NotebookConfig(name=item, date_based=(item == "daily")))
         elif isinstance(item, dict):
-            # New format: dict with name and optional date_based
+            # New format: dict with name and optional settings
+            ext_path = None
+            if "path" in item:
+                ext_path = expand_path(item["path"])
             result.append(
                 NotebookConfig(
                     name=item["name"],
                     date_based=item.get("date_based", False),
+                    todo_exclude=item.get("todo_exclude", False),
+                    path=ext_path,
                 )
             )
     return result
@@ -306,12 +348,23 @@ def save_config(config: Config) -> None:
     if config.embeddings.api_key:
         embeddings_data["api_key"] = config.embeddings.api_key
 
+    # Build notebook list with optional fields
+    notebooks_data = []
+    for nb in config.notebooks:
+        nb_dict: dict[str, Any] = {
+            "name": nb.name,
+            "date_based": nb.date_based,
+        }
+        if nb.todo_exclude:
+            nb_dict["todo_exclude"] = True
+        if nb.path is not None:
+            nb_dict["path"] = str(nb.path)
+        notebooks_data.append(nb_dict)
+
     data = {
         "notes_root": str(config.notes_root),
         "editor": config.editor,
-        "notebooks": [
-            {"name": nb.name, "date_based": nb.date_based} for nb in config.notebooks
-        ],
+        "notebooks": notebooks_data,
         "linked_todos": [
             {"path": str(lt.path), "alias": lt.alias, "sync": lt.sync}
             for lt in config.linked_todos
@@ -340,8 +393,10 @@ def ensure_directories(config: Config) -> None:
     # Create .nb directory
     config.nb_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create notebook directories
+    # Create notebook directories (skip external notebooks)
     for nb in config.notebooks:
+        if nb.is_external:
+            continue  # External notebooks manage their own directories
         notebook_path = config.notes_root / nb.name
         notebook_path.mkdir(parents=True, exist_ok=True)
 
@@ -370,6 +425,74 @@ def init_config(notes_root: Path | None = None) -> Config:
     ensure_directories(config)
 
     return config
+
+
+def add_notebook(
+    name: str,
+    date_based: bool = False,
+    todo_exclude: bool = False,
+    path: Path | None = None,
+) -> NotebookConfig:
+    """Add a new notebook to the configuration.
+
+    Args:
+        name: Name of the notebook
+        date_based: Whether to use date-based organization
+        todo_exclude: Whether to exclude from nb todo by default
+        path: External path (None for internal notebook)
+
+    Returns:
+        The created NotebookConfig
+
+    Raises:
+        ValueError: If notebook name already exists
+    """
+    config = get_config()
+
+    # Check if notebook already exists
+    if config.get_notebook(name) is not None:
+        raise ValueError(f"Notebook '{name}' already exists")
+
+    # Create the notebook config
+    nb = NotebookConfig(
+        name=name,
+        date_based=date_based,
+        todo_exclude=todo_exclude,
+        path=path,
+    )
+
+    # Add to config and save
+    config.notebooks.append(nb)
+    save_config(config)
+
+    # Create directory for internal notebooks
+    if not nb.is_external:
+        notebook_path = config.notes_root / name
+        notebook_path.mkdir(parents=True, exist_ok=True)
+
+    return nb
+
+
+def remove_notebook(name: str) -> bool:
+    """Remove a notebook from the configuration.
+
+    Note: This only removes the configuration, not the files.
+
+    Args:
+        name: Name of the notebook to remove
+
+    Returns:
+        True if removed, False if not found
+    """
+    config = get_config()
+
+    for i, nb in enumerate(config.notebooks):
+        if nb.name == name:
+            config.notebooks.pop(i)
+            save_config(config)
+            return True
+
+    return False
 
 
 # Singleton config instance

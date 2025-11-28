@@ -11,6 +11,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from nb.config import get_config
 from nb.core.todos import toggle_todo_in_file
 from nb.index.todos_repo import (
     get_sorted_todos,
@@ -18,6 +19,29 @@ from nb.index.todos_repo import (
 )
 from nb.models import Todo
 from nb.utils.dates import get_week_range
+
+
+def _format_todo_source(t: Todo) -> str:
+    """Format the source of a todo for display."""
+    if not t.source:
+        return ""
+
+    if t.source.alias:
+        # Linked file - show @alias
+        return f"@{t.source.alias}"
+    elif t.source.type == "inbox":
+        return "inbox"
+    else:
+        # Regular note - show notebook/filename
+        config = get_config()
+        try:
+            rel_path = t.source.path.relative_to(config.notes_root)
+            if len(rel_path.parts) > 1:
+                return f"{rel_path.parts[0]}/{rel_path.stem}"
+            else:
+                return rel_path.stem
+        except ValueError:
+            return t.source.path.stem
 
 
 @dataclass
@@ -28,7 +52,8 @@ class TodoViewState:
     cursor: int = 0
     show_completed: bool = False
     filter_tag: str | None = None
-    filter_project: str | None = None
+    filter_notebook: str | None = None
+    exclude_notebooks: list[str] | None = None
     message: str | None = None
 
     def current_todo(self) -> Todo | None:
@@ -62,7 +87,8 @@ class TodoViewState:
         self.todos = get_sorted_todos(
             completed=completed,
             tag=self.filter_tag,
-            project=self.filter_project,
+            notebook=self.filter_notebook,
+            exclude_notebooks=self.exclude_notebooks,
         )
         # Clamp cursor
         if self.todos:
@@ -83,10 +109,12 @@ def render_todo_table(state: TodoViewState) -> Table:
     table.add_column("", width=2)  # Cursor indicator
     table.add_column("", width=3)  # Checkbox
     table.add_column("Task", ratio=3)
-    table.add_column("Due", width=10)
+    table.add_column("Source", width=14)
+    table.add_column("Added", width=5)
+    table.add_column("Due", width=8)
     table.add_column("Pri", width=3)
-    table.add_column("Tags", width=15)
-    table.add_column("ID", width=8)
+    table.add_column("Tags", width=12)
+    table.add_column("ID", width=6)
 
     today = date.today()
     week_start, week_end = get_week_range()
@@ -104,11 +132,24 @@ def render_todo_table(state: TodoViewState) -> Table:
 
         # Task content
         content = todo.content
-        if len(content) > 40:
-            content = content[:37] + "..."
+        if len(content) > 35:
+            content = content[:32] + "..."
         content_style = "strikethrough" if todo.completed else ""
         if is_selected:
             content_style += " reverse"
+
+        # Source
+        source_str = _format_todo_source(todo)
+        if len(source_str) > 14:
+            source_str = source_str[:11] + "..."
+        source_style = "blue"
+
+        # Added (created) date
+        if todo.created_date:
+            added_str = todo.created_date.strftime("%m/%d")
+        else:
+            added_str = "-"
+        added_style = "dim"
 
         # Due date
         if todo.due_date:
@@ -138,13 +179,15 @@ def render_todo_table(state: TodoViewState) -> Table:
         tags_style = "cyan" if todo.tags else "dim"
 
         # ID
-        id_str = todo.id[:8]
+        id_str = todo.id[:6]
         id_style = "dim"
 
         table.add_row(
             Text(cursor, style=cursor_style),
             Text(checkbox, style=checkbox_style),
             Text(content, style=content_style),
+            Text(source_str, style=source_style),
+            Text(added_str, style=added_style),
             Text(due_str, style=due_style),
             Text(pri_str, style=pri_style),
             Text(tags_str, style=tags_style),
@@ -181,8 +224,8 @@ def render_view(state: TodoViewState) -> Panel:
     header.append("Todos", style="bold")
     if state.filter_tag:
         header.append(f" #{state.filter_tag}", style="cyan")
-    if state.filter_project:
-        header.append(f" @{state.filter_project}", style="magenta")
+    if state.filter_notebook:
+        header.append(f" @{state.filter_notebook}", style="magenta")
     if state.show_completed:
         header.append(" (showing completed)", style="dim")
     header.append(f" [{len(state.todos)} items]", style="dim")
@@ -251,16 +294,17 @@ def get_key() -> str:
 def run_interactive_todos(
     show_completed: bool = False,
     tag: str | None = None,
-    project: str | None = None,
+    notebook: str | None = None,
+    exclude_notebooks: list[str] | None = None,
 ) -> None:
     """Run the interactive todo viewer.
 
     Args:
         show_completed: Whether to include completed todos.
         tag: Filter by tag.
-        project: Filter by project.
+        notebook: Filter by notebook.
+        exclude_notebooks: Notebooks to exclude.
     """
-    from nb.config import get_config
     from nb.utils.editor import open_in_editor
 
     console = Console()
@@ -268,13 +312,19 @@ def run_interactive_todos(
 
     # Initial state
     completed = None if show_completed else False
-    todos = get_sorted_todos(completed=completed, tag=tag, project=project)
+    todos = get_sorted_todos(
+        completed=completed,
+        tag=tag,
+        notebook=notebook,
+        exclude_notebooks=exclude_notebooks,
+    )
 
     state = TodoViewState(
         todos=todos,
         show_completed=show_completed,
         filter_tag=tag,
-        filter_project=project,
+        filter_notebook=notebook,
+        exclude_notebooks=exclude_notebooks,
     )
 
     # Clear screen and hide cursor

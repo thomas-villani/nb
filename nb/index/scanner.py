@@ -2,38 +2,76 @@
 
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
 from nb.config import get_config
 from nb.core.notes import get_note
 from nb.core.todos import extract_todos
-from nb.index.db import get_db
+from nb.index.db import get_db, Database
 from nb.index.todos_repo import delete_todos_for_source, upsert_todo
 from nb.utils.hashing import make_note_hash
+
+# Thread-local storage for database connections
+_thread_local = threading.local()
 
 # Flag to enable/disable vector search indexing
 # Set to False to skip vector indexing (useful if embeddings not available)
 ENABLE_VECTOR_INDEXING = True
 
+# Lock for vector indexing (localvectordb may not be thread-safe)
+_vector_lock = threading.Lock()
+
+
+def _get_thread_db() -> Database:
+    """Get a thread-local database connection.
+
+    Each thread gets its own SQLite connection to avoid thread-safety issues.
+    """
+    if not hasattr(_thread_local, "db"):
+        from nb.index.db import Database, init_db
+
+        config = get_config()
+        _thread_local.db = Database(config.db_path)
+        init_db(_thread_local.db)
+    return _thread_local.db
+
 
 def scan_notes(notes_root: Path | None = None) -> list[Path]:
-    """Find all markdown files in the notes root.
+    """Find all markdown files in the notes root and external notebooks.
 
     Excludes hidden directories and .nb directory.
     """
     if notes_root is None:
         notes_root = get_config().notes_root
 
-    if not notes_root.exists():
-        return []
-
     notes = []
-    for md_file in notes_root.rglob("*.md"):
-        # Skip hidden directories and .nb
-        if any(part.startswith(".") for part in md_file.relative_to(notes_root).parts):
-            continue
-        notes.append(md_file)
+
+    # Scan notes_root
+    if notes_root.exists():
+        for md_file in notes_root.rglob("*.md"):
+            # Skip hidden directories and .nb
+            if any(
+                part.startswith(".") for part in md_file.relative_to(notes_root).parts
+            ):
+                continue
+            notes.append(md_file)
+
+    # Scan external notebooks
+    config = get_config()
+    for nb in config.external_notebooks():
+        if nb.path and nb.path.exists():
+            for md_file in nb.path.rglob("*.md"):
+                # Skip hidden directories
+                try:
+                    rel_parts = md_file.relative_to(nb.path).parts
+                    if any(part.startswith(".") for part in rel_parts):
+                        continue
+                except ValueError:
+                    continue
+                notes.append(md_file)
 
     return sorted(notes)
 
@@ -47,9 +85,13 @@ def get_file_hash(path: Path) -> str:
 def needs_reindex(path: Path, notes_root: Path | None = None) -> bool:
     """Check if a file needs to be reindexed.
 
+    Uses a two-tier check for performance:
+    1. Fast path: Compare file mtime (no file read required)
+    2. Slow path: Compare content hash (only if mtime changed)
+
     Returns True if:
     - File is not in the database
-    - File's content hash has changed
+    - File's mtime changed AND content hash changed
     """
     if notes_root is None:
         notes_root = get_config().notes_root
@@ -59,15 +101,26 @@ def needs_reindex(path: Path, notes_root: Path | None = None) -> bool:
     except ValueError:
         relative = path
 
+    # Get current file mtime
+    try:
+        current_mtime = path.stat().st_mtime
+    except OSError:
+        return True  # File doesn't exist or can't be read
+
     db = get_db()
     row = db.fetchone(
-        "SELECT content_hash FROM notes WHERE path = ?",
+        "SELECT mtime, content_hash FROM notes WHERE path = ?",
         (str(relative),),
     )
 
     if not row:
-        return True
+        return True  # New file
 
+    # Fast path: mtime unchanged means file unchanged
+    if row["mtime"] is not None and row["mtime"] == current_mtime:
+        return False
+
+    # Slow path: mtime changed, verify with content hash
     current_hash = get_file_hash(path)
     return row["content_hash"] != current_hash
 
@@ -104,13 +157,19 @@ def index_note(
     except (OSError, UnicodeDecodeError):
         content = ""
 
+    # Get file mtime for caching
+    try:
+        mtime = full_path.stat().st_mtime
+    except OSError:
+        mtime = None
+
     db = get_db()
 
-    # Upsert note (now includes content column)
+    # Upsert note (now includes content and mtime columns)
     db.execute(
         """
-        INSERT OR REPLACE INTO notes (path, title, date, notebook, content_hash, content, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO notes (path, title, date, notebook, content_hash, content, mtime, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             str(note.path),
@@ -119,6 +178,7 @@ def index_note(
             note.notebook,
             note.content_hash,
             content,
+            mtime,
             datetime.now().isoformat(),
         ),
     )
@@ -178,6 +238,7 @@ def index_all_notes(
     notes_root: Path | None = None,
     force: bool = False,
     index_vectors: bool = True,
+    max_workers: int = 4,
 ) -> int:
     """Index all notes in the notes root.
 
@@ -185,6 +246,7 @@ def index_all_notes(
         notes_root: Override notes root directory
         force: If True, reindex all files even if unchanged
         index_vectors: Whether to also index to localvectordb for search
+        max_workers: Maximum number of parallel workers (default 4)
 
     Returns:
         Number of files indexed.
@@ -193,14 +255,144 @@ def index_all_notes(
         notes_root = get_config().notes_root
 
     note_files = scan_notes(notes_root)
-    count = 0
 
-    for path in note_files:
-        if force or needs_reindex(path, notes_root):
-            index_note(path, notes_root, index_vectors=index_vectors)
-            count += 1
+    # Filter to files that need reindexing
+    files_to_index = [
+        path for path in note_files if force or needs_reindex(path, notes_root)
+    ]
+
+    if not files_to_index:
+        return 0
+
+    # For small batches or when vectors are needed, use sequential processing
+    # (vector indexing may not be thread-safe)
+    if len(files_to_index) <= 3 or (index_vectors and ENABLE_VECTOR_INDEXING):
+        count = 0
+        for path in files_to_index:
+            try:
+                index_note(path, notes_root, index_vectors=index_vectors)
+                count += 1
+            except Exception:
+                pass
+        return count
+
+    # Parallel processing for larger batches without vector indexing
+    count = 0
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(
+                _index_note_thread_safe, path, notes_root, index_vectors
+            ): path
+            for path in files_to_index
+        }
+        for future in as_completed(futures):
+            try:
+                future.result()
+                count += 1
+            except Exception:
+                # Log error but continue with other files
+                pass
 
     return count
+
+
+def _index_note_thread_safe(
+    path: Path,
+    notes_root: Path,
+    index_vectors: bool = True,
+) -> None:
+    """Thread-safe wrapper for index_note.
+
+    Uses thread-local database connections.
+    """
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    note = get_note(path, notes_root)
+    if not note:
+        return
+
+    # Read the full content for storage and vector indexing
+    if path.is_absolute():
+        full_path = path
+    else:
+        full_path = notes_root / path
+
+    try:
+        content = full_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        content = ""
+
+    # Get file mtime for caching
+    try:
+        mtime = full_path.stat().st_mtime
+    except OSError:
+        mtime = None
+
+    # Use thread-local database connection
+    db = _get_thread_db()
+
+    # Upsert note
+    db.execute(
+        """
+        INSERT OR REPLACE INTO notes (path, title, date, notebook, content_hash, content, mtime, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            str(note.path),
+            note.title,
+            note.date.isoformat() if note.date else None,
+            note.notebook,
+            note.content_hash,
+            content,
+            mtime,
+            datetime.now().isoformat(),
+        ),
+    )
+
+    # Update tags
+    db.execute("DELETE FROM note_tags WHERE note_path = ?", (str(note.path),))
+    if note.tags:
+        db.executemany(
+            "INSERT INTO note_tags (note_path, tag) VALUES (?, ?)",
+            [(str(note.path), tag) for tag in note.tags],
+        )
+
+    # Update links
+    db.execute("DELETE FROM note_links WHERE source_path = ?", (str(note.path),))
+    if note.links:
+        db.executemany(
+            "INSERT INTO note_links (source_path, target_path, display_text) VALUES (?, ?, ?)",
+            [(str(note.path), link, link) for link in note.links],
+        )
+
+    db.commit()
+
+    # Index to localvectordb for search (with lock for thread safety)
+    if index_vectors and ENABLE_VECTOR_INDEXING and content:
+        with _vector_lock:
+            try:
+                from nb.index.search import get_search
+
+                search = get_search()
+                search.index_note(note, content)
+            except Exception:
+                pass
+
+    # Index todos
+    # Determine source type
+    if full_path.name == "todo.md":
+        source_type = "inbox"
+    else:
+        source_type = "note"
+
+    # Delete existing todos for this file
+    delete_todos_for_source(full_path)
+
+    # Extract and index new todos
+    todos = extract_todos(full_path, source_type=source_type, notes_root=notes_root)
+    for todo in todos:
+        upsert_todo(todo)
 
 
 def rebuild_search_index(notes_root: Path | None = None) -> int:
@@ -446,6 +638,12 @@ def index_linked_note(
     except (OSError, UnicodeDecodeError):
         content = ""
 
+    # Get file mtime for caching
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = None
+
     db = get_db()
 
     # Use absolute path as the unique identifier for external notes
@@ -455,8 +653,8 @@ def index_linked_note(
     db.execute(
         """
         INSERT OR REPLACE INTO notes
-        (path, title, date, notebook, content_hash, content, external, source_alias, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (path, title, date, notebook, content_hash, content, mtime, external, source_alias, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             note_path,
@@ -465,6 +663,7 @@ def index_linked_note(
             notebook,
             note.content_hash,
             content,
+            mtime,
             1,  # external = True
             alias,
             datetime.now().isoformat(),

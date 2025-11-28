@@ -15,7 +15,7 @@ from nb.utils.hashing import make_attachment_id, make_todo_id
 TODO_PATTERN = re.compile(r"^(?P<indent>\s*)- \[(?P<done>[ xX])\] (?P<content>.+)$")
 DUE_PATTERN = re.compile(r"@due\((?P<date>[^)]+)\)")
 PRIORITY_PATTERN = re.compile(r"@priority\((?P<level>[123])\)")
-TAG_PATTERN = re.compile(r"#(\w+)")
+TAG_PATTERN = re.compile(r"#([^ ]+)")
 ATTACH_PATTERN = re.compile(r"^\s*@attach:\s*(.+)$")
 
 # Pattern to detect fenced code blocks
@@ -95,12 +95,10 @@ def extract_todos(
     in_code_block = False
     current_todo: Todo | None = None
 
-    # Determine project from path
-    try:
-        relative = path.relative_to(notes_root)
-        project = relative.parts[0] if len(relative.parts) > 1 else None
-    except ValueError:
-        project = None
+    # Determine project (notebook) from path
+    from nb.core.notebooks import get_notebook_for_file
+
+    project = get_notebook_for_file(path)
 
     # Get created date from file or parse from filename
     from nb.utils.dates import parse_date_from_filename
@@ -154,7 +152,7 @@ def extract_todos(
         tags = parse_tags(raw_content)
 
         todo = Todo(
-            id=make_todo_id(path, clean_content, line_num),
+            id=make_todo_id(path, clean_content),
             content=clean_content,
             raw_content=raw_content,
             completed=done,
@@ -300,7 +298,7 @@ def add_todo_to_inbox(text: str, notes_root: Path | None = None) -> Todo:
     )
 
     return Todo(
-        id=make_todo_id(inbox_path, clean_content, line_number),
+        id=make_todo_id(inbox_path, clean_content),
         content=clean_content,
         raw_content=text,
         completed=False,
@@ -334,23 +332,13 @@ def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
     Returns:
         The created Todo object.
     """
+    from nb.core.notes import ensure_daily_note
+
     if dt is None:
         dt = date.today()
 
-    config = get_config()
-
-    # Get the daily note path
-    note_path = (
-        config.notes_root / "daily" / str(dt.year) / f"{dt.month:02d}" / f"{dt}.md"
-    )
-
-    # Create the note if it doesn't exist
-    if not note_path.exists():
-        note_path.parent.mkdir(parents=True, exist_ok=True)
-        note_path.write_text(
-            f"---\ndate: {dt}\n---\n\n# {dt.strftime('%A, %B %d, %Y')}\n\n",
-            encoding="utf-8",
-        )
+    # Get the daily note path (creates if needed)
+    note_path = ensure_daily_note(dt)
 
     # Read current content
     content = note_path.read_text(encoding="utf-8")
@@ -374,7 +362,7 @@ def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
     )
 
     return Todo(
-        id=make_todo_id(note_path, clean_content, line_number),
+        id=make_todo_id(note_path, clean_content),
         content=clean_content,
         raw_content=text,
         completed=False,

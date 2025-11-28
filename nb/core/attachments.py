@@ -232,7 +232,7 @@ def attach_to_todo(
     from nb.core.todos import clean_todo_content
 
     clean_content = clean_todo_content(todo_line.split("]", 1)[-1].strip())
-    todo_id = make_todo_id(note_path, clean_content, line_number)
+    todo_id = make_todo_id(note_path, clean_content)
 
     # Create the attachment
     attachment = create_attachment(

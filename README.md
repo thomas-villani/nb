@@ -4,9 +4,11 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 
 ## Features
 
-- **Daily notes** - Automatic date-organized journal entries
+- **Daily notes** - Automatic date-organized journal entries with week-based folders
 - **Todo management** - Extract and track todos from any markdown file
+- **Multiple notebooks** - Organize notes by project, including external directories
 - **Unified search** - Keyword, semantic, and hybrid search powered by localvectordb
+- **Note streaming** - Browse notes interactively with keyboard navigation
 - **Linked files** - Index external todo files and note directories
 - **Attachments** - Attach files and URLs to notes and todos
 - **Interactive mode** - Keyboard-driven todo management
@@ -53,19 +55,40 @@ nb search "project ideas"
 ```bash
 nb                    # Open today's note (default action)
 nb today              # Same as above
+nb today -n work      # Open today's note in a specific notebook
 nb yesterday          # Open yesterday's note
 nb open "nov 25"      # Open note for a specific date
 nb open "last friday" # Fuzzy date parsing
 ```
 
+Date-based notebooks organize notes by work week:
+```
+daily/2025/Nov25-Dec01/2025-11-27.md
+```
+
 ### Notes Management
 
 ```bash
-nb new projects/idea    # Create a new note
-nb edit daily/2025-11-27  # Edit an existing note
-nb add "Quick thought"  # Append text to today's note
-nb list --week          # List this week's daily notes
-nb notebooks            # List all notebooks
+nb new projects/idea       # Create a new note
+nb new -n work             # Create today's note in work notebook
+nb new -n ideas my-idea    # Create named note in notebook
+nb edit daily/2025-11-27   # Edit an existing note
+nb add "Quick thought"     # Append text to today's note
+nb list --week             # List this week's daily notes
+nb stream daily            # Browse notes interactively
+nb stream daily -w "last week"  # Browse last week's notes
+```
+
+### Notebook Management
+
+```bash
+nb notebooks               # List all notebooks
+nb notebooks -v            # Verbose list with note counts
+nb notebooks create ideas  # Create a new notebook
+nb notebooks create work-log --date-based     # Date-based notebook
+nb notebooks create personal --todo-exclude   # Exclude from nb todo
+nb notebooks create vault --from ~/Obsidian   # External directory
+nb notebooks remove old-project               # Remove from config
 ```
 
 ### Todos
@@ -82,6 +105,8 @@ Todos are extracted from markdown files using GitHub-style checkboxes:
 
 ```bash
 nb todo                 # List all open todos
+nb todo -n daily        # Show todos from a specific notebook
+nb todo -n personal     # View excluded notebook explicitly
 nb todo --overdue       # Show overdue todos
 nb todo -t work         # Filter by tag
 nb todo -p 1            # Filter by priority (1=high, 2=medium, 3=low)
@@ -93,6 +118,9 @@ nb todo undone abc123   # Mark incomplete
 nb todo show abc123     # Show todo details
 nb todo edit abc123     # Open source file at todo line
 ```
+
+Notebooks with `todo_exclude: true` are hidden from `nb todo` by default.
+Use `-n <notebook>` to view them explicitly.
 
 #### Interactive Mode
 
@@ -176,6 +204,7 @@ nb attach open note.md --line 15
 ```bash
 nb index              # Rebuild notes and todos index
 nb index --force      # Force full reindex
+nb index --rebuild    # Drop and recreate database (for schema changes)
 nb index --embeddings # Rebuild search embeddings
 nb config             # Open config file
 ```
@@ -188,18 +217,28 @@ Configuration is stored in `~/notes/.nb/config.yaml`:
 notes_root: ~/notes
 editor: micro  # or vim, code, etc.
 
+# Notebooks (internal and external)
 notebooks:
-  - daily
-  - projects
-  - work
+  - name: daily
+    date_based: true          # Uses YYYY/Week/YYYY-MM-DD.md structure
+  - name: projects
+    date_based: false
+  - name: work
+    date_based: true
+  - name: personal
+    date_based: false
+    todo_exclude: true        # Hidden from `nb todo` by default
+  - name: obsidian
+    path: ~/Documents/Obsidian/vault   # External directory
+    date_based: false
 
-# Linked todo files
+# Linked todo files (for standalone TODO.md files)
 linked_todos:
   - path: ~/code/project/TODO.md
     alias: project
     sync: true
 
-# Linked note directories
+# Linked note directories (legacy - prefer external notebooks)
 linked_notes:
   - path: ~/docs/wiki
     alias: wiki
@@ -212,6 +251,15 @@ embeddings:
   model: nomic-embed-text
 ```
 
+### Notebook Options
+
+| Option | Description |
+|--------|-------------|
+| `name` | Notebook name (required) |
+| `date_based` | Use week-based date organization |
+| `todo_exclude` | Exclude from `nb todo` by default |
+| `path` | External directory path (makes notebook external) |
+
 ### Environment Variables
 
 - `NB_NOTES_ROOT` - Override notes root directory
@@ -221,20 +269,25 @@ embeddings:
 
 ```
 ~/notes/
-├── daily/
+├── daily/                    # Date-based notebook
 │   └── 2025/
-│       └── 11/
+│       ├── Nov18-Nov24/
+│       │   └── 2025-11-20.md
+│       └── Nov25-Dec01/      # Week folders (Mon-Sun)
 │           ├── 2025-11-26.md
 │           └── 2025-11-27.md
-├── projects/
+├── projects/                 # Flat notebook
 │   └── myproject.md
 ├── work/
-├── todo.md              # Todo inbox
+├── todo.md                   # Todo inbox
 └── .nb/
     ├── config.yaml
-    ├── index.db         # SQLite database
-    ├── vectors/         # Search embeddings
-    └── attachments/     # Copied attachments
+    ├── index.db              # SQLite database
+    ├── vectors/              # Search embeddings
+    └── attachments/          # Copied attachments
+
+# External notebook (configured via path:)
+~/Documents/Obsidian/vault/   # Indexed as "obsidian" notebook
 ```
 
 ## Note Format

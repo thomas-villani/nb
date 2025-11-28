@@ -6,6 +6,17 @@ import hashlib
 from pathlib import Path
 
 
+def normalize_path(path: Path | str) -> str:
+    """Normalize a path to a consistent string format.
+
+    Uses forward slashes for cross-platform consistency.
+    This ensures paths are stored/compared identically on Windows and Unix.
+    """
+    if isinstance(path, Path):
+        return path.as_posix()
+    return str(path).replace("\\", "/")
+
+
 def hash_content(content: str, length: int = 8) -> str:
     """Generate a SHA256 hash of content, truncated to specified length.
 
@@ -19,23 +30,23 @@ def hash_content(content: str, length: int = 8) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()[:length]
 
 
-def make_todo_id(source_path: Path, content: str, line_number: int) -> str:
+def make_todo_id(source_path: Path, content: str) -> str:
     """Generate a stable ID for a todo item.
 
     The ID is based on:
-    - Source file path
+    - Source file path (normalized)
     - Todo content (cleaned)
-    - Line number
 
     This means the ID will change if the todo is:
     - Moved to a different file
     - Has its content edited
-    - Moved to a different line
 
-    This is intentional - when a todo changes significantly,
-    it should be treated as a new todo.
+    Line number is NOT included so that reordering todos
+    (e.g., adding a new todo above) doesn't change existing IDs.
     """
-    combined = f"{source_path}:{line_number}:{content}"
+    # Normalize path for consistent IDs across platforms
+    normalized = normalize_path(source_path)
+    combined = f"{normalized}:{content}"
     return hash_content(combined)
 
 

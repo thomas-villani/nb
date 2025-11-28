@@ -71,14 +71,22 @@
 
 
 
+
+
 Tom's Notes
 -----------
-1. Should have note templates
-2. Add a command to add a todo to today's note.
-3. Refactor the link command - linking todos and notes is basically the same, shouldn't really have them separately
-4. I think all notebooks should be essentially date-based.
-5. Add an `nb -s` command to show the notebook rather than edit
-6. Allow linking notes into existing notebooks
+1. Should have note templates?
+2. [x] Add a command to add a todo to today's note.
+3. [x] Refactor the link command - linking todos and notes is basically the same, shouldn't really have them separately
+4. [x] I think all notebooks should be essentially date-based.
+5. [x] Add an `nb -s` command to show the notebook rather than edit
+6. Allow linking notes into existing notebooks?
 7. How to handle meetings? Special section in a note? Should there be other special sections in the notes too? 
    - Should I link contacts from outlook into meetings?
 8. Should be able to tag sections within notes too?
+9. Tags --- for todos and notes, this is probably wise.
+10. Need a note browser
+11. How do I add / edit notes in specific notebooks?
+12. Fix stream tui commands
+13. Having line numbers be part of the hash for todos is too fragile since often the other parts of the file may change.
+14. 

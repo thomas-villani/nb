@@ -36,11 +36,35 @@ def get_notebook_notes(notebook: str, notes_root: Path | None = None) -> list[Pa
         notes_root: Override notes root directory
 
     Returns:
-        List of relative paths to notes in the notebook.
+        List of paths to notes in the notebook.
+        For internal notebooks: relative paths from notes_root.
+        For external notebooks: absolute paths.
     """
+    config = get_config()
     if notes_root is None:
-        notes_root = get_config().notes_root
+        notes_root = config.notes_root
 
+    # Check if this is an external notebook
+    nb_config = config.get_notebook(notebook)
+    if nb_config and nb_config.is_external:
+        notebook_path = nb_config.path
+        if not notebook_path or not notebook_path.exists():
+            return []
+
+        notes = []
+        for md_file in notebook_path.rglob("*.md"):
+            # Skip hidden directories
+            try:
+                rel_parts = md_file.relative_to(notebook_path).parts
+                if any(part.startswith(".") for part in rel_parts):
+                    continue
+            except ValueError:
+                continue
+            # Return absolute paths for external notebooks
+            notes.append(md_file)
+        return sorted(notes)
+
+    # Internal notebook
     notebook_path = notes_root / notebook
     if not notebook_path.exists():
         return []
@@ -126,6 +150,36 @@ def is_notebook_date_based(notebook: str) -> bool:
     return notebook == "daily"
 
 
+def get_notebook_for_file(path: Path) -> str | None:
+    """Determine which notebook a file belongs to.
+
+    Checks both internal notebooks (under notes_root) and external notebooks.
+
+    Args:
+        path: Absolute path to the file
+
+    Returns:
+        Notebook name, or None if not in any notebook.
+    """
+    config = get_config()
+
+    # Check external notebooks first (they have explicit paths)
+    for nb in config.external_notebooks():
+        if nb.path and path.is_relative_to(nb.path):
+            return nb.name
+
+    # Check internal notebooks (under notes_root)
+    try:
+        relative = path.relative_to(config.notes_root)
+        if len(relative.parts) > 0:
+            # First directory component is the notebook
+            return relative.parts[0]
+    except ValueError:
+        pass
+
+    return None
+
+
 def get_notebook_note_path(
     notebook: str,
     dt: date | None = None,
@@ -133,8 +187,10 @@ def get_notebook_note_path(
 ) -> Path:
     """Get the path for a note in a notebook.
 
-    For date-based notebooks, creates path like: notebook/YYYY/MM/YYYY-MM-DD.md
-    For flat notebooks, creates path like: notebook/name.md
+    For date-based notebooks, creates path like: base/YYYY/Nov25-Dec01/YYYY-MM-DD.md
+    (organized by work week, Monday-Sunday)
+
+    For flat notebooks, creates path like: base/name.md
 
     Args:
         notebook: Name of the notebook
@@ -145,23 +201,33 @@ def get_notebook_note_path(
         Full path to the note file.
 
     Raises:
-        ValueError: If name is required but not provided.
+        ValueError: If name is required but not provided, or notebook doesn't exist.
     """
+    from nb.utils.dates import get_week_folder_name
+
     config = get_config()
+    nb_config = config.get_notebook(notebook)
+
+    # Determine base path (external path or notes_root/notebook)
+    if nb_config and nb_config.is_external:
+        if not nb_config.path:
+            raise ValueError(f"External notebook '{notebook}' has no path configured")
+        base_path = nb_config.path
+    else:
+        base_path = config.notes_root / notebook
 
     if is_notebook_date_based(notebook):
         if dt is None:
             dt = date.today()
-        return (
-            config.notes_root / notebook / str(dt.year) / f"{dt.month:02d}" / f"{dt}.md"
-        )
+        week_folder = get_week_folder_name(dt)
+        return base_path / str(dt.year) / week_folder / f"{dt}.md"
     else:
         if name is None:
             raise ValueError(f"Name required for non-date-based notebook: {notebook}")
         # Ensure .md extension
         if not name.endswith(".md"):
             name = f"{name}.md"
-        return config.notes_root / notebook / name
+        return base_path / name
 
 
 def ensure_notebook_note(

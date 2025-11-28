@@ -81,16 +81,43 @@ def main(ctx: click.Context, show: bool) -> None:
 
 
 @main.command()
+@click.option("--notebook", "-n", help="Notebook to create today's note in")
 @click.pass_context
-def today(ctx: click.Context) -> None:
-    """Open today's daily note."""
+def today(ctx: click.Context, notebook: str | None) -> None:
+    """Open today's note.
+
+    By default opens today's daily note. Use -n to specify a different notebook.
+
+    \b
+    Examples:
+      nb today           # Today's note in 'daily'
+      nb today -n work   # Today's note in 'work' notebook
+    """
+    from nb.core.notebooks import is_notebook_date_based, ensure_notebook_note
+
     dt = date.today()
-    path = ensure_daily_note(dt)
+
+    if notebook:
+        # Create today's note in specified notebook
+        if is_notebook_date_based(notebook):
+            # Use date-based structure
+            path = ensure_notebook_note(notebook, dt=dt)
+        else:
+            # Use today's date as filename
+            path = ensure_notebook_note(notebook, name=dt.isoformat())
+    else:
+        # Default: daily notebook
+        path = ensure_daily_note(dt)
 
     if ctx.obj and ctx.obj.get("show"):
         print_note(path)
     else:
-        console.print(f"[dim]Opening {path.name}...[/dim]")
+        config = get_config()
+        try:
+            rel_path = path.relative_to(config.notes_root)
+        except ValueError:
+            rel_path = path
+        console.print(f"[dim]Opening {rel_path}...[/dim]")
         open_note(path)
 
 
@@ -109,10 +136,11 @@ def yesterday(ctx: click.Context) -> None:
 
 
 @main.command("t")
+@click.option("--notebook", "-n", help="Notebook to create today's note in")
 @click.pass_context
-def today_alias(ctx: click.Context) -> None:
+def today_alias(ctx: click.Context, notebook: str | None) -> None:
     """Alias for 'today'."""
-    ctx.invoke(today)
+    ctx.invoke(today, notebook=notebook)
 
 
 @main.command("y")
@@ -174,21 +202,98 @@ def open_alias(ctx: click.Context, date_str: str) -> None:
 
 
 @main.command("new")
-@click.argument("path")
+@click.argument("path", required=False)
+@click.option("--notebook", "-n", help="Notebook to create the note in")
 @click.option("--title", "-t", help="Title for the note")
-def new_note(path: str, title: str | None) -> None:
+def new_note(path: str | None, notebook: str | None, title: str | None) -> None:
     """Create a new note.
 
-    PATH is the location for the note (e.g., "projects/myproject/ideas").
+    PATH is the location for the note. Can be:
+    - A full path: "projects/myproject/ideas"
+    - Just a name: "ideas" (requires --notebook)
+    - Omitted if notebook is date-based (creates today's note)
+
     The .md extension is added automatically if not present.
+
+    \b
+    Examples:
+      nb new -n daily           # Today's note in daily (date-based)
+      nb new ideas -n projects  # projects/ideas.md
+      nb new projects/roadmap   # projects/roadmap.md
     """
+    from nb.core.notebooks import is_notebook_date_based, ensure_notebook_note
+
+    config = get_config()
+
+    # If notebook specified but no path, check if it's date-based
+    if notebook and not path:
+        if is_notebook_date_based(notebook):
+            # Create/open today's note in this date-based notebook
+            full_path = ensure_notebook_note(notebook)
+            console.print(
+                f"[green]Opening:[/green] {full_path.relative_to(config.notes_root)}"
+            )
+            open_note(full_path)
+            return
+        else:
+            console.print(f"[yellow]Notebook '{notebook}' is not date-based.[/yellow]")
+            console.print(f"Please provide a note name: nb new <name> -n {notebook}")
+            raise SystemExit(1)
+
+    # If no path and no notebook, show help
+    if not path:
+        console.print("[yellow]Usage: nb new <name> --notebook <notebook>[/yellow]")
+        console.print("       nb new -n <date-based-notebook>  # Creates today's note")
+        console.print("\nAvailable notebooks:")
+        for nb in config.notebooks:
+            date_hint = " (date-based)" if nb.date_based else ""
+            console.print(f"  - {nb.name}{date_hint}")
+        raise SystemExit(1)
+
+    note_path = Path(path)
+
+    # If notebook specified and path doesn't include a notebook, prepend it
+    if notebook:
+        # Check if notebook exists
+        notebook_names = [nb.name for nb in config.notebooks]
+        if notebook not in notebook_names:
+            console.print(
+                f"[yellow]Warning: '{notebook}' is not a configured notebook.[/yellow]"
+            )
+            console.print(f"Available notebooks: {', '.join(notebook_names)}")
+            # Still allow it - might be intentional
+
+        # If path doesn't already start with the notebook, prepend it
+        if not str(note_path).startswith(notebook):
+            note_path = Path(notebook) / note_path
+
+    # If path doesn't include a notebook dir and none specified, check if it matches a notebook
+    elif len(note_path.parts) == 1:
+        # Single name - could be a notebook name or a note name
+        notebook_names = [nb.name for nb in config.notebooks]
+
+        # If it's a notebook name, probably a mistake
+        if path in notebook_names:
+            console.print(
+                f"[yellow]'{path}' is a notebook name. Did you mean:[/yellow]"
+            )
+            console.print(f"  nb {path}      # Open today's note in {path}")
+            console.print(f"  nb new <name> -n {path}  # Create a note in {path}")
+            raise SystemExit(1)
+
+        # Otherwise, ask which notebook
+        console.print(f"[yellow]No notebook specified for '{path}'.[/yellow]")
+        console.print("Use --notebook/-n to specify, or provide full path:")
+        for nb in config.notebooks:
+            console.print(f"  nb new {path} -n {nb.name}")
+        raise SystemExit(1)
+
     try:
-        note_path = Path(path)
         full_path = create_note(note_path, title=title)
         console.print(f"[green]Created:[/green] {note_path}")
         open_note(full_path)
     except FileExistsError:
-        console.print(f"[red]Note already exists:[/red] {path}")
+        console.print(f"[red]Note already exists:[/red] {note_path}")
         raise SystemExit(1)
 
 
@@ -214,11 +319,22 @@ def edit_note(path: str) -> None:
     open_note(full_path)
 
 
-@main.command("notebooks")
+@main.group("notebooks", invoke_without_command=True)
 @click.option("--verbose", "-v", is_flag=True, help="Show note counts")
-def notebooks_cmd(verbose: bool) -> None:
+@click.pass_context
+def notebooks_cmd(ctx: click.Context, verbose: bool) -> None:
+    """Manage notebooks.
+
+    Run without a subcommand to list all notebooks.
+    """
+    if ctx.invoked_subcommand is None:
+        _list_notebooks(verbose)
+
+
+def _list_notebooks(verbose: bool = False) -> None:
     """List all notebooks."""
-    nbs = list_notebooks()
+    config = get_config()
+    nbs = config.notebooks
 
     if not nbs:
         console.print("[dim]No notebooks found.[/dim]")
@@ -227,16 +343,145 @@ def notebooks_cmd(verbose: bool) -> None:
     if verbose:
         table = Table(show_header=True)
         table.add_column("Notebook")
+        table.add_column("Type")
         table.add_column("Notes", justify="right")
+        table.add_column("Path")
 
         for nb in nbs:
-            notes = get_notebook_notes(nb)
-            table.add_row(nb, str(len(notes)))
+            nb_path = config.get_notebook_path(nb.name)
+            if nb_path and nb_path.exists():
+                notes = get_notebook_notes(nb.name)
+                note_count = str(len(notes))
+            else:
+                note_count = "[dim]-[/dim]"
+
+            nb_type_parts = []
+            if nb.date_based:
+                nb_type_parts.append("date")
+            if nb.todo_exclude:
+                nb_type_parts.append("excl")
+            if nb.is_external:
+                nb_type_parts.append("ext")
+            nb_type = ", ".join(nb_type_parts) if nb_type_parts else "-"
+
+            path_display = str(nb.path) if nb.is_external else f"~/{nb.name}"
+            table.add_row(nb.name, nb_type, note_count, path_display)
 
         console.print(table)
     else:
         for nb in nbs:
-            console.print(nb)
+            suffix = ""
+            if nb.is_external:
+                suffix = f" [dim](external: {nb.path})[/dim]"
+            elif nb.date_based:
+                suffix = " [dim](date-based)[/dim]"
+            console.print(f"{nb.name}{suffix}")
+
+
+@notebooks_cmd.command("list")
+@click.option("--verbose", "-v", is_flag=True, help="Show details")
+def notebooks_list(verbose: bool) -> None:
+    """List all notebooks."""
+    _list_notebooks(verbose)
+
+
+@notebooks_cmd.command("create")
+@click.argument("name")
+@click.option("--from", "from_path", help="External path to use as notebook")
+@click.option("--date-based", "-d", is_flag=True, help="Use date-based organization")
+@click.option(
+    "--todo-exclude", "-x", is_flag=True, help="Exclude from nb todo by default"
+)
+def notebooks_create(
+    name: str,
+    from_path: str | None,
+    date_based: bool,
+    todo_exclude: bool,
+) -> None:
+    """Create a new notebook.
+
+    Examples:
+        nb notebooks create ideas
+        nb notebooks create work-log --date-based
+        nb notebooks create obsidian --from ~/Documents/Obsidian/vault
+        nb notebooks create personal --todo-exclude
+    """
+    from nb.config import add_notebook, expand_path
+
+    # Validate external path if provided
+    ext_path = None
+    if from_path:
+        ext_path = expand_path(from_path)
+        if not ext_path.exists():
+            console.print(f"[red]Path does not exist:[/red] {ext_path}")
+            raise SystemExit(1)
+        if not ext_path.is_dir():
+            console.print(f"[red]Path is not a directory:[/red] {ext_path}")
+            raise SystemExit(1)
+
+    try:
+        nb = add_notebook(
+            name=name,
+            date_based=date_based,
+            todo_exclude=todo_exclude,
+            path=ext_path,
+        )
+
+        if nb.is_external:
+            console.print(
+                f"[green]Created external notebook:[/green] {name} -> {ext_path}"
+            )
+        else:
+            config = get_config()
+            console.print(f"[green]Created notebook:[/green] {name}")
+            console.print(f"[dim]Location: {config.notes_root / name}[/dim]")
+
+        if date_based:
+            console.print(
+                "[dim]Using date-based organization (YYYY/Week/YYYY-MM-DD.md)[/dim]"
+            )
+        if todo_exclude:
+            console.print("[dim]Excluded from nb todo by default[/dim]")
+
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise SystemExit(1)
+
+
+@notebooks_cmd.command("remove")
+@click.argument("name")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
+def notebooks_remove(name: str, yes: bool) -> None:
+    """Remove a notebook from configuration.
+
+    Note: This only removes the notebook from nb's configuration.
+    The actual files are NOT deleted.
+    """
+    from nb.config import remove_notebook
+
+    config = get_config()
+    nb = config.get_notebook(name)
+
+    if nb is None:
+        console.print(f"[red]Notebook not found:[/red] {name}")
+        raise SystemExit(1)
+
+    if not yes:
+        if nb.is_external:
+            console.print(f"Remove external notebook '{name}' from configuration?")
+            console.print(f"[dim]Path: {nb.path}[/dim]")
+        else:
+            console.print(f"Remove notebook '{name}' from configuration?")
+            console.print("[dim]Files will NOT be deleted.[/dim]")
+
+        if not click.confirm("Continue?"):
+            console.print("[dim]Cancelled.[/dim]")
+            return
+
+    if remove_notebook(name):
+        console.print(f"[green]Removed notebook:[/green] {name}")
+    else:
+        console.print(f"[red]Failed to remove notebook:[/red] {name}")
 
 
 @main.command("nbs")
@@ -326,7 +571,7 @@ def list_notes_cmd(notebook: str | None, week: bool, month: bool) -> None:
 @click.option("--overdue", is_flag=True, help="Show only overdue todos")
 @click.option("--priority", "-p", type=int, help="Filter by priority (1, 2, or 3)")
 @click.option("--tag", "-t", help="Filter by tag")
-@click.option("--project", help="Filter by project")
+@click.option("--notebook", "-n", help="Filter by notebook (overrides exclusions)")
 @click.option("--all", "show_all", is_flag=True, help="Include completed todos")
 @click.option("-i", "--interactive", is_flag=True, help="Open interactive todo viewer")
 @click.pass_context
@@ -337,7 +582,7 @@ def todo(
     overdue: bool,
     priority: int | None,
     tag: str | None,
-    project: str | None,
+    notebook: str | None,
     show_all: bool,
     interactive: bool,
 ) -> None:
@@ -345,10 +590,17 @@ def todo(
 
     Run 'nb todo' without a subcommand to list todos.
     Use -i for interactive mode with keyboard navigation.
+
+    Notebooks with todo_exclude: true in config are hidden by default.
+    Use -n <notebook> to view a specific notebook (including excluded ones).
     """
     if ctx.invoked_subcommand is None:
-        # Ensure todos are indexed
-        index_all_notes()
+        # Ensure todos are indexed (skip vector indexing for speed)
+        index_all_notes(index_vectors=False)
+
+        # Get excluded notebooks from config (unless a specific notebook is requested)
+        config = get_config()
+        exclude_notebooks = None if notebook else config.excluded_notebooks() or None
 
         if interactive:
             # Launch interactive viewer
@@ -357,7 +609,8 @@ def todo(
             run_interactive_todos(
                 show_completed=show_all,
                 tag=tag,
-                project=project,
+                notebook=notebook,
+                exclude_notebooks=exclude_notebooks,
             )
         else:
             # Default: list todos
@@ -367,7 +620,8 @@ def todo(
                 overdue=overdue,
                 priority=priority,
                 tag=tag,
-                project=project,
+                notebook=notebook,
+                exclude_notebooks=exclude_notebooks,
                 show_all=show_all,
             )
 
@@ -378,7 +632,8 @@ def _list_todos(
     overdue: bool = False,
     priority: int | None = None,
     tag: str | None = None,
-    project: str | None = None,
+    notebook: str | None = None,
+    exclude_notebooks: list[str] | None = None,
     show_all: bool = False,
 ) -> None:
     """List todos with optional filters."""
@@ -391,11 +646,16 @@ def _list_todos(
             overdue=True,
             priority=priority,
             tag=tag,
-            project=project,
+            notebook=notebook,
+            exclude_notebooks=exclude_notebooks,
         )
     else:
         todos = get_sorted_todos(
-            completed=completed, priority=priority, tag=tag, project=project
+            completed=completed,
+            priority=priority,
+            tag=tag,
+            notebook=notebook,
+            exclude_notebooks=exclude_notebooks,
         )
 
     if not todos:
@@ -437,6 +697,29 @@ def _list_todos(
             _print_todo(t, indent=0)
 
 
+def _format_todo_source(t) -> str:
+    """Format the source of a todo for display."""
+    if not t.source:
+        return ""
+
+    if t.source.alias:
+        # Linked file - show @alias
+        return f"@{t.source.alias}"
+    elif t.source.type == "inbox":
+        return "inbox"
+    else:
+        # Regular note - show notebook/filename
+        config = get_config()
+        try:
+            rel_path = t.source.path.relative_to(config.notes_root)
+            if len(rel_path.parts) > 1:
+                return f"{rel_path.parts[0]}/{rel_path.stem}"
+            else:
+                return rel_path.stem
+        except ValueError:
+            return t.source.path.stem
+
+
 def _print_todo(t, indent: int = 0) -> None:
     """Print a single todo with formatting."""
     prefix = "  " * indent
@@ -447,6 +730,17 @@ def _print_todo(t, indent: int = 0) -> None:
 
     # Add metadata
     meta_parts = []
+
+    # Add source info
+    source_str = _format_todo_source(t)
+    if source_str:
+        meta_parts.append(f"[blue]{source_str}[/blue]")
+
+    # Add created date
+    if t.created_date:
+        created_str = t.created_date.strftime("%m/%d")
+        meta_parts.append(f"[dim]+{created_str}[/dim]")
+
     if t.due_date:
         due_str = t.due_date.strftime("%b %d")
         if t.is_overdue:
@@ -914,9 +1208,30 @@ def grep_cmd(pattern: str, context_lines: int, ignore_case: bool) -> None:
 
 @main.command("index")
 @click.option("--force", "-f", is_flag=True, help="Force reindex all files")
+@click.option("--rebuild", is_flag=True, help="Drop and recreate the database")
 @click.option("--embeddings", "-e", is_flag=True, help="Rebuild search embeddings")
-def index_cmd(force: bool, embeddings: bool) -> None:
-    """Rebuild the notes and todos index."""
+def index_cmd(force: bool, rebuild: bool, embeddings: bool) -> None:
+    """Rebuild the notes and todos index.
+
+    Incrementally indexes new and modified files. Use --force to reindex
+    all files, or --rebuild to drop and recreate the database entirely.
+
+    \b
+    Examples:
+      nb index               # Index new/changed files
+      nb index --force       # Reindex all files
+      nb index --rebuild     # Drop database and reindex (fixes schema issues)
+      nb index --embeddings  # Rebuild semantic search vectors
+    """
+    if rebuild:
+        console.print("[yellow]Rebuilding database from scratch...[/yellow]")
+        from nb.index.db import get_db, rebuild_db
+
+        db = get_db()
+        rebuild_db(db)
+        console.print("[green]Database rebuilt.[/green]")
+        force = True  # Force reindex after rebuild
+
     console.print("[dim]Indexing notes...[/dim]")
     count = index_all_notes(force=force)
     console.print(f"[green]Indexed {count} files.[/green]")
@@ -932,6 +1247,127 @@ def index_cmd(force: bool, embeddings: bool) -> None:
     console.print(f"Todos: {stats['open']} open, {stats['completed']} completed")
     if stats["overdue"]:
         console.print(f"[red]{stats['overdue']} overdue[/red]")
+
+
+# =============================================================================
+# Stream Command
+# =============================================================================
+
+
+@main.command("stream")
+@click.argument("notebook", required=False)
+@click.option(
+    "--when", "-w", help="Date range: 'last week', 'this week', 'last 3 days'"
+)
+@click.option("--since", help="Start from this date")
+@click.option("--until", help="End at this date")
+@click.option("--reverse", "-r", is_flag=True, help="Show oldest first")
+def stream_notes(
+    notebook: str | None,
+    when: str | None,
+    since: str | None,
+    until: str | None,
+    reverse: bool,
+) -> None:
+    """Browse notes interactively in a streaming view.
+
+    Navigate through notes with keyboard controls:
+
+    \b
+    j/k or arrows  - Scroll within note
+    n/N or p       - Next/previous note
+    g/G            - First/last note (or top/bottom of current)
+    d/u            - Half-page down/up
+    e              - Edit current note
+    q              - Quit
+
+    Examples:
+
+    \b
+      nb stream                      # Stream all notes
+      nb stream daily                # Stream daily notes
+      nb stream -w "last week"       # Last week's notes
+      nb stream -w "this week"       # This week's notes
+      nb stream daily -w "last 2 weeks"  # Daily notes from last 2 weeks
+    """
+    from nb.index.db import get_db
+    from nb.models import Note
+    from nb.tui.stream import run_note_stream
+    from nb.utils.dates import parse_fuzzy_date, parse_date_range
+    from datetime import date as date_type
+
+    config = get_config()
+    db = get_db()
+
+    # Build query
+    query = "SELECT path, title, date, notebook FROM notes WHERE 1=1"
+    params: list = []
+
+    # Filter by notebook
+    if notebook:
+        query += " AND notebook = ?"
+        params.append(notebook)
+
+    # Filter by date range
+    # --when takes precedence and uses parse_date_range for week support
+    if when:
+        start, end = parse_date_range(when)
+        if start:
+            query += " AND date >= ?"
+            params.append(start.isoformat())
+        if end:
+            query += " AND date <= ?"
+            params.append(end.isoformat())
+    else:
+        if since:
+            since_date = parse_fuzzy_date(since)
+            if since_date:
+                query += " AND date >= ?"
+                params.append(since_date.isoformat())
+
+        if until:
+            until_date = parse_fuzzy_date(until)
+            if until_date:
+                query += " AND date <= ?"
+                params.append(until_date.isoformat())
+
+    # Order by date
+    if reverse:
+        query += " ORDER BY date ASC"
+    else:
+        query += " ORDER BY date DESC"
+
+    rows = db.fetchall(query, tuple(params))
+
+    if not rows:
+        console.print("[yellow]No notes found.[/yellow]")
+        return
+
+    # Convert to Note objects
+    notes = []
+    for row in rows:
+        note_date = None
+        if row["date"]:
+            try:
+                note_date = date_type.fromisoformat(row["date"])
+            except ValueError:
+                pass
+
+        notes.append(
+            Note(
+                path=Path(row["path"]),
+                title=row["title"] or "",
+                date=note_date,
+                tags=[],
+                links=[],
+                attachments=[],
+                notebook=row["notebook"] or "",
+                content_hash="",
+            )
+        )
+
+    console.print(f"[dim]Loading {len(notes)} notes...[/dim]")
+    run_note_stream(notes, config.notes_root)
 
 
 # =============================================================================
@@ -1463,7 +1899,7 @@ def attach_open(target: str, line: int | None) -> None:
 @click.pass_context
 def todo_alias(ctx: click.Context) -> None:
     """Alias for 'todo' (list todos)."""
-    index_all_notes()
+    index_all_notes(index_vectors=False)
     todos = get_sorted_todos(completed=False)
     if not todos:
         console.print("[dim]No todos found.[/dim]")

@@ -23,14 +23,16 @@ from nb.utils.markdown import (
 def get_daily_note_path(dt: date, notes_root: Path | None = None) -> Path:
     """Get the path for a daily note.
 
-    Daily notes are stored as: daily/YYYY/MM/YYYY-MM-DD.md
+    Daily notes are stored as: daily/YYYY/Nov25-Dec01/YYYY-MM-DD.md
+    (organized by work week, Monday-Sunday)
     """
+    from nb.utils.dates import get_week_folder_name
+
     if notes_root is None:
         notes_root = get_config().notes_root
 
-    return (
-        notes_root / "daily" / str(dt.year) / f"{dt.month:02d}" / f"{dt.isoformat()}.md"
-    )
+    week_folder = get_week_folder_name(dt)
+    return notes_root / "daily" / str(dt.year) / week_folder / f"{dt.isoformat()}.md"
 
 
 def ensure_daily_note(dt: date, notes_root: Path | None = None) -> Path:

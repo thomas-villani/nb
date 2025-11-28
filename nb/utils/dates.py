@@ -164,6 +164,68 @@ def get_week_range(dt: date | None = None) -> tuple[date, date]:
     return start, end
 
 
+def get_week_folder_name(dt: date | None = None) -> str:
+    """Get the week folder name for a date (e.g., 'Nov25-Dec01').
+
+    Uses Monday-Sunday week boundaries.
+    """
+    if dt is None:
+        dt = date.today()
+    start, end = get_week_range(dt)
+    # Format: Nov25-Dec01
+    return f"{start.strftime('%b%d')}-{end.strftime('%b%d')}"
+
+
+def parse_week_folder_name(folder_name: str, year: int) -> tuple[date, date] | None:
+    """Parse a week folder name back to start and end dates.
+
+    Args:
+        folder_name: e.g., 'Nov25-Dec01'
+        year: The year (from parent folder)
+
+    Returns:
+        Tuple of (start_date, end_date) or None if parsing fails.
+    """
+    match = re.match(r"^([A-Za-z]{3})(\d{1,2})-([A-Za-z]{3})(\d{1,2})$", folder_name)
+    if not match:
+        return None
+
+    start_month_str, start_day_str, end_month_str, end_day_str = match.groups()
+
+    try:
+        # Parse start date
+        start_date = dateutil_parser.parse(
+            f"{start_month_str} {start_day_str} {year}"
+        ).date()
+
+        # Parse end date - might be in next year if week crosses year boundary
+        end_date = dateutil_parser.parse(f"{end_month_str} {end_day_str} {year}").date()
+
+        # If end is before start, it crosses year boundary
+        if end_date < start_date:
+            end_date = dateutil_parser.parse(
+                f"{end_month_str} {end_day_str} {year + 1}"
+            ).date()
+
+        return start_date, end_date
+    except (ValueError, TypeError):
+        return None
+
+
+def get_weeks_ago(n: int) -> tuple[date, date]:
+    """Get the date range for N weeks ago.
+
+    Args:
+        n: Number of weeks ago (0 = this week, 1 = last week, etc.)
+
+    Returns:
+        Tuple of (start_date, end_date) for that week.
+    """
+    today = date.today()
+    target = today - timedelta(weeks=n)
+    return get_week_range(target)
+
+
 def get_month_range(dt: date | None = None) -> tuple[date, date]:
     """Get the first and last day of the month containing dt."""
     if dt is None:

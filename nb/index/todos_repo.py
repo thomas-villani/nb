@@ -7,6 +7,7 @@ from pathlib import Path
 
 from nb.index.db import get_db
 from nb.models import Priority, Todo, TodoSource
+from nb.utils.hashing import normalize_path
 
 
 def _row_to_todo(row) -> Todo:
@@ -65,7 +66,7 @@ def upsert_todo(todo: Todo) -> None:
             todo.raw_content,
             1 if todo.completed else 0,
             todo.source.type,
-            str(todo.source.path),
+            normalize_path(todo.source.path),
             1 if todo.source.external else 0,
             todo.source.alias,
             todo.line_number,
@@ -110,9 +111,24 @@ def delete_todo(todo_id: str) -> None:
 
 
 def delete_todos_for_source(source_path: Path) -> None:
-    """Delete all todos from a specific source file."""
+    """Delete all todos from a specific source file.
+
+    Handles both normalized (forward slashes) and legacy (backslashes) paths
+    for backward compatibility with existing data.
+    """
     db = get_db()
-    db.execute("DELETE FROM todos WHERE source_path = ?", (str(source_path),))
+    normalized = normalize_path(source_path)
+    # Also try the original str() representation for legacy data
+    legacy = str(source_path)
+
+    if normalized != legacy:
+        # Delete both normalized and legacy paths
+        db.execute(
+            "DELETE FROM todos WHERE source_path = ? OR source_path = ?",
+            (normalized, legacy),
+        )
+    else:
+        db.execute("DELETE FROM todos WHERE source_path = ?", (normalized,))
     db.commit()
 
 
@@ -132,7 +148,8 @@ def query_todos(
     due_end: date | None = None,
     overdue: bool = False,
     priority: int | None = None,
-    project: str | None = None,
+    notebook: str | None = None,
+    exclude_notebooks: list[str] | None = None,
     tag: str | None = None,
     source_path: Path | None = None,
     parent_only: bool = True,
@@ -145,7 +162,8 @@ def query_todos(
         due_end: Filter by due date <= this
         overdue: Only include overdue todos
         priority: Filter by priority level (1, 2, or 3)
-        project: Filter by project name
+        notebook: Filter by notebook name (stored as project)
+        exclude_notebooks: List of notebooks to exclude
         tag: Filter by tag
         source_path: Filter by source file path
         parent_only: If True, only return top-level todos (not subtasks)
@@ -186,13 +204,18 @@ def query_todos(
         conditions.append("t.priority = ?")
         params.append(priority)
 
-    if project:
+    if notebook:
         conditions.append("t.project = ?")
-        params.append(project)
+        params.append(notebook)
+
+    if exclude_notebooks:
+        placeholders = ", ".join("?" for _ in exclude_notebooks)
+        conditions.append(f"(t.project IS NULL OR t.project NOT IN ({placeholders}))")
+        params.extend(exclude_notebooks)
 
     if source_path:
         conditions.append("t.source_path = ?")
-        params.append(str(source_path))
+        params.append(normalize_path(source_path))
 
     if parent_only:
         conditions.append("t.parent_id IS NULL")
@@ -233,7 +256,8 @@ def get_todo_children(parent_id: str) -> list[Todo]:
 def get_sorted_todos(
     completed: bool | None = False,
     tag: str | None = None,
-    project: str | None = None,
+    notebook: str | None = None,
+    exclude_notebooks: list[str] | None = None,
     priority: int | None = None,
 ) -> list[Todo]:
     """Get todos sorted by the default sorting order.
@@ -250,7 +274,8 @@ def get_sorted_todos(
     todos = query_todos(
         completed=completed,
         tag=tag,
-        project=project,
+        notebook=notebook,
+        exclude_notebooks=exclude_notebooks,
         priority=priority,
         parent_only=True,
     )
