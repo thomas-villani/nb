@@ -11,6 +11,9 @@ dependencies = [
     "python-frontmatter>=1.0", # yaml frontmatter
     "rich>=13.0",              # pretty printing in CLI
 ]
+[project.scripts]
+nb = "nb.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",

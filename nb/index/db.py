@@ -1,0 +1,231 @@
+"""SQLite database management for nb."""
+
+from __future__ import annotations
+
+import sqlite3
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Iterator
+
+# Current schema version
+SCHEMA_VERSION = 2
+
+# Phase 1 schema: notes, tags, links
+SCHEMA_V1 = """
+-- Schema version tracking
+CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY
+);
+
+-- Notes
+CREATE TABLE IF NOT EXISTS notes (
+    path TEXT PRIMARY KEY,
+    title TEXT,
+    date TEXT,
+    notebook TEXT,
+    content_hash TEXT,
+    updated_at TEXT
+);
+
+-- Note tags (many-to-many)
+CREATE TABLE IF NOT EXISTS note_tags (
+    note_path TEXT REFERENCES notes(path) ON DELETE CASCADE,
+    tag TEXT,
+    PRIMARY KEY (note_path, tag)
+);
+
+-- Note links (wiki-style links between notes)
+CREATE TABLE IF NOT EXISTS note_links (
+    source_path TEXT REFERENCES notes(path) ON DELETE CASCADE,
+    target_path TEXT,
+    display_text TEXT,
+    PRIMARY KEY (source_path, target_path)
+);
+
+-- Indexes for notes
+CREATE INDEX IF NOT EXISTS idx_notes_date ON notes(date);
+CREATE INDEX IF NOT EXISTS idx_notes_notebook ON notes(notebook);
+CREATE INDEX IF NOT EXISTS idx_note_tags_tag ON note_tags(tag);
+"""
+
+# Phase 2 additions: todos
+SCHEMA_V2 = """
+-- Todos
+CREATE TABLE IF NOT EXISTS todos (
+    id TEXT PRIMARY KEY,
+    content TEXT,
+    raw_content TEXT,
+    completed INTEGER DEFAULT 0,
+    source_type TEXT,
+    source_path TEXT,
+    source_external INTEGER DEFAULT 0,
+    source_alias TEXT,
+    line_number INTEGER,
+    created_date TEXT,
+    due_date TEXT,
+    priority INTEGER,
+    project TEXT,
+    parent_id TEXT REFERENCES todos(id) ON DELETE CASCADE,
+    content_hash TEXT
+);
+
+-- Todo tags (many-to-many)
+CREATE TABLE IF NOT EXISTS todo_tags (
+    todo_id TEXT REFERENCES todos(id) ON DELETE CASCADE,
+    tag TEXT,
+    PRIMARY KEY (todo_id, tag)
+);
+
+-- Attachments (polymorphic: can belong to note or todo)
+CREATE TABLE IF NOT EXISTS attachments (
+    id TEXT PRIMARY KEY,
+    parent_type TEXT,
+    parent_id TEXT,
+    type TEXT,
+    path TEXT,
+    title TEXT,
+    added_date TEXT,
+    copied INTEGER DEFAULT 0
+);
+
+-- Linked external todo files
+CREATE TABLE IF NOT EXISTS linked_files (
+    alias TEXT PRIMARY KEY,
+    path TEXT UNIQUE,
+    sync INTEGER DEFAULT 1
+);
+
+-- Indexes for todos
+CREATE INDEX IF NOT EXISTS idx_todos_due ON todos(due_date);
+CREATE INDEX IF NOT EXISTS idx_todos_completed ON todos(completed);
+CREATE INDEX IF NOT EXISTS idx_todos_project ON todos(project);
+CREATE INDEX IF NOT EXISTS idx_todos_source ON todos(source_path);
+CREATE INDEX IF NOT EXISTS idx_todos_parent ON todos(parent_id);
+CREATE INDEX IF NOT EXISTS idx_todo_tags_tag ON todo_tags(tag);
+CREATE INDEX IF NOT EXISTS idx_attachments_parent ON attachments(parent_type, parent_id);
+"""
+
+# Migration scripts (indexed by target version)
+MIGRATIONS: dict[int, str] = {
+    1: SCHEMA_V1,
+    2: SCHEMA_V2,
+}
+
+
+class Database:
+    """SQLite database connection manager."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self._conn: sqlite3.Connection | None = None
+
+    def connect(self) -> sqlite3.Connection:
+        """Get or create a database connection."""
+        if self._conn is None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self._conn = sqlite3.connect(self.path)
+            self._conn.row_factory = sqlite3.Row
+            # Enable foreign keys
+            self._conn.execute("PRAGMA foreign_keys = ON")
+        return self._conn
+
+    def close(self) -> None:
+        """Close the database connection."""
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
+
+    @contextmanager
+    def transaction(self) -> Iterator[sqlite3.Connection]:
+        """Context manager for database transactions."""
+        conn = self.connect()
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Cursor:
+        """Execute a SQL statement."""
+        return self.connect().execute(sql, params)
+
+    def executemany(self, sql: str, params: list[tuple[Any, ...]]) -> None:
+        """Execute a SQL statement for multiple parameter sets."""
+        self.connect().executemany(sql, params)
+
+    def fetchone(self, sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
+        """Execute a query and fetch one row."""
+        return self.execute(sql, params).fetchone()
+
+    def fetchall(self, sql: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
+        """Execute a query and fetch all rows."""
+        return self.execute(sql, params).fetchall()
+
+    def commit(self) -> None:
+        """Commit the current transaction."""
+        if self._conn is not None:
+            self._conn.commit()
+
+
+def get_schema_version(db: Database) -> int:
+    """Get the current schema version, or 0 if not initialized."""
+    try:
+        row = db.fetchone("SELECT version FROM schema_version")
+        return row["version"] if row else 0
+    except sqlite3.OperationalError:
+        # Table doesn't exist
+        return 0
+
+
+def set_schema_version(db: Database, version: int) -> None:
+    """Set the schema version."""
+    db.execute("DELETE FROM schema_version")
+    db.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+    db.commit()
+
+
+def apply_migrations(db: Database) -> None:
+    """Apply any pending schema migrations."""
+    current = get_schema_version(db)
+
+    for version in sorted(MIGRATIONS.keys()):
+        if version > current:
+            # Apply this migration
+            db.connect().executescript(MIGRATIONS[version])
+            set_schema_version(db, version)
+
+
+def init_db(db: Database) -> None:
+    """Initialize the database schema.
+
+    Creates tables if they don't exist and applies any pending migrations.
+    """
+    apply_migrations(db)
+
+
+# Singleton database instance
+_db: Database | None = None
+
+
+def get_db() -> Database:
+    """Get the global database instance.
+
+    Initializes the database on first call.
+    """
+    global _db
+    if _db is None:
+        from nb.config import get_config
+
+        config = get_config()
+        _db = Database(config.db_path)
+        init_db(_db)
+    return _db
+
+
+def reset_db() -> None:
+    """Reset the database instance (useful for testing)."""
+    global _db
+    if _db is not None:
+        _db.close()
+        _db = None

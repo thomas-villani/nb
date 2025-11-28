@@ -87,15 +87,15 @@ Some thoughts on the design...
 
 ### Syntax Elements
 
-| Element | Syntax | Example |
-|---------|--------|---------|
-| Todo | `- [ ]` / `- [x]` | `- [ ] Task here` |
-| Due date | `@due(...)` | `@due(friday)`, `@due(2025-12-01)`, `@due(next week)` |
-| Priority | `@priority(1\|2\|3)` | `@priority(1)` (1=high, 3=low) |
-| Tag | `#tag` | `#urgent #work` |
-| Attachment | `@attach: <path>` | `@attach: ~/docs/file.pdf` |
-| Wiki link | `[[path\|title]]` | `[[projects/api/design\|API Design]]` |
-| Subtask | Indented todo | `  - [ ] Subtask` |
+| Element    | Syntax               | Example                                               |
+|------------|----------------------|-------------------------------------------------------|
+| Todo       | `- [ ]` / `- [x]`    | `- [ ] Task here`                                     |
+| Due date   | `@due(...)`          | `@due(friday)`, `@due(2025-12-01)`, `@due(next week)` |
+| Priority   | `@priority(1\|2\|3)` | `@priority(1)` (1=high, 3=low)                        |
+| Tag        | `#tag`               | `#urgent #work`                                       |
+| Attachment | `@attach: <path>`    | `@attach: ~/docs/file.pdf`                            |
+| Link       | `[title](path)`      | `[API Design](projects/api/design)`                   |
+| Subtask    | Indented todo        | `  - [ ] Subtask`                                     |
 
 ---
 
@@ -695,24 +695,24 @@ def toggle_todo(todo_id: str) -> bool:
 
 ## Implementation Phases
 
-### Phase 1: Core Foundation
-- [ ] Project scaffolding, config, CLI skeleton
-- [ ] Note model, daily note creation/opening
-- [ ] Basic notebook support
-- [ ] SQLite schema and migrations
+### Phase 1: Core Foundation ✅
+- [x] Project scaffolding, config, CLI skeleton
+- [x] Note model, daily note creation/opening
+- [x] Basic notebook support
+- [x] SQLite schema and migrations
 
-### Phase 2: Todo System
-- [ ] Todo extraction from markdown
-- [ ] Todo listing with filters and sorting
-- [ ] Completion toggling with source sync
-- [ ] Subtask support
-- [ ] `todo.md` inbox
+### Phase 2: Todo System ✅
+- [x] Todo extraction from markdown
+- [x] Todo listing with filters and sorting
+- [x] Completion toggling with source sync
+- [x] Subtask support
+- [x] `todo.md` inbox
 
 ### Phase 3: Search & Index
-- [ ] Filesystem scanner with change detection
+- [x] Filesystem scanner with change detection
 - [ ] FTS5 keyword search
 - [ ] localvectordb semantic search integration
-- [ ] Tag and backlink indexing
+- [x] Tag and backlink indexing
 
 ### Phase 4: TUI
 - [ ] Wijjit todo list view
