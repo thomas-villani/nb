@@ -65,19 +65,21 @@ def ensure_setup() -> None:
 @click.option(
     "-s", "--show", is_flag=True, help="Print note to console instead of opening editor"
 )
+@click.option("--notebook", "-n", help="Notebook for default today action")
 @click.pass_context
-def main(ctx: click.Context, show: bool) -> None:
+def main(ctx: click.Context, show: bool, notebook: str | None) -> None:
     """A plaintext-first note-taking and todo management CLI.
 
     Run 'nb' without arguments to open today's daily note.
     Use -s to print the note to console instead.
+    Use -n to specify a notebook for the default action.
     """
     ensure_setup()
     ctx.ensure_object(dict)
     ctx.obj["show"] = show
     if ctx.invoked_subcommand is None:
         # Default action: open today's note
-        ctx.invoke(today)
+        ctx.invoke(today, notebook=notebook)
 
 
 @main.command()
@@ -151,21 +153,82 @@ def yesterday_alias(ctx: click.Context) -> None:
 
 
 @main.command("open")
-@click.argument("date_str")
+@click.argument("note_ref")
+@click.option("--notebook", "-n", help="Notebook to open the note from")
 @click.pass_context
-def open_date(ctx: click.Context, date_str: str) -> None:
-    """Open a note for a specific date.
+def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
+    """Open a note by date or name.
 
-    DATE_STR can be:
+    NOTE_REF can be:
     - A date like "2025-11-26" or "nov 26"
     - A relative date like "friday" or "last monday"
+    - A note name (when used with -n for non-date-based notebooks)
     - A path to a note file
+
+    \b
+    Examples:
+      nb open friday              # Open Friday's daily note
+      nb open "last monday"       # Open last Monday's note
+      nb open myproject -n ideas  # Open ideas/myproject.md
+      nb open friday -n work      # Open Friday in work notebook
     """
+    from nb.core.notebooks import (
+        is_notebook_date_based,
+        ensure_notebook_note,
+        get_notebook_note_path,
+    )
+
     config = get_config()
     show = ctx.obj and ctx.obj.get("show")
 
+    # If notebook is specified, handle it
+    if notebook:
+        # Check if it's a date-based notebook
+        if is_notebook_date_based(notebook):
+            # Try to parse as a date
+            parsed = parse_fuzzy_date(note_ref)
+            if parsed:
+                note_path = ensure_notebook_note(notebook, dt=parsed)
+                if show:
+                    print_note(note_path)
+                else:
+                    try:
+                        rel_path = note_path.relative_to(config.notes_root)
+                    except ValueError:
+                        rel_path = note_path
+                    console.print(f"[dim]Opening {rel_path}...[/dim]")
+                    open_note(note_path)
+                return
+            else:
+                console.print(f"[red]Could not parse date: {note_ref}[/red]")
+                raise SystemExit(1)
+        else:
+            # Non-date-based notebook: treat note_ref as a name
+            try:
+                note_path = get_notebook_note_path(notebook, name=note_ref)
+            except ValueError as e:
+                console.print(f"[red]{e}[/red]")
+                raise SystemExit(1)
+
+            if not note_path.exists():
+                console.print(f"[red]Note not found: {notebook}/{note_ref}[/red]")
+                raise SystemExit(1)
+
+            if show:
+                print_note(note_path)
+            else:
+                try:
+                    rel_path = note_path.relative_to(config.notes_root)
+                except ValueError:
+                    rel_path = note_path
+                console.print(f"[dim]Opening {rel_path}...[/dim]")
+                open_note(note_path)
+            return
+
+    # No notebook specified - use original behavior
+
     # First check if it's a path to an existing note
-    path = Path(date_str)
+    path = Path(note_ref)
     if not path.suffix:
         path = path.with_suffix(".md")
 
@@ -179,7 +242,7 @@ def open_date(ctx: click.Context, date_str: str) -> None:
         return
 
     # Try to parse as a date
-    parsed = parse_fuzzy_date(date_str)
+    parsed = parse_fuzzy_date(note_ref)
     if parsed:
         note_path = ensure_daily_note(parsed)
         if show:
@@ -189,16 +252,114 @@ def open_date(ctx: click.Context, date_str: str) -> None:
             open_note(note_path)
         return
 
-    console.print(f"[red]Could not parse date: {date_str}[/red]")
+    console.print(f"[red]Could not parse date: {note_ref}[/red]")
     raise SystemExit(1)
 
 
 @main.command("o")
-@click.argument("date_str")
+@click.argument("note_ref")
+@click.option("--notebook", "-n", help="Notebook to open the note from")
 @click.pass_context
-def open_alias(ctx: click.Context, date_str: str) -> None:
+def open_alias(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
     """Alias for 'open'."""
-    ctx.invoke(open_date, date_str=date_str)
+    ctx.invoke(open_date, note_ref=note_ref, notebook=notebook)
+
+
+@main.command("show")
+@click.argument("note_ref", required=False)
+@click.option("--notebook", "-n", help="Notebook to show the note from")
+def show_note(note_ref: str | None, notebook: str | None) -> None:
+    """Print a note to the console.
+
+    NOTE_REF can be:
+    - A date like "2025-11-26" or "nov 26"
+    - A relative date like "friday" or "last monday"
+    - A note name (when used with -n for non-date-based notebooks)
+    - A path to a note file
+    - Omitted to show today's note
+
+    \b
+    Examples:
+      nb show                     # Show today's daily note
+      nb show friday              # Show Friday's daily note
+      nb show -n work             # Show today's note in work notebook
+      nb show friday -n work      # Show Friday in work notebook
+      nb show myproject -n ideas  # Show ideas/myproject.md
+    """
+    from nb.core.notebooks import (
+        is_notebook_date_based,
+        ensure_notebook_note,
+        get_notebook_note_path,
+    )
+
+    config = get_config()
+
+    # If no note_ref provided, default to today
+    if note_ref is None:
+        note_ref = "today"
+
+    # Handle "today" specially
+    if note_ref.lower() == "today":
+        dt = date.today()
+        if notebook:
+            if is_notebook_date_based(notebook):
+                note_path = ensure_notebook_note(notebook, dt=dt)
+            else:
+                # For non-date-based, use today's date as name
+                note_path = ensure_notebook_note(notebook, name=dt.isoformat())
+        else:
+            note_path = ensure_daily_note(dt)
+        print_note(note_path)
+        return
+
+    # If notebook is specified, handle it
+    if notebook:
+        if is_notebook_date_based(notebook):
+            # Try to parse as a date
+            parsed = parse_fuzzy_date(note_ref)
+            if parsed:
+                note_path = ensure_notebook_note(notebook, dt=parsed)
+                print_note(note_path)
+                return
+            else:
+                console.print(f"[red]Could not parse date: {note_ref}[/red]")
+                raise SystemExit(1)
+        else:
+            # Non-date-based notebook: treat note_ref as a name
+            try:
+                note_path = get_notebook_note_path(notebook, name=note_ref)
+            except ValueError as e:
+                console.print(f"[red]{e}[/red]")
+                raise SystemExit(1)
+
+            if not note_path.exists():
+                console.print(f"[red]Note not found: {notebook}/{note_ref}[/red]")
+                raise SystemExit(1)
+
+            print_note(note_path)
+            return
+
+    # No notebook specified - check if it's a path or parse as date
+
+    # First check if it's a path to an existing note
+    path = Path(note_ref)
+    if not path.suffix:
+        path = path.with_suffix(".md")
+
+    full_path = config.notes_root / path
+    if full_path.exists():
+        print_note(full_path)
+        return
+
+    # Try to parse as a date
+    parsed = parse_fuzzy_date(note_ref)
+    if parsed:
+        note_path = ensure_daily_note(parsed)
+        print_note(note_path)
+        return
+
+    console.print(f"[red]Could not parse date: {note_ref}[/red]")
+    raise SystemExit(1)
 
 
 @main.command("new")
@@ -1255,7 +1416,7 @@ def index_cmd(force: bool, rebuild: bool, embeddings: bool) -> None:
 
 
 @main.command("stream")
-@click.argument("notebook", required=False)
+@click.option("--notebook", "-n", help="Filter by notebook")
 @click.option(
     "--when", "-w", help="Date range: 'last week', 'this week', 'last 3 days'"
 )
@@ -1274,7 +1435,8 @@ def stream_notes(
     Navigate through notes with keyboard controls:
 
     \b
-    j/k or arrows  - Scroll within note
+    j/k or ↑/↓     - Scroll within note
+    ←/→ or PgUp/Dn - Previous/next note
     n/N or p       - Next/previous note
     g/G            - First/last note (or top/bottom of current)
     d/u            - Half-page down/up
@@ -1285,10 +1447,10 @@ def stream_notes(
 
     \b
       nb stream                      # Stream all notes
-      nb stream daily                # Stream daily notes
+      nb stream -n daily             # Stream daily notes
       nb stream -w "last week"       # Last week's notes
       nb stream -w "this week"       # This week's notes
-      nb stream daily -w "last 2 weeks"  # Daily notes from last 2 weeks
+      nb stream -n daily -w "last 2 weeks"  # Daily notes from last 2 weeks
     """
     from nb.index.db import get_db
     from nb.models import Note

@@ -114,6 +114,10 @@ def get_key() -> str:
                 return "up"
             elif ch2 == b"P":
                 return "down"
+            elif ch2 == b"K":  # Left arrow
+                return "left"
+            elif ch2 == b"M":  # Right arrow
+                return "right"
             elif ch2 == b"I":  # Page Up
                 return "pageup"
             elif ch2 == b"Q":  # Page Down
@@ -137,6 +141,10 @@ def get_key() -> str:
                         return "up"
                     elif ch3 == "B":
                         return "down"
+                    elif ch3 == "C":  # Right arrow
+                        return "right"
+                    elif ch3 == "D":  # Left arrow
+                        return "left"
                     elif ch3 == "5":
                         sys.stdin.read(1)  # consume ~
                         return "pageup"
@@ -185,10 +193,10 @@ def render_header(state: StreamState) -> Panel:
 def render_help_bar() -> Text:
     """Render the help bar with keyboard shortcuts."""
     help_text = Text()
-    help_text.append(" j/k ", style="bold cyan")
+    help_text.append(" j/k/↑/↓ ", style="bold cyan")
     help_text.append("scroll  ")
-    help_text.append(" n/N ", style="bold cyan")
-    help_text.append("next/prev  ")
+    help_text.append(" ←/→/PgUp/PgDn ", style="bold cyan")
+    help_text.append("prev/next  ")
     help_text.append(" g/G ", style="bold cyan")
     help_text.append("top/bottom  ")
     help_text.append(" e ", style="bold cyan")
@@ -282,17 +290,17 @@ def run_note_stream(
         elif key in ("k", "up"):  # Scroll up
             state.scroll_up()
 
-        elif key == "d" or key == "pagedown":  # Half page down
+        elif key == "d":  # Half page down
             state.scroll_down(state.terminal_height // 2)
 
-        elif key == "u" or key == "pageup":  # Half page up
+        elif key == "u":  # Half page up
             state.scroll_up(state.terminal_height // 2)
 
-        elif key == "n":  # Next note
+        elif key in ("n", "right", "pagedown"):  # Next note
             if not state.next_note():
                 state.message = "Last note"
 
-        elif key in ("N", "p"):  # Previous note
+        elif key in ("N", "p", "left", "pageup"):  # Previous note
             if not state.prev_note():
                 state.message = "First note"
 

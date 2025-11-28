@@ -38,6 +38,9 @@ pip install -e .
 # Open today's daily note
 nb
 
+# Show today's note in console (instead of opening editor)
+nb -s
+
 # Add a todo
 nb todo add "Review pull request @due(friday) #work"
 
@@ -53,12 +56,25 @@ nb search "project ideas"
 ### Daily Notes
 
 ```bash
-nb                    # Open today's note (default action)
-nb today              # Same as above
-nb today -n work      # Open today's note in a specific notebook
-nb yesterday          # Open yesterday's note
-nb open "nov 25"      # Open note for a specific date
-nb open "last friday" # Fuzzy date parsing
+nb                        # Open today's note (default action)
+nb -n work                # Open today's note in work notebook
+nb -s                     # Show today's note in console
+nb -s -n work             # Show today's note in work notebook
+
+nb today                  # Same as `nb`
+nb today -n work          # Today's note in work notebook
+nb yesterday              # Open yesterday's note
+
+nb open "nov 25"          # Open note for a specific date
+nb open "last friday"     # Fuzzy date parsing
+nb open friday -n work    # Open Friday's note in work notebook
+nb open myproject -n ideas  # Open ideas/myproject.md
+
+nb show                   # Show today's note in console
+nb show friday            # Show Friday's daily note
+nb show -n work           # Show today in work notebook
+nb show friday -n work    # Show Friday in work notebook
+nb show myproject -n ideas  # Show ideas/myproject.md
 ```
 
 Date-based notebooks organize notes by work week:
@@ -75,8 +91,12 @@ nb new -n ideas my-idea    # Create named note in notebook
 nb edit daily/2025-11-27   # Edit an existing note
 nb add "Quick thought"     # Append text to today's note
 nb list --week             # List this week's daily notes
-nb stream daily            # Browse notes interactively
-nb stream daily -w "last week"  # Browse last week's notes
+nb list -n work            # List notes in work notebook
+
+nb stream                  # Browse all notes interactively
+nb stream -n daily         # Browse daily notes
+nb stream -w "last week"   # Browse last week's notes
+nb stream -n daily -w "last 2 weeks"  # Daily notes from last 2 weeks
 ```
 
 ### Notebook Management
@@ -98,7 +118,7 @@ Todos are extracted from markdown files using GitHub-style checkboxes:
 ```markdown
 - [ ] Task to do @due(friday) @priority(1) #urgent
 - [x] Completed task
-  - [ ] Subtask
+  - [ ] Subtask (nested todos are supported)
 ```
 
 #### Commands
@@ -113,6 +133,7 @@ nb todo -p 1            # Filter by priority (1=high, 2=medium, 3=low)
 nb todo --all           # Include completed todos
 
 nb todo add "New task"  # Add to inbox (todo.md)
+nb todo add --today "Call dentist"  # Add to today's note
 nb todo done abc123     # Mark complete (by ID prefix)
 nb todo undone abc123   # Mark incomplete
 nb todo show abc123     # Show todo details
@@ -136,14 +157,6 @@ Keyboard shortcuts:
 - `g/G` - Jump to top/bottom
 - `q` - Quit
 
-#### Metadata Syntax
-
-| Element | Syntax | Example |
-|---------|--------|---------|
-| Due date | `@due(...)` | `@due(friday)`, `@due(2025-12-01)`, `@due(next week)` |
-| Priority | `@priority(1\|2\|3)` | `@priority(1)` (1=high) |
-| Tag | `#tag` | `#work #urgent` |
-
 ### Search
 
 ```bash
@@ -152,6 +165,9 @@ nb search -s "query"    # Semantic search only
 nb search -k "query"    # Keyword search only
 nb search -t mytag      # Filter by tag
 nb search -n daily      # Filter by notebook
+nb search "query" --when "last 2 weeks"  # Date range filter
+nb search "query" --since friday         # From a date onwards
+nb search "query" --recent               # Boost recent results
 
 nb grep "pattern"       # Regex search
 nb grep "TODO.*urgent" -C 5  # With context lines
@@ -178,12 +194,12 @@ With `--sync` (default), completing a todo updates the source file.
 Link external note files or directories to make them searchable:
 
 ```bash
-nb link note add ~/docs/wiki
-nb link note add ~/vault --alias vault --notebook @vault
-nb link note add ~/docs --no-recursive
-nb link note list
-nb link note sync
-nb link note remove wiki
+nb link add ~/docs/wiki --notes-only
+nb link add ~/vault --alias vault -n @vault
+nb link add ~/docs --no-recursive
+nb link list
+nb link sync
+nb link remove wiki
 ```
 
 Linked notes appear under a virtual notebook (prefixed with `@` by default).
@@ -292,23 +308,99 @@ embeddings:
 
 ## Note Format
 
+Notes are markdown files with optional YAML frontmatter.
+
+### Frontmatter
+
+Frontmatter is optional YAML metadata at the top of the file:
+
+```yaml
+---
+date: 2025-11-27
+title: Meeting Notes
+tags: [meeting, project, quarterly]
+---
+```
+
+| Field | Description |
+|-------|-------------|
+| `date` | Note date (YYYY-MM-DD format) |
+| `title` | Note title (used in search results) |
+| `tags` | List of tags for filtering |
+
+### Todos
+
+Todos use GitHub-style checkboxes with optional metadata:
+
+```markdown
+- [ ] Incomplete task
+- [x] Completed task
+  - [ ] Nested subtask
+  - [x] Completed subtask
+```
+
+#### Todo Metadata
+
+Metadata can be added inline after the todo text:
+
+| Element | Syntax | Examples |
+|---------|--------|----------|
+| Due date | `@due(...)` | `@due(friday)`, `@due(2025-12-01)`, `@due(next week)`, `@due(tomorrow)` |
+| Priority | `@priority(1\|2\|3)` | `@priority(1)` (1=high, 2=medium, 3=low) |
+| Tags | `#tag` | `#work`, `#urgent`, `#project-alpha` |
+
+Example todos with metadata:
+
+```markdown
+- [ ] Review PR for new feature @due(friday) @priority(1) #code-review
+- [ ] Schedule team meeting @due(next monday) #meetings
+- [ ] Update documentation @priority(2) #docs #maintenance
+- [x] Send project update email #communication
+```
+
+### Attachments
+
+Attach files or URLs to notes using the `@attach:` syntax:
+
+```markdown
+@attach: ~/Documents/spec.pdf
+@attach: ./relative/path/to/file.png
+@attach: https://example.com/resource
+@attach: [Custom Title](~/path/to/file.pdf)
+```
+
+### Complete Example
+
 ```markdown
 ---
 date: 2025-11-27
-tags: [meeting, project]
+title: Project Kickoff Meeting
+tags: [meeting, project, quarterly]
 ---
 
-# Meeting Notes
+# Project Kickoff Meeting
 
-Discussed the new feature with the team.
+Met with the team to discuss Q1 priorities.
+
+## Attendees
+
+- Alice, Bob, Charlie
+
+## Discussion
+
+Reviewed the roadmap and assigned initial tasks.
 
 ## Action Items
 
-- [ ] Write documentation @due(friday) @priority(1) #docs
-- [ ] Review PR #1234 #work
-- [x] Send update email
+- [ ] Write project specification @due(friday) @priority(1) #docs
+- [ ] Set up CI/CD pipeline @due(next week) @priority(2) #devops
+- [ ] Review competitor analysis @due(dec 15) #research
+- [x] Send meeting notes to stakeholders #communication
 
-@attach: ~/docs/spec.pdf
+## Attachments
+
+@attach: ~/Documents/roadmap-2025.pdf
+@attach: https://wiki.company.com/project-alpha
 ```
 
 ## Aliases
@@ -323,6 +415,17 @@ Discussed the new feature with the team.
 | `td` | `todo` |
 | `ta` | `todo add` |
 | `nbs` | `notebooks` |
+
+## Global Options
+
+These options work with the main `nb` command:
+
+| Option | Description |
+|--------|-------------|
+| `-s, --show` | Print note to console instead of opening editor |
+| `-n, --notebook` | Specify notebook for the default (today) action |
+| `--version` | Show version number |
+| `--help` | Show help message |
 
 ## Development
 
