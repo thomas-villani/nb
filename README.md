@@ -162,11 +162,13 @@ nb todo open-attach <id> [n]    # open nth attachment
 --all                           # include completed
 ```
 
-### Linked Todo Files
+### Linked Notes and Todo Files
+
+I want to be able to add files that 
 
 ```bash
 nb link list                    # list linked files
-nb link add <path> --alias <name> [--sync|--no-sync]
+nb link add <path> [--alias <name>] [--sync|--no-sync]
 nb link remove <alias>
 ```
 
@@ -713,6 +715,9 @@ def toggle_todo(todo_id: str) -> bool:
 - [ ] FTS5 keyword search
 - [ ] localvectordb semantic search integration
 - [x] Tag and backlink indexing
+- [ ] Linked external todo files
+- [ ] Attachments (link + copy modes), with searchable
+
 
 ### Phase 4: TUI
 - [ ] Wijjit todo list view
@@ -721,8 +726,6 @@ def toggle_todo(todo_id: str) -> bool:
 - [ ] Interactive filtering
 
 ### Phase 5: Advanced Features
-- [ ] Linked external todo files
-- [ ] Attachments (link + copy modes)
 - [ ] Wiki-link navigation
 - [ ] Due date reminders (optional)
 
