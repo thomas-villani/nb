@@ -285,6 +285,7 @@ def list_notes_cmd(notebook: str | None, week: bool, month: bool) -> None:
 @click.option("--tag", "-t", help="Filter by tag")
 @click.option("--project", help="Filter by project")
 @click.option("--all", "show_all", is_flag=True, help="Include completed todos")
+@click.option("-i", "--interactive", is_flag=True, help="Open interactive todo viewer")
 @click.pass_context
 def todo(
     ctx: click.Context,
@@ -295,22 +296,37 @@ def todo(
     tag: str | None,
     project: str | None,
     show_all: bool,
+    interactive: bool,
 ) -> None:
     """Manage todos.
 
     Run 'nb todo' without a subcommand to list todos.
+    Use -i for interactive mode with keyboard navigation.
     """
     if ctx.invoked_subcommand is None:
-        # Default: list todos
-        _list_todos(
-            filter_today=filter_today,
-            filter_week=filter_week,
-            overdue=overdue,
-            priority=priority,
-            tag=tag,
-            project=project,
-            show_all=show_all,
-        )
+        # Ensure todos are indexed
+        index_all_notes()
+
+        if interactive:
+            # Launch interactive viewer
+            from nb.tui.todos import run_interactive_todos
+
+            run_interactive_todos(
+                show_completed=show_all,
+                tag=tag,
+                project=project,
+            )
+        else:
+            # Default: list todos
+            _list_todos(
+                filter_today=filter_today,
+                filter_week=filter_week,
+                overdue=overdue,
+                priority=priority,
+                tag=tag,
+                project=project,
+                show_all=show_all,
+            )
 
 
 def _list_todos(
@@ -323,9 +339,6 @@ def _list_todos(
     show_all: bool = False,
 ) -> None:
     """List todos with optional filters."""
-    # First, ensure todos are indexed
-    index_all_notes()
-
     # Determine completion filter
     completed = None if show_all else False
 
@@ -464,11 +477,16 @@ def todo_done(todo_id: str) -> None:
         return
 
     # Toggle in source file
-    if toggle_todo_in_file(t.source.path, t.line_number):
-        update_todo_completion(t.id, True)
-        console.print(f"[green]Completed:[/green] {t.content}")
-    else:
-        console.print("[red]Failed to update todo in source file.[/red]")
+    try:
+        if toggle_todo_in_file(t.source.path, t.line_number):
+            update_todo_completion(t.id, True)
+            console.print(f"[green]Completed:[/green] {t.content}")
+        else:
+            console.print("[red]Failed to update todo in source file.[/red]")
+            raise SystemExit(1)
+    except PermissionError as e:
+        console.print(f"[red]{e}[/red]")
+        console.print("[dim]Use 'nb link' to enable sync for this file.[/dim]")
         raise SystemExit(1)
 
 
@@ -489,11 +507,16 @@ def todo_undone(todo_id: str) -> None:
         return
 
     # Toggle in source file
-    if toggle_todo_in_file(t.source.path, t.line_number):
-        update_todo_completion(t.id, False)
-        console.print(f"[green]Reopened:[/green] {t.content}")
-    else:
-        console.print("[red]Failed to update todo in source file.[/red]")
+    try:
+        if toggle_todo_in_file(t.source.path, t.line_number):
+            update_todo_completion(t.id, False)
+            console.print(f"[green]Reopened:[/green] {t.content}")
+        else:
+            console.print("[red]Failed to update todo in source file.[/red]")
+            raise SystemExit(1)
+    except PermissionError as e:
+        console.print(f"[red]{e}[/red]")
+        console.print("[dim]Use 'nb link' to enable sync for this file.[/dim]")
         raise SystemExit(1)
 
 
@@ -574,22 +597,813 @@ def _find_todo(todo_id: str):
 
 
 # =============================================================================
+# Search Commands
+# =============================================================================
+
+
+@main.command("search")
+@click.argument("query")
+@click.option(
+    "-s", "--semantic", is_flag=True, help="Use pure semantic search (no keyword)"
+)
+@click.option(
+    "-k", "--keyword", is_flag=True, help="Use pure keyword search (no semantic)"
+)
+@click.option("-t", "--tag", help="Filter by tag")
+@click.option("--notebook", "-n", help="Filter by notebook")
+@click.option("--limit", default=20, help="Max results")
+def search_cmd(
+    query: str,
+    semantic: bool,
+    keyword: bool,
+    tag: str | None,
+    notebook: str | None,
+    limit: int,
+) -> None:
+    """Search notes by keyword, semantic similarity, or both (hybrid).
+
+    By default uses hybrid search (70% semantic, 30% keyword).
+    Use --semantic for pure semantic search, --keyword for pure keyword search.
+
+    Examples:
+        nb search "machine learning"
+        nb search -s "project ideas"
+        nb search -k "TODO" --notebook daily
+    """
+    from nb.index.search import get_search
+
+    # Determine search type
+    if semantic and keyword:
+        console.print("[red]Cannot use both --semantic and --keyword[/red]")
+        raise SystemExit(1)
+    elif semantic:
+        search_type = "vector"
+    elif keyword:
+        search_type = "keyword"
+    else:
+        search_type = "hybrid"
+
+    # Build filters
+    filters = {}
+    if tag:
+        filters["tags"] = {"$contains": tag}
+    if notebook:
+        filters["notebook"] = notebook
+
+    try:
+        search = get_search()
+        results = search.search(
+            query,
+            search_type=search_type,
+            k=limit,
+            filters=filters if filters else None,
+        )
+    except Exception as e:
+        console.print(f"[red]Search failed:[/red] {e}")
+        console.print(
+            "[dim]Make sure the index is built and embeddings are available.[/dim]"
+        )
+        raise SystemExit(1)
+
+    if not results:
+        console.print("[dim]No results found.[/dim]")
+        return
+
+    console.print(f"\n[bold]Found {len(results)} results:[/bold]\n")
+
+    for r in results:
+        # Display path and title
+        title = r.title or Path(r.path).stem
+        console.print(f"[bold cyan]{r.path}[/bold cyan]")
+        console.print(f"  [bold]{title}[/bold]")
+
+        # Display score and metadata
+        meta_parts = [f"score: {r.score:.3f}"]
+        if r.notebook:
+            meta_parts.append(f"notebook: {r.notebook}")
+        if r.date:
+            meta_parts.append(f"date: {r.date}")
+        console.print(f"  [dim]{' | '.join(meta_parts)}[/dim]")
+
+        # Display snippet
+        if r.snippet:
+            snippet = r.snippet.replace("\n", " ").strip()
+            if len(snippet) > 150:
+                snippet = snippet[:150] + "..."
+            console.print(f"  [dim]{snippet}[/dim]")
+
+        console.print()
+
+
+@main.command("s")
+@click.argument("query")
+@click.pass_context
+def search_alias(ctx: click.Context, query: str) -> None:
+    """Alias for 'search' (hybrid search)."""
+    ctx.invoke(search_cmd, query=query)
+
+
+@main.command("ss")
+@click.argument("query")
+@click.pass_context
+def semantic_search_alias(ctx: click.Context, query: str) -> None:
+    """Alias for 'search --semantic'."""
+    ctx.invoke(search_cmd, query=query, semantic=True)
+
+
+@main.command("grep")
+@click.argument("pattern")
+@click.option("-C", "--context", "context_lines", default=2, help="Context lines")
+@click.option(
+    "-i", "--ignore-case/--case-sensitive", default=True, help="Case sensitivity"
+)
+def grep_cmd(pattern: str, context_lines: int, ignore_case: bool) -> None:
+    """Search notes with regex pattern matching.
+
+    Unlike 'search', this performs raw regex matching on the files.
+    Useful for finding exact strings, code snippets, or patterns.
+
+    Examples:
+        nb grep "TODO.*urgent"
+        nb grep "def\\s+\\w+" -C 5
+        nb grep "API_KEY" --case-sensitive
+    """
+    from nb.index.search import grep_notes
+
+    config = get_config()
+
+    try:
+        results = grep_notes(
+            pattern,
+            config.notes_root,
+            context_lines=context_lines,
+            case_sensitive=not ignore_case,
+        )
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+
+    if not results:
+        console.print("[dim]No matches found.[/dim]")
+        return
+
+    console.print(f"\n[bold]Found {len(results)} matches:[/bold]\n")
+
+    current_file = None
+    for r in results:
+        # Print file header when it changes
+        if r.path != current_file:
+            if current_file is not None:
+                console.print()  # Blank line between files
+            console.print(f"[bold cyan]{r.path}[/bold cyan]")
+            current_file = r.path
+
+        # Print context before
+        for i, line in enumerate(r.context_before):
+            line_num = r.line_number - len(r.context_before) + i
+            console.print(f"[dim]{line_num:4d}:[/dim] {line}")
+
+        # Print matching line (highlighted)
+        console.print(
+            f"[yellow]{r.line_number:4d}:[/yellow] [bold]{r.line_content}[/bold]"
+        )
+
+        # Print context after
+        for i, line in enumerate(r.context_after):
+            line_num = r.line_number + 1 + i
+            console.print(f"[dim]{line_num:4d}:[/dim] {line}")
+
+        console.print()
+
+
+# =============================================================================
 # Index Command
 # =============================================================================
 
 
 @main.command("index")
 @click.option("--force", "-f", is_flag=True, help="Force reindex all files")
-def index_cmd(force: bool) -> None:
+@click.option("--embeddings", "-e", is_flag=True, help="Rebuild search embeddings")
+def index_cmd(force: bool, embeddings: bool) -> None:
     """Rebuild the notes and todos index."""
     console.print("[dim]Indexing notes...[/dim]")
     count = index_all_notes(force=force)
     console.print(f"[green]Indexed {count} files.[/green]")
 
+    if embeddings:
+        console.print("[dim]Rebuilding search index...[/dim]")
+        from nb.index.scanner import rebuild_search_index
+
+        search_count = rebuild_search_index()
+        console.print(f"[green]Indexed {search_count} notes for search.[/green]")
+
     stats = get_todo_stats()
     console.print(f"Todos: {stats['open']} open, {stats['completed']} completed")
     if stats["overdue"]:
         console.print(f"[red]{stats['overdue']} overdue[/red]")
+
+
+# =============================================================================
+# Link Commands
+# =============================================================================
+
+
+@main.group()
+def link() -> None:
+    """Manage linked external files.
+
+    Link external todo files or note files/directories to index them
+    alongside your notes. Use 'nb link add' for todo files and
+    'nb link note add' for note files/directories.
+    """
+    pass
+
+
+@link.command("list")
+def link_list() -> None:
+    """List all linked external files (todos and notes)."""
+    from nb.core.links import list_linked_files, list_linked_notes
+
+    linked_todos = list_linked_files()
+    linked_notes = list_linked_notes()
+
+    if not linked_todos and not linked_notes:
+        console.print("[dim]No linked files.[/dim]")
+        console.print("[dim]Use 'nb link add <path>' for todo files.[/dim]")
+        console.print("[dim]Use 'nb link note add <path>' for note files.[/dim]")
+        return
+
+    if linked_todos:
+        console.print("\n[bold]Linked Todo Files[/bold]")
+        table = Table(show_header=True)
+        table.add_column("Alias")
+        table.add_column("Path")
+        table.add_column("Sync")
+        table.add_column("Exists")
+
+        for lf in linked_todos:
+            exists = "[green]yes[/green]" if lf.path.exists() else "[red]no[/red]"
+            sync = "[green]yes[/green]" if lf.sync else "[dim]no[/dim]"
+            table.add_row(lf.alias, str(lf.path), sync, exists)
+
+        console.print(table)
+
+    if linked_notes:
+        console.print("\n[bold]Linked Note Files/Directories[/bold]")
+        table = Table(show_header=True)
+        table.add_column("Alias")
+        table.add_column("Path")
+        table.add_column("Notebook")
+        table.add_column("Type")
+        table.add_column("Exists")
+
+        for ln in linked_notes:
+            exists = "[green]yes[/green]" if ln.path.exists() else "[red]no[/red]"
+            path_type = "dir" if ln.path.is_dir() else "file"
+            if ln.path.is_dir() and ln.recursive:
+                path_type = "dir (recursive)"
+            notebook = ln.notebook or f"@{ln.alias}"
+            table.add_row(ln.alias, str(ln.path), notebook, path_type, exists)
+
+        console.print(table)
+
+
+@link.command("add")
+@click.argument("path", type=click.Path(exists=True))
+@click.option("--alias", "-a", help="Short name for the file (defaults to filename)")
+@click.option("--sync/--no-sync", default=True, help="Sync completions back to source")
+@click.option(
+    "--config", "save_to_config", is_flag=True, help="Save to config file instead of DB"
+)
+def link_add(path: str, alias: str | None, sync: bool, save_to_config: bool) -> None:
+    """Add an external todo file to track.
+
+    The file will be scanned for todos and they'll appear in 'nb todo'.
+    With --sync (default), completing a todo will update the source file.
+
+    Examples:
+        nb link add ~/work/project/TODO.md
+        nb link add ~/docs/tasks.md --alias work --no-sync
+    """
+    from nb.core.links import add_linked_file
+    from nb.index.scanner import index_linked_file
+
+    try:
+        linked = add_linked_file(
+            Path(path),
+            alias=alias,
+            sync=sync,
+            save_to_config=save_to_config,
+        )
+    except FileNotFoundError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+
+    console.print(f"[green]Linked:[/green] {linked.alias} -> {linked.path}")
+
+    # Index the file
+    todo_count = index_linked_file(linked.path, alias=linked.alias)
+    console.print(f"[dim]Found {todo_count} todos.[/dim]")
+
+
+@link.command("remove")
+@click.argument("alias")
+def link_remove(alias: str) -> None:
+    """Stop tracking a linked external file.
+
+    This does not delete the file, just removes it from tracking.
+    """
+    from nb.core.links import get_linked_file, remove_linked_file
+    from nb.index.todos_repo import delete_todos_for_source
+
+    linked = get_linked_file(alias)
+    if not linked:
+        console.print(f"[red]Linked file not found: {alias}[/red]")
+        raise SystemExit(1)
+
+    # Remove todos from index
+    delete_todos_for_source(linked.path)
+
+    # Remove the link
+    if remove_linked_file(alias):
+        console.print(f"[green]Removed:[/green] {alias}")
+    else:
+        console.print(f"[red]Failed to remove: {alias}[/red]")
+        raise SystemExit(1)
+
+
+@link.command("sync")
+@click.argument("alias", required=False)
+def link_sync(alias: str | None) -> None:
+    """Re-scan linked files and update todo index.
+
+    If ALIAS is provided, only that file is scanned.
+    Otherwise, all linked files are scanned.
+    """
+    from nb.core.links import get_linked_file, list_linked_files
+    from nb.index.scanner import index_linked_file, scan_linked_files
+
+    if alias:
+        linked = get_linked_file(alias)
+        if not linked:
+            console.print(f"[red]Linked file not found: {alias}[/red]")
+            raise SystemExit(1)
+
+        if not linked.path.exists():
+            console.print(f"[red]File does not exist: {linked.path}[/red]")
+            raise SystemExit(1)
+
+        todo_count = index_linked_file(linked.path, alias=linked.alias)
+        console.print(f"[green]Synced {linked.alias}:[/green] {todo_count} todos")
+    else:
+        total = scan_linked_files()
+        linked_count = len(list_linked_files())
+        console.print(f"[green]Synced {linked_count} files:[/green] {total} todos")
+
+
+@link.command("enable-sync")
+@click.argument("alias")
+def link_enable_sync(alias: str) -> None:
+    """Enable syncing completions back to a linked file."""
+    from nb.core.links import update_linked_file_sync
+
+    if update_linked_file_sync(alias, True):
+        console.print(f"[green]Enabled sync for:[/green] {alias}")
+    else:
+        console.print(f"[red]Linked file not found: {alias}[/red]")
+        raise SystemExit(1)
+
+
+@link.command("disable-sync")
+@click.argument("alias")
+def link_disable_sync(alias: str) -> None:
+    """Disable syncing completions back to a linked file.
+
+    Todos will still be tracked, but completing them won't modify the source.
+    """
+    from nb.core.links import update_linked_file_sync
+
+    if update_linked_file_sync(alias, False):
+        console.print(f"[yellow]Disabled sync for:[/yellow] {alias}")
+    else:
+        console.print(f"[red]Linked file not found: {alias}[/red]")
+        raise SystemExit(1)
+
+
+# -----------------------------------------------------------------------------
+# Link Note Subcommands
+# -----------------------------------------------------------------------------
+
+
+@link.group("note")
+def link_note() -> None:
+    """Manage linked external note files and directories.
+
+    Link external markdown files or directories to index them alongside
+    your notes. Linked notes are searchable and appear in their own
+    virtual notebook.
+    """
+    pass
+
+
+@link_note.command("add")
+@click.argument("path", type=click.Path(exists=True))
+@click.option(
+    "--alias", "-a", help="Short name for the link (defaults to filename/dirname)"
+)
+@click.option("--notebook", "-n", help="Virtual notebook name (defaults to @alias)")
+@click.option(
+    "--no-recursive", is_flag=True, help="Don't scan subdirectories (for directories)"
+)
+@click.option(
+    "--config", "save_to_config", is_flag=True, help="Save to config file instead of DB"
+)
+def link_note_add(
+    path: str,
+    alias: str | None,
+    notebook: str | None,
+    no_recursive: bool,
+    save_to_config: bool,
+) -> None:
+    """Link an external note file or directory.
+
+    The notes will be indexed and searchable. For directories, all .md files
+    are scanned (recursively by default).
+
+    Examples:
+        nb link note add ~/docs/wiki
+        nb link note add ~/code/project/README.md --alias project-readme
+        nb link note add ~/vault --notebook vault --no-recursive
+    """
+    from nb.core.links import add_linked_note
+    from nb.index.scanner import index_single_linked_note
+
+    try:
+        linked = add_linked_note(
+            Path(path),
+            alias=alias,
+            notebook=notebook,
+            recursive=not no_recursive,
+            save_to_config=save_to_config,
+        )
+    except FileNotFoundError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+
+    path_type = "directory" if Path(path).is_dir() else "file"
+    console.print(f"[green]Linked {path_type}:[/green] {linked.alias} -> {linked.path}")
+    console.print(f"[dim]Notebook: {linked.notebook}[/dim]")
+
+    # Index the notes
+    note_count = index_single_linked_note(linked.alias)
+    console.print(f"[dim]Indexed {note_count} notes.[/dim]")
+
+
+@link_note.command("remove")
+@click.argument("alias")
+def link_note_remove(alias: str) -> None:
+    """Stop tracking a linked note file/directory.
+
+    This does not delete the files, just removes them from the index.
+    """
+    from nb.core.links import get_linked_note, remove_linked_note
+    from nb.index.scanner import remove_linked_note_from_index
+
+    linked = get_linked_note(alias)
+    if not linked:
+        console.print(f"[red]Linked note not found: {alias}[/red]")
+        raise SystemExit(1)
+
+    # Remove notes from index
+    removed_count = remove_linked_note_from_index(alias)
+
+    # Remove the link
+    if remove_linked_note(alias):
+        console.print(f"[green]Removed:[/green] {alias} ({removed_count} notes)")
+    else:
+        console.print(f"[red]Failed to remove: {alias}[/red]")
+        raise SystemExit(1)
+
+
+@link_note.command("sync")
+@click.argument("alias", required=False)
+def link_note_sync(alias: str | None) -> None:
+    """Re-scan linked note files/directories and update index.
+
+    If ALIAS is provided, only that source is scanned.
+    Otherwise, all linked notes are scanned.
+    """
+    from nb.core.links import get_linked_note, list_linked_notes
+    from nb.index.scanner import index_single_linked_note, scan_linked_notes
+
+    if alias:
+        linked = get_linked_note(alias)
+        if not linked:
+            console.print(f"[red]Linked note not found: {alias}[/red]")
+            raise SystemExit(1)
+
+        if not linked.path.exists():
+            console.print(f"[red]Path does not exist: {linked.path}[/red]")
+            raise SystemExit(1)
+
+        note_count = index_single_linked_note(alias)
+        console.print(f"[green]Synced {linked.alias}:[/green] {note_count} notes")
+    else:
+        total = scan_linked_notes()
+        linked_count = len(list_linked_notes())
+        console.print(f"[green]Synced {linked_count} sources:[/green] {total} notes")
+
+
+@link_note.command("list")
+def link_note_list() -> None:
+    """List all linked note files/directories."""
+    from nb.core.links import list_linked_notes
+
+    linked = list_linked_notes()
+
+    if not linked:
+        console.print("[dim]No linked notes.[/dim]")
+        console.print("[dim]Use 'nb link note add <path>' to add one.[/dim]")
+        return
+
+    table = Table(show_header=True)
+    table.add_column("Alias")
+    table.add_column("Path")
+    table.add_column("Notebook")
+    table.add_column("Type")
+    table.add_column("Exists")
+
+    for ln in linked:
+        exists = "[green]yes[/green]" if ln.path.exists() else "[red]no[/red]"
+        path_type = "dir" if ln.path.is_dir() else "file"
+        if ln.path.is_dir() and ln.recursive:
+            path_type = "dir (recursive)"
+        notebook = ln.notebook or f"@{ln.alias}"
+        table.add_row(ln.alias, str(ln.path), notebook, path_type, exists)
+
+    console.print(table)
+
+
+# =============================================================================
+# Attach Commands
+# =============================================================================
+
+
+@main.group()
+def attach() -> None:
+    """Manage file attachments.
+
+    Attach files or URLs to notes and todos. Files can be linked
+    (referenced in place) or copied to the attachments directory.
+    """
+    pass
+
+
+@attach.command("file")
+@click.argument("file_path", type=click.Path(exists=True))
+@click.option("--to", "target", help="Note path or todo ID to attach to")
+@click.option("--title", "-t", help="Display title for the attachment")
+@click.option("--copy", "-c", is_flag=True, help="Copy file to attachments directory")
+def attach_file(
+    file_path: str, target: str | None, title: str | None, copy: bool
+) -> None:
+    """Attach a file to a note or todo.
+
+    By default attaches to today's daily note. Use --to to specify a target.
+
+    Examples:
+        nb attach file ./document.pdf
+        nb attach file ~/image.png --to daily/2025-11-27.md
+        nb attach file report.pdf --to abc12345 --copy
+    """
+    from nb.core.attachments import attach_to_note, attach_to_todo
+
+    config = get_config()
+
+    # Determine target
+    if target is None:
+        # Default to today's note
+        note_path = ensure_daily_note(date.today())
+    elif len(target) >= 8 and "/" not in target and "\\" not in target:
+        # Looks like a todo ID - try to find it
+        t = _find_todo(target)
+        if t:
+            try:
+                attachment = attach_to_todo(
+                    t.source.path,
+                    t.line_number,
+                    file_path,
+                    title=title,
+                    copy=copy,
+                )
+                console.print(f"[green]Attached:[/green] {attachment.path}")
+                console.print(f"[dim]To todo: {t.content[:50]}...[/dim]")
+                return
+            except FileNotFoundError as e:
+                console.print(f"[red]{e}[/red]")
+                raise SystemExit(1)
+        # Fall through to try as note path
+        note_path = config.notes_root / target
+    else:
+        note_path = config.notes_root / target
+
+    if not note_path.suffix:
+        note_path = note_path.with_suffix(".md")
+
+    if not note_path.exists():
+        console.print(f"[red]Note not found: {target}[/red]")
+        raise SystemExit(1)
+
+    try:
+        attachment = attach_to_note(note_path, file_path, title=title, copy=copy)
+        console.print(f"[green]Attached:[/green] {attachment.path}")
+        console.print(f"[dim]To: {note_path.name}[/dim]")
+    except FileNotFoundError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+
+
+@attach.command("url")
+@click.argument("url")
+@click.option("--to", "target", help="Note path or todo ID to attach to")
+@click.option("--title", "-t", help="Display title for the URL")
+def attach_url(url: str, target: str | None, title: str | None) -> None:
+    """Attach a URL to a note or todo.
+
+    By default attaches to today's daily note. Use --to to specify a target.
+
+    Examples:
+        nb attach url https://example.com/doc
+        nb attach url https://github.com/repo --to projects/myproject.md
+    """
+    from nb.core.attachments import attach_to_note, attach_to_todo
+
+    config = get_config()
+
+    # Determine target (same logic as attach_file)
+    if target is None:
+        note_path = ensure_daily_note(date.today())
+    elif len(target) >= 8 and "/" not in target and "\\" not in target:
+        t = _find_todo(target)
+        if t:
+            try:
+                attachment = attach_to_todo(
+                    t.source.path,
+                    t.line_number,
+                    url,
+                    title=title,
+                    copy=False,
+                )
+                console.print(f"[green]Attached:[/green] {attachment.path}")
+                console.print(f"[dim]To todo: {t.content[:50]}...[/dim]")
+                return
+            except Exception as e:
+                console.print(f"[red]{e}[/red]")
+                raise SystemExit(1)
+        note_path = config.notes_root / target
+    else:
+        note_path = config.notes_root / target
+
+    if not note_path.suffix:
+        note_path = note_path.with_suffix(".md")
+
+    if not note_path.exists():
+        console.print(f"[red]Note not found: {target}[/red]")
+        raise SystemExit(1)
+
+    try:
+        attachment = attach_to_note(note_path, url, title=title, copy=False)
+        console.print(f"[green]Attached:[/green] {attachment.path}")
+        console.print(f"[dim]To: {note_path.name}[/dim]")
+    except Exception as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+
+
+@attach.command("list")
+@click.argument("target", required=False)
+def attach_list(target: str | None) -> None:
+    """List attachments in a note.
+
+    Shows all @attach lines in the specified note (or today's note by default).
+
+    Examples:
+        nb attach list
+        nb attach list daily/2025-11-27.md
+    """
+    from nb.core.attachments import list_attachments_in_file, resolve_attachment_path
+    from nb.models import Attachment
+
+    config = get_config()
+
+    if target is None:
+        note_path = ensure_daily_note(date.today())
+    else:
+        note_path = config.notes_root / target
+        if not note_path.suffix:
+            note_path = note_path.with_suffix(".md")
+
+    if not note_path.exists():
+        console.print(f"[red]Note not found: {target}[/red]")
+        raise SystemExit(1)
+
+    attachments = list_attachments_in_file(note_path)
+
+    if not attachments:
+        console.print("[dim]No attachments found.[/dim]")
+        return
+
+    console.print(f"\n[bold]Attachments in {note_path.name}:[/bold]\n")
+
+    for line_num, path in attachments:
+        # Check if file exists
+        from nb.core.attachments import is_url
+
+        if is_url(path):
+            status = "[cyan]url[/cyan]"
+        else:
+            # Create a temp attachment to resolve path
+            temp = Attachment(id="", type="file", path=path)
+            resolved = resolve_attachment_path(temp)
+            if resolved:
+                status = "[green]ok[/green]"
+            else:
+                status = "[red]missing[/red]"
+
+        console.print(f"  {line_num:4d}: {path}  {status}")
+
+
+@attach.command("open")
+@click.argument("target")
+@click.option("--line", "-l", type=int, help="Line number of the attachment")
+def attach_open(target: str, line: int | None) -> None:
+    """Open an attachment with the system default handler.
+
+    TARGET can be a note path. Use --line to specify which attachment.
+
+    Examples:
+        nb attach open daily/2025-11-27.md --line 15
+    """
+    from nb.core.attachments import list_attachments_in_file, open_attachment
+    from nb.models import Attachment
+
+    config = get_config()
+    note_path = config.notes_root / target
+    if not note_path.suffix:
+        note_path = note_path.with_suffix(".md")
+
+    if not note_path.exists():
+        console.print(f"[red]Note not found: {target}[/red]")
+        raise SystemExit(1)
+
+    attachments = list_attachments_in_file(note_path)
+
+    if not attachments:
+        console.print("[dim]No attachments in this note.[/dim]")
+        return
+
+    if line is None:
+        if len(attachments) == 1:
+            line = attachments[0][0]
+        else:
+            console.print(
+                "[yellow]Multiple attachments found. Use --line to specify:[/yellow]"
+            )
+            for ln, path in attachments:
+                console.print(f"  {ln:4d}: {path}")
+            return
+
+    # Find attachment at line
+    found = None
+    for ln, path in attachments:
+        if ln == line:
+            found = path
+            break
+
+    if found is None:
+        console.print(f"[red]No attachment at line {line}[/red]")
+        raise SystemExit(1)
+
+    # Determine type and open
+    from nb.core.attachments import is_url
+
+    attachment = Attachment(
+        id="",
+        type="url" if is_url(found) else "file",
+        path=found,
+    )
+
+    if open_attachment(attachment):
+        console.print(f"[green]Opened:[/green] {found}")
+    else:
+        console.print(f"[red]Failed to open:[/red] {found}")
+        raise SystemExit(1)
 
 
 # =============================================================================

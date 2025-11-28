@@ -186,18 +186,50 @@ def extract_todos(
     return todos
 
 
-def toggle_todo_in_file(path: Path, line_number: int) -> bool:
+def can_toggle_linked_file(path: Path) -> bool:
+    """Check if a linked file can be toggled (sync is enabled).
+
+    Args:
+        path: Path to check.
+
+    Returns:
+        True if the file can be modified, False if it's a linked file with sync disabled.
+    """
+    from nb.core.links import get_linked_file_by_path
+
+    linked = get_linked_file_by_path(path)
+    if linked is None:
+        # Not a linked file, so it's fine to toggle
+        return True
+
+    # It's a linked file, check sync setting
+    return linked.sync
+
+
+def toggle_todo_in_file(
+    path: Path,
+    line_number: int,
+    check_linked_sync: bool = True,
+) -> bool:
     """Toggle a todo's completion status in its source file.
 
     Args:
         path: Path to the file
         line_number: 1-based line number of the todo
+        check_linked_sync: Whether to check if linked file allows sync
 
     Returns:
         True if successfully toggled, False otherwise.
+
+    Raises:
+        PermissionError: If the file is a linked file with sync disabled.
     """
     if not path.exists():
         return False
+
+    # Check if we're allowed to modify this file
+    if check_linked_sync and not can_toggle_linked_file(path):
+        raise PermissionError(f"Cannot modify linked file (sync disabled): {path.name}")
 
     content = path.read_text(encoding="utf-8")
     lines = content.splitlines()

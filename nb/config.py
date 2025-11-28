@@ -20,6 +20,26 @@ class LinkedTodoConfig:
 
 
 @dataclass
+class LinkedNoteConfig:
+    """Configuration for a linked external note file or directory."""
+
+    path: Path
+    alias: str
+    notebook: str | None = None  # Virtual notebook name (defaults to alias)
+    recursive: bool = True  # For directories, scan recursively
+
+
+@dataclass
+class EmbeddingsConfig:
+    """Configuration for embedding generation (localvectordb)."""
+
+    provider: str = "ollama"  # "ollama" or "openai"
+    model: str = "nomic-embed-text"
+    base_url: str | None = None  # For custom Ollama endpoint
+    api_key: str | None = None  # For OpenAI
+
+
+@dataclass
 class Config:
     """Application configuration."""
 
@@ -29,6 +49,8 @@ class Config:
         default_factory=lambda: ["daily", "projects", "work", "personal"]
     )
     linked_todos: list[LinkedTodoConfig] = field(default_factory=list)
+    linked_notes: list[LinkedNoteConfig] = field(default_factory=list)
+    embeddings: EmbeddingsConfig = field(default_factory=EmbeddingsConfig)
     date_format: str = "%Y-%m-%d"
     time_format: str = "%H:%M"
 
@@ -46,6 +68,16 @@ class Config:
     def config_path(self) -> Path:
         """Return path to config file."""
         return self.nb_dir / "config.yaml"
+
+    @property
+    def vectors_path(self) -> Path:
+        """Return path to localvectordb vectors directory."""
+        return self.nb_dir / "vectors"
+
+    @property
+    def attachments_path(self) -> Path:
+        """Return path to attachments directory."""
+        return self.nb_dir / "attachments"
 
 
 # Default configuration values
@@ -74,6 +106,22 @@ notebooks:
 #   - path: ~/code/myproject/TODO.md
 #     alias: myproject
 #     sync: true
+
+# Linked external note files or directories (optional)
+# linked_notes:
+#   - path: ~/docs/wiki
+#     alias: wiki
+#     notebook: wiki        # Virtual notebook name
+#     recursive: true       # Scan subdirectories
+#   - path: ~/code/project/docs/design.md
+#     alias: project-design
+
+# Embedding configuration for semantic search
+embeddings:
+  provider: ollama    # "ollama" or "openai"
+  model: nomic-embed-text
+  # base_url: http://localhost:11434  # Optional: custom Ollama endpoint
+  # api_key: null  # Required for OpenAI
 
 # Date/time display formats
 date_format: "%Y-%m-%d"
@@ -120,6 +168,33 @@ def _parse_linked_todos(data: list[dict[str, Any]]) -> list[LinkedTodoConfig]:
     return result
 
 
+def _parse_linked_notes(data: list[dict[str, Any]]) -> list[LinkedNoteConfig]:
+    """Parse linked_notes configuration."""
+    result = []
+    for item in data:
+        result.append(
+            LinkedNoteConfig(
+                path=expand_path(item["path"]),
+                alias=item["alias"],
+                notebook=item.get("notebook"),
+                recursive=item.get("recursive", True),
+            )
+        )
+    return result
+
+
+def _parse_embeddings(data: dict[str, Any] | None) -> EmbeddingsConfig:
+    """Parse embeddings configuration."""
+    if data is None:
+        return EmbeddingsConfig()
+    return EmbeddingsConfig(
+        provider=data.get("provider", "ollama"),
+        model=data.get("model", "nomic-embed-text"),
+        base_url=data.get("base_url"),
+        api_key=data.get("api_key"),
+    )
+
+
 def load_config(config_path: Path | None = None) -> Config:
     """Load configuration from YAML file.
 
@@ -148,6 +223,8 @@ def load_config(config_path: Path | None = None) -> Config:
 
     notebooks = data.get("notebooks", ["daily", "projects", "work", "personal"])
     linked_todos = _parse_linked_todos(data.get("linked_todos", []))
+    linked_notes = _parse_linked_notes(data.get("linked_notes", []))
+    embeddings = _parse_embeddings(data.get("embeddings"))
     date_format = data.get("date_format", "%Y-%m-%d")
     time_format = data.get("time_format", "%H:%M")
 
@@ -156,6 +233,8 @@ def load_config(config_path: Path | None = None) -> Config:
         editor=editor,
         notebooks=notebooks,
         linked_todos=linked_todos,
+        linked_notes=linked_notes,
+        embeddings=embeddings,
         date_format=date_format,
         time_format=time_format,
     )
@@ -163,6 +242,16 @@ def load_config(config_path: Path | None = None) -> Config:
 
 def save_config(config: Config) -> None:
     """Save configuration to YAML file."""
+    # Build embeddings dict, excluding None values
+    embeddings_data = {
+        "provider": config.embeddings.provider,
+        "model": config.embeddings.model,
+    }
+    if config.embeddings.base_url:
+        embeddings_data["base_url"] = config.embeddings.base_url
+    if config.embeddings.api_key:
+        embeddings_data["api_key"] = config.embeddings.api_key
+
     data = {
         "notes_root": str(config.notes_root),
         "editor": config.editor,
@@ -171,6 +260,16 @@ def save_config(config: Config) -> None:
             {"path": str(lt.path), "alias": lt.alias, "sync": lt.sync}
             for lt in config.linked_todos
         ],
+        "linked_notes": [
+            {
+                "path": str(ln.path),
+                "alias": ln.alias,
+                "notebook": ln.notebook,
+                "recursive": ln.recursive,
+            }
+            for ln in config.linked_notes
+        ],
+        "embeddings": embeddings_data,
         "date_format": config.date_format,
         "time_format": config.time_format,
     }

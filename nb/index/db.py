@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 # Current schema version
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 4
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -105,10 +105,37 @@ CREATE INDEX IF NOT EXISTS idx_todo_tags_tag ON todo_tags(tag);
 CREATE INDEX IF NOT EXISTS idx_attachments_parent ON attachments(parent_type, parent_id);
 """
 
+# Phase 3 additions: content column for notes (used by grep and caching)
+SCHEMA_V3 = """
+-- Add content column to notes table for grep and caching
+ALTER TABLE notes ADD COLUMN content TEXT;
+"""
+
+# Phase 3.5 additions: linked notes support
+SCHEMA_V4 = """
+-- Add external flag and source_alias to notes table
+ALTER TABLE notes ADD COLUMN external INTEGER DEFAULT 0;
+ALTER TABLE notes ADD COLUMN source_alias TEXT;
+
+-- Linked external note files/directories
+CREATE TABLE IF NOT EXISTS linked_notes (
+    alias TEXT PRIMARY KEY,
+    path TEXT UNIQUE,
+    notebook TEXT,
+    recursive INTEGER DEFAULT 1
+);
+
+-- Index for external notes
+CREATE INDEX IF NOT EXISTS idx_notes_external ON notes(external);
+CREATE INDEX IF NOT EXISTS idx_notes_source_alias ON notes(source_alias);
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
     2: SCHEMA_V2,
+    3: SCHEMA_V3,
+    4: SCHEMA_V4,
 }
 
 
