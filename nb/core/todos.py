@@ -322,3 +322,70 @@ def get_inbox_path(notes_root: Path | None = None) -> Path:
     if notes_root is None:
         notes_root = get_config().notes_root
     return notes_root / "todo.md"
+
+
+def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
+    """Add a new todo to a daily note.
+
+    Args:
+        text: The todo text (can include @due, @priority, #tags)
+        dt: The date of the daily note (defaults to today)
+
+    Returns:
+        The created Todo object.
+    """
+    if dt is None:
+        dt = date.today()
+
+    config = get_config()
+
+    # Get the daily note path
+    note_path = (
+        config.notes_root / "daily" / str(dt.year) / f"{dt.month:02d}" / f"{dt}.md"
+    )
+
+    # Create the note if it doesn't exist
+    if not note_path.exists():
+        note_path.parent.mkdir(parents=True, exist_ok=True)
+        note_path.write_text(
+            f"---\ndate: {dt}\n---\n\n# {dt.strftime('%A, %B %d, %Y')}\n\n",
+            encoding="utf-8",
+        )
+
+    # Read current content
+    content = note_path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+
+    # Find line number for new todo
+    line_number = len(lines) + 1
+
+    # Append the todo
+    with open(note_path, "a", encoding="utf-8") as f:
+        f.write(f"- [ ] {text}\n")
+
+    # Create and return Todo object
+    clean_content = clean_todo_content(text)
+
+    source = TodoSource(
+        type="note",
+        path=note_path,
+        external=False,
+        alias=None,
+    )
+
+    return Todo(
+        id=make_todo_id(note_path, clean_content, line_number),
+        content=clean_content,
+        raw_content=text,
+        completed=False,
+        source=source,
+        line_number=line_number,
+        created_date=dt,
+        due_date=parse_due_date(text),
+        priority=parse_priority(text),
+        tags=parse_tags(text),
+        project="daily",
+        parent_id=None,
+        children=[],
+        attachments=[],
+    )

@@ -6,13 +6,17 @@ import hashlib
 from pathlib import Path
 
 
-def hash_content(content: str) -> str:
-    """Generate a SHA256 hash of content, truncated to 12 characters.
+def hash_content(content: str, length: int = 8) -> str:
+    """Generate a SHA256 hash of content, truncated to specified length.
+
+    Args:
+        content: The content to hash.
+        length: Number of hex characters to return (default 8).
 
     This provides a reasonably unique identifier while remaining
     short enough to be human-readable in IDs.
     """
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:length]
 
 
 def make_todo_id(source_path: Path, content: str, line_number: int) -> str:

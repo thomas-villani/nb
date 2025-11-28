@@ -11,6 +11,14 @@ import yaml
 
 
 @dataclass
+class NotebookConfig:
+    """Configuration for a notebook."""
+
+    name: str
+    date_based: bool = False  # If True, uses YYYY/MM/YYYY-MM-DD.md structure
+
+
+@dataclass
 class LinkedTodoConfig:
     """Configuration for a linked external todo file."""
 
@@ -45,14 +53,30 @@ class Config:
 
     notes_root: Path
     editor: str
-    notebooks: list[str] = field(
-        default_factory=lambda: ["daily", "projects", "work", "personal"]
+    notebooks: list[NotebookConfig] = field(
+        default_factory=lambda: [
+            NotebookConfig(name="daily", date_based=True),
+            NotebookConfig(name="projects", date_based=False),
+            NotebookConfig(name="work", date_based=False),
+            NotebookConfig(name="personal", date_based=False),
+        ]
     )
     linked_todos: list[LinkedTodoConfig] = field(default_factory=list)
     linked_notes: list[LinkedNoteConfig] = field(default_factory=list)
     embeddings: EmbeddingsConfig = field(default_factory=EmbeddingsConfig)
     date_format: str = "%Y-%m-%d"
     time_format: str = "%H:%M"
+
+    def get_notebook(self, name: str) -> NotebookConfig | None:
+        """Get a notebook configuration by name."""
+        for nb in self.notebooks:
+            if nb.name == name:
+                return nb
+        return None
+
+    def notebook_names(self) -> list[str]:
+        """Get list of notebook names."""
+        return [nb.name for nb in self.notebooks]
 
     @property
     def nb_dir(self) -> Path:
@@ -95,11 +119,16 @@ notes_root: ~/notes
 editor: micro
 
 # Notebook directories (created under notes_root)
+# Set date_based: true to use YYYY/MM/YYYY-MM-DD.md structure
 notebooks:
-  - daily      # Special: date-organized daily notes
-  - projects
-  - work
-  - personal
+  - name: daily
+    date_based: true     # Uses date-organized structure
+  - name: projects
+    date_based: false
+  - name: work
+    date_based: false    # Set to true for daily work logs
+  - name: personal
+    date_based: false
 
 # Linked external todo files (optional)
 # linked_todos:
@@ -152,6 +181,28 @@ def get_config_path(notes_root: Path | None = None) -> Path:
     if notes_root is None:
         notes_root = get_default_notes_root()
     return notes_root / ".nb" / "config.yaml"
+
+
+def _parse_notebooks(data: list[Any]) -> list[NotebookConfig]:
+    """Parse notebooks configuration.
+
+    Supports both old format (list of strings) and new format (list of dicts).
+    """
+    result = []
+    for item in data:
+        if isinstance(item, str):
+            # Old format: just a string name
+            # "daily" is date-based by default for backwards compatibility
+            result.append(NotebookConfig(name=item, date_based=(item == "daily")))
+        elif isinstance(item, dict):
+            # New format: dict with name and optional date_based
+            result.append(
+                NotebookConfig(
+                    name=item["name"],
+                    date_based=item.get("date_based", False),
+                )
+            )
+    return result
 
 
 def _parse_linked_todos(data: list[dict[str, Any]]) -> list[LinkedTodoConfig]:
@@ -221,7 +272,10 @@ def load_config(config_path: Path | None = None) -> Config:
     # Get editor: prefer $EDITOR environment variable
     editor = os.environ.get("EDITOR") or data.get("editor", DEFAULT_EDITOR)
 
-    notebooks = data.get("notebooks", ["daily", "projects", "work", "personal"])
+    # Parse notebooks (supports both old string format and new dict format)
+    raw_notebooks = data.get("notebooks", ["daily", "projects", "work", "personal"])
+    notebooks = _parse_notebooks(raw_notebooks)
+
     linked_todos = _parse_linked_todos(data.get("linked_todos", []))
     linked_notes = _parse_linked_notes(data.get("linked_notes", []))
     embeddings = _parse_embeddings(data.get("embeddings"))
@@ -255,7 +309,9 @@ def save_config(config: Config) -> None:
     data = {
         "notes_root": str(config.notes_root),
         "editor": config.editor,
-        "notebooks": config.notebooks,
+        "notebooks": [
+            {"name": nb.name, "date_based": nb.date_based} for nb in config.notebooks
+        ],
         "linked_todos": [
             {"path": str(lt.path), "alias": lt.alias, "sync": lt.sync}
             for lt in config.linked_todos
@@ -285,8 +341,8 @@ def ensure_directories(config: Config) -> None:
     config.nb_dir.mkdir(parents=True, exist_ok=True)
 
     # Create notebook directories
-    for notebook in config.notebooks:
-        notebook_path = config.notes_root / notebook
+    for nb in config.notebooks:
+        notebook_path = config.notes_root / nb.name
         notebook_path.mkdir(parents=True, exist_ok=True)
 
 

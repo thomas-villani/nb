@@ -79,4 +79,6 @@ Tom's Notes
 4. I think all notebooks should be essentially date-based.
 5. Add an `nb -s` command to show the notebook rather than edit
 6. Allow linking notes into existing notebooks
-7. 
+7. How to handle meetings? Special section in a note? Should there be other special sections in the notes too? 
+   - Should I link contacts from outlook into meetings?
+8. Should be able to tag sections within notes too?

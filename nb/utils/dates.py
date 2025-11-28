@@ -175,3 +175,90 @@ def get_month_range(dt: date | None = None) -> tuple[date, date]:
     else:
         end = dt.replace(month=dt.month + 1, day=1) - timedelta(days=1)
     return start, end
+
+
+def parse_date_range(text: str) -> tuple[date | None, date | None]:
+    """Parse a fuzzy date range expression into start and end dates.
+
+    Supports:
+    - "today", "yesterday", "this week", "this month"
+    - "last N days/weeks/months" (e.g., "last 3 months")
+    - "past N days/weeks/months" (alias for "last N")
+    - "since <date>" for open-ended ranges
+    - "<date> to <date>" for explicit ranges
+
+    Returns (start_date, end_date) tuple. Either can be None for open ranges.
+    """
+    if not text:
+        return None, None
+
+    text = text.strip().lower()
+    today = date.today()
+
+    # Handle "today"
+    if text == "today":
+        return today, today
+
+    # Handle "yesterday"
+    if text == "yesterday":
+        yesterday = today - timedelta(days=1)
+        return yesterday, yesterday
+
+    # Handle "this week"
+    if text == "this week":
+        return get_week_range(today)
+
+    # Handle "this month"
+    if text == "this month":
+        return get_month_range(today)
+
+    # Handle "last week"
+    if text == "last week":
+        last_week = today - timedelta(weeks=1)
+        return get_week_range(last_week)
+
+    # Handle "last month"
+    if text == "last month":
+        last_month = today - relativedelta(months=1)
+        return get_month_range(last_month)
+
+    # Handle "last N days/weeks/months" or "past N days/weeks/months"
+    last_n_match = re.match(
+        r"^(?:last|past)\s+(\d+)\s+(day|days|week|weeks|month|months)$", text
+    )
+    if last_n_match:
+        n = int(last_n_match.group(1))
+        unit = last_n_match.group(2).rstrip("s")  # Normalize to singular
+
+        if unit == "day":
+            start = today - timedelta(days=n)
+        elif unit == "week":
+            start = today - timedelta(weeks=n)
+        elif unit == "month":
+            start = today - relativedelta(months=n)
+        else:
+            return None, None
+
+        return start, today
+
+    # Handle "since <date>"
+    since_match = re.match(r"^since\s+(.+)$", text)
+    if since_match:
+        start = parse_fuzzy_date(since_match.group(1))
+        if start:
+            return start, today
+
+    # Handle "<date> to <date>"
+    range_match = re.match(r"^(.+?)\s+to\s+(.+)$", text)
+    if range_match:
+        start = parse_fuzzy_date(range_match.group(1))
+        end = parse_fuzzy_date(range_match.group(2))
+        if start and end:
+            return start, end
+
+    # Try parsing as a single date (search that specific day)
+    single_date = parse_fuzzy_date(text)
+    if single_date:
+        return single_date, single_date
+
+    return None, None

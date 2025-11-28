@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 from nb.config import get_config
@@ -106,3 +107,100 @@ def get_notebook_stats(notebook: str, notes_root: Path | None = None) -> dict[st
     return {
         "note_count": len(notes),
     }
+
+
+def is_notebook_date_based(notebook: str) -> bool:
+    """Check if a notebook uses date-based organization.
+
+    Args:
+        notebook: Name of the notebook
+
+    Returns:
+        True if the notebook uses YYYY/MM/YYYY-MM-DD.md structure.
+    """
+    config = get_config()
+    nb_config = config.get_notebook(notebook)
+    if nb_config:
+        return nb_config.date_based
+    # Default: only "daily" is date-based for unknown notebooks
+    return notebook == "daily"
+
+
+def get_notebook_note_path(
+    notebook: str,
+    dt: date | None = None,
+    name: str | None = None,
+) -> Path:
+    """Get the path for a note in a notebook.
+
+    For date-based notebooks, creates path like: notebook/YYYY/MM/YYYY-MM-DD.md
+    For flat notebooks, creates path like: notebook/name.md
+
+    Args:
+        notebook: Name of the notebook
+        dt: Date for date-based notebooks (defaults to today)
+        name: Filename for flat notebooks (required if not date-based)
+
+    Returns:
+        Full path to the note file.
+
+    Raises:
+        ValueError: If name is required but not provided.
+    """
+    config = get_config()
+
+    if is_notebook_date_based(notebook):
+        if dt is None:
+            dt = date.today()
+        return (
+            config.notes_root / notebook / str(dt.year) / f"{dt.month:02d}" / f"{dt}.md"
+        )
+    else:
+        if name is None:
+            raise ValueError(f"Name required for non-date-based notebook: {notebook}")
+        # Ensure .md extension
+        if not name.endswith(".md"):
+            name = f"{name}.md"
+        return config.notes_root / notebook / name
+
+
+def ensure_notebook_note(
+    notebook: str,
+    dt: date | None = None,
+    name: str | None = None,
+) -> Path:
+    """Ensure a note exists in a notebook, creating it if necessary.
+
+    For date-based notebooks, creates the daily note with a header.
+    For flat notebooks, creates an empty note with a title.
+
+    Args:
+        notebook: Name of the notebook
+        dt: Date for date-based notebooks (defaults to today)
+        name: Filename for flat notebooks (required if not date-based)
+
+    Returns:
+        Path to the note file.
+    """
+    path = get_notebook_note_path(notebook, dt=dt, name=name)
+
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        if is_notebook_date_based(notebook):
+            if dt is None:
+                dt = date.today()
+            # Create daily note with header
+            path.write_text(
+                f"---\ndate: {dt}\n---\n\n# {dt.strftime('%A, %B %d, %Y')}\n\n",
+                encoding="utf-8",
+            )
+        else:
+            # Create note with title from filename
+            title = path.stem.replace("-", " ").replace("_", " ").title()
+            path.write_text(
+                f"---\ntitle: {title}\n---\n\n# {title}\n\n",
+                encoding="utf-8",
+            )
+
+    return path

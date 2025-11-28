@@ -18,7 +18,7 @@ from nb.core.notes import (
     list_daily_notes,
     open_note,
 )
-from nb.core.todos import add_todo_to_inbox, toggle_todo_in_file
+from nb.core.todos import add_todo_to_daily_note, add_todo_to_inbox, toggle_todo_in_file
 from nb.index.scanner import index_all_notes
 from nb.index.todos_repo import (
     get_sorted_todos,
@@ -34,6 +34,25 @@ from nb.utils.editor import open_in_editor
 console = Console()
 
 
+def print_note(path: Path) -> None:
+    """Print a note's content to console with markdown formatting."""
+    from rich.markdown import Markdown
+
+    if not path.exists():
+        console.print(f"[red]Note not found: {path}[/red]")
+        raise SystemExit(1)
+
+    content = path.read_text(encoding="utf-8")
+
+    # Print header with path info
+    console.print(f"[dim]─── {path.name} ───[/dim]\n")
+
+    # Render markdown
+    md = Markdown(content)
+    console.print(md)
+    console.print()
+
+
 def ensure_setup() -> None:
     """Ensure nb is set up (creates config and directories on first run)."""
     config = get_config()
@@ -43,34 +62,50 @@ def ensure_setup() -> None:
 
 @click.group(invoke_without_command=True)
 @click.version_option(version=__version__, prog_name="nb")
+@click.option(
+    "-s", "--show", is_flag=True, help="Print note to console instead of opening editor"
+)
 @click.pass_context
-def main(ctx: click.Context) -> None:
+def main(ctx: click.Context, show: bool) -> None:
     """A plaintext-first note-taking and todo management CLI.
 
     Run 'nb' without arguments to open today's daily note.
+    Use -s to print the note to console instead.
     """
     ensure_setup()
+    ctx.ensure_object(dict)
+    ctx.obj["show"] = show
     if ctx.invoked_subcommand is None:
         # Default action: open today's note
         ctx.invoke(today)
 
 
 @main.command()
-def today() -> None:
+@click.pass_context
+def today(ctx: click.Context) -> None:
     """Open today's daily note."""
     dt = date.today()
     path = ensure_daily_note(dt)
-    console.print(f"[dim]Opening {path.name}...[/dim]")
-    open_note(path)
+
+    if ctx.obj and ctx.obj.get("show"):
+        print_note(path)
+    else:
+        console.print(f"[dim]Opening {path.name}...[/dim]")
+        open_note(path)
 
 
 @main.command()
-def yesterday() -> None:
+@click.pass_context
+def yesterday(ctx: click.Context) -> None:
     """Open yesterday's daily note."""
     dt = date.today() - timedelta(days=1)
     path = ensure_daily_note(dt)
-    console.print(f"[dim]Opening {path.name}...[/dim]")
-    open_note(path)
+
+    if ctx.obj and ctx.obj.get("show"):
+        print_note(path)
+    else:
+        console.print(f"[dim]Opening {path.name}...[/dim]")
+        open_note(path)
 
 
 @main.command("t")
@@ -89,7 +124,8 @@ def yesterday_alias(ctx: click.Context) -> None:
 
 @main.command("open")
 @click.argument("date_str")
-def open_date(date_str: str) -> None:
+@click.pass_context
+def open_date(ctx: click.Context, date_str: str) -> None:
     """Open a note for a specific date.
 
     DATE_STR can be:
@@ -98,6 +134,7 @@ def open_date(date_str: str) -> None:
     - A path to a note file
     """
     config = get_config()
+    show = ctx.obj and ctx.obj.get("show")
 
     # First check if it's a path to an existing note
     path = Path(date_str)
@@ -106,16 +143,22 @@ def open_date(date_str: str) -> None:
 
     full_path = config.notes_root / path
     if full_path.exists():
-        console.print(f"[dim]Opening {path}...[/dim]")
-        open_note(full_path)
+        if show:
+            print_note(full_path)
+        else:
+            console.print(f"[dim]Opening {path}...[/dim]")
+            open_note(full_path)
         return
 
     # Try to parse as a date
     parsed = parse_fuzzy_date(date_str)
     if parsed:
         note_path = ensure_daily_note(parsed)
-        console.print(f"[dim]Opening {note_path.name}...[/dim]")
-        open_note(note_path)
+        if show:
+            print_note(note_path)
+        else:
+            console.print(f"[dim]Opening {note_path.name}...[/dim]")
+            open_note(note_path)
         return
 
     console.print(f"[red]Could not parse date: {date_str}[/red]")
@@ -421,8 +464,8 @@ def _print_todo(t, indent: int = 0) -> None:
 
     meta_str = "  ".join(meta_parts)
 
-    # Print with short ID
-    short_id = t.id[:8]
+    # Print with short ID (6 chars is plenty for personal use)
+    short_id = t.id[:6]
     if t.completed:
         console.print(
             f"{prefix}{checkbox} [strikethrough]{content}[/strikethrough]  {meta_str}  [dim]{short_id}[/dim]"
@@ -440,24 +483,42 @@ def _print_todo(t, indent: int = 0) -> None:
 
 @todo.command("add")
 @click.argument("text")
-def todo_add(text: str) -> None:
-    """Add a new todo to the inbox.
+@click.option(
+    "--today",
+    "add_today",
+    is_flag=True,
+    help="Add to today's daily note instead of inbox",
+)
+def todo_add(text: str, add_today: bool) -> None:
+    """Add a new todo to the inbox (or today's note with --today).
 
     TEXT can include metadata like @due(friday), @priority(1), or #tags.
+
+    Examples:
+        nb todo add "Review PR @due(friday) #work"
+        nb todo add --today "Call dentist @priority(1)"
     """
-    t = add_todo_to_inbox(text)
-    console.print(f"[green]Added:[/green] {t.content}")
-    console.print(f"[dim]ID: {t.id[:8]}[/dim]")
+    if add_today:
+        t = add_todo_to_daily_note(text)
+        console.print(f"[green]Added to today's note:[/green] {t.content}")
+    else:
+        t = add_todo_to_inbox(text)
+        console.print(f"[green]Added to inbox:[/green] {t.content}")
+    console.print(f"[dim]ID: {t.id[:6]}[/dim]")
 
 
 @main.command("ta")
 @click.argument("text")
-@click.pass_context
-def todo_add_alias(ctx: click.Context, text: str) -> None:
+@click.option("--today", "add_today", is_flag=True, help="Add to today's daily note")
+def todo_add_alias(text: str, add_today: bool) -> None:
     """Alias for 'todo add'."""
-    t = add_todo_to_inbox(text)
-    console.print(f"[green]Added:[/green] {t.content}")
-    console.print(f"[dim]ID: {t.id[:8]}[/dim]")
+    if add_today:
+        t = add_todo_to_daily_note(text)
+        console.print(f"[green]Added to today's note:[/green] {t.content}")
+    else:
+        t = add_todo_to_inbox(text)
+        console.print(f"[green]Added to inbox:[/green] {t.content}")
+    console.print(f"[dim]ID: {t.id[:6]}[/dim]")
 
 
 @todo.command("done")
@@ -590,7 +651,7 @@ def _find_todo(todo_id: str):
         for row in rows[:5]:
             t = get_todo_by_id(row["id"])
             if t:
-                console.print(f"  {row['id'][:12]}: {t.content[:50]}")
+                console.print(f"  {row['id'][:6]}: {t.content[:50]}")
         return None
 
     return None
@@ -611,6 +672,16 @@ def _find_todo(todo_id: str):
 )
 @click.option("-t", "--tag", help="Filter by tag")
 @click.option("--notebook", "-n", help="Filter by notebook")
+@click.option(
+    "--when",
+    "when_filter",
+    help="Filter by date range (e.g., 'last 3 months', 'this week')",
+)
+@click.option("--since", "since_date", help="Show notes from this date onwards")
+@click.option("--until", "until_date", help="Show notes up to this date")
+@click.option(
+    "--recent", is_flag=True, help="Boost recent results (30% recency weight)"
+)
 @click.option("--limit", default=20, help="Max results")
 def search_cmd(
     query: str,
@@ -618,6 +689,10 @@ def search_cmd(
     keyword: bool,
     tag: str | None,
     notebook: str | None,
+    when_filter: str | None,
+    since_date: str | None,
+    until_date: str | None,
+    recent: bool,
     limit: int,
 ) -> None:
     """Search notes by keyword, semantic similarity, or both (hybrid).
@@ -625,12 +700,20 @@ def search_cmd(
     By default uses hybrid search (70% semantic, 30% keyword).
     Use --semantic for pure semantic search, --keyword for pure keyword search.
 
+    Date filtering:
+        --when "last 3 months"    Fuzzy date range
+        --when "this week"        Current week
+        --since friday            From a date onwards
+        --until "nov 20"          Up to a date
+
     Examples:
         nb search "machine learning"
-        nb search -s "project ideas"
-        nb search -k "TODO" --notebook daily
+        nb search -s "project ideas" --recent
+        nb search "TODO" --when "last 2 weeks"
+        nb search "meeting notes" --since "last monday"
     """
     from nb.index.search import get_search
+    from nb.utils.dates import parse_date_range, parse_fuzzy_date
 
     # Determine search type
     if semantic and keyword:
@@ -650,6 +733,36 @@ def search_cmd(
     if notebook:
         filters["notebook"] = notebook
 
+    # Handle date filtering
+    date_start = None
+    date_end = None
+
+    if when_filter:
+        start, end = parse_date_range(when_filter)
+        if start:
+            date_start = start.isoformat()
+        if end:
+            date_end = end.isoformat()
+        if not start and not end:
+            console.print(f"[yellow]Could not parse date range: {when_filter}[/yellow]")
+
+    if since_date:
+        parsed = parse_fuzzy_date(since_date)
+        if parsed:
+            date_start = parsed.isoformat()
+        else:
+            console.print(f"[yellow]Could not parse date: {since_date}[/yellow]")
+
+    if until_date:
+        parsed = parse_fuzzy_date(until_date)
+        if parsed:
+            date_end = parsed.isoformat()
+        else:
+            console.print(f"[yellow]Could not parse date: {until_date}[/yellow]")
+
+    # Determine recency boost
+    recency_boost = 0.3 if recent else 0.0
+
     try:
         search = get_search()
         results = search.search(
@@ -657,6 +770,9 @@ def search_cmd(
             search_type=search_type,
             k=limit,
             filters=filters if filters else None,
+            date_start=date_start,
+            date_end=date_end,
+            recency_boost=recency_boost,
         )
     except Exception as e:
         console.print(f"[red]Search failed:[/red] {e}")
@@ -668,6 +784,21 @@ def search_cmd(
     if not results:
         console.print("[dim]No results found.[/dim]")
         return
+
+    # Show filter info
+    filter_info = []
+    if date_start or date_end:
+        if date_start and date_end:
+            filter_info.append(f"dates: {date_start} to {date_end}")
+        elif date_start:
+            filter_info.append(f"since: {date_start}")
+        else:
+            filter_info.append(f"until: {date_end}")
+    if recent:
+        filter_info.append("recency boosted")
+
+    if filter_info:
+        console.print(f"[dim]Filters: {', '.join(filter_info)}[/dim]")
 
     console.print(f"\n[bold]Found {len(results)} results:[/bold]\n")
 
@@ -812,16 +943,15 @@ def index_cmd(force: bool, embeddings: bool) -> None:
 def link() -> None:
     """Manage linked external files.
 
-    Link external todo files or note files/directories to index them
-    alongside your notes. Use 'nb link add' for todo files and
-    'nb link note add' for note files/directories.
+    Link external markdown files or directories to index them
+    alongside your notes. Both todos and note content are indexed.
     """
     pass
 
 
 @link.command("list")
 def link_list() -> None:
-    """List all linked external files (todos and notes)."""
+    """List all linked external files."""
     from nb.core.links import list_linked_files, list_linked_notes
 
     linked_todos = list_linked_files()
@@ -829,84 +959,117 @@ def link_list() -> None:
 
     if not linked_todos and not linked_notes:
         console.print("[dim]No linked files.[/dim]")
-        console.print("[dim]Use 'nb link add <path>' for todo files.[/dim]")
-        console.print("[dim]Use 'nb link note add <path>' for note files.[/dim]")
+        console.print("[dim]Use 'nb link add <path>' to add one.[/dim]")
         return
 
-    if linked_todos:
-        console.print("\n[bold]Linked Todo Files[/bold]")
-        table = Table(show_header=True)
-        table.add_column("Alias")
-        table.add_column("Path")
-        table.add_column("Sync")
-        table.add_column("Exists")
+    table = Table(show_header=True, title="Linked Files")
+    table.add_column("Alias")
+    table.add_column("Path")
+    table.add_column("Type")
+    table.add_column("Sync")
+    table.add_column("Exists")
 
-        for lf in linked_todos:
-            exists = "[green]yes[/green]" if lf.path.exists() else "[red]no[/red]"
-            sync = "[green]yes[/green]" if lf.sync else "[dim]no[/dim]"
-            table.add_row(lf.alias, str(lf.path), sync, exists)
+    for lf in linked_todos:
+        exists = "[green]yes[/green]" if lf.path.exists() else "[red]no[/red]"
+        sync = "[green]yes[/green]" if lf.sync else "[dim]no[/dim]"
+        table.add_row(lf.alias, str(lf.path), "todos", sync, exists)
 
-        console.print(table)
+    for ln in linked_notes:
+        exists = "[green]yes[/green]" if ln.path.exists() else "[red]no[/red]"
+        path_type = "notes"
+        if ln.path.is_dir():
+            path_type = "notes (dir)" if not ln.recursive else "notes (recursive)"
+        table.add_row(ln.alias, str(ln.path), path_type, "-", exists)
 
-    if linked_notes:
-        console.print("\n[bold]Linked Note Files/Directories[/bold]")
-        table = Table(show_header=True)
-        table.add_column("Alias")
-        table.add_column("Path")
-        table.add_column("Notebook")
-        table.add_column("Type")
-        table.add_column("Exists")
-
-        for ln in linked_notes:
-            exists = "[green]yes[/green]" if ln.path.exists() else "[red]no[/red]"
-            path_type = "dir" if ln.path.is_dir() else "file"
-            if ln.path.is_dir() and ln.recursive:
-                path_type = "dir (recursive)"
-            notebook = ln.notebook or f"@{ln.alias}"
-            table.add_row(ln.alias, str(ln.path), notebook, path_type, exists)
-
-        console.print(table)
+    console.print(table)
 
 
 @link.command("add")
 @click.argument("path", type=click.Path(exists=True))
 @click.option("--alias", "-a", help="Short name for the file (defaults to filename)")
-@click.option("--sync/--no-sync", default=True, help="Sync completions back to source")
 @click.option(
-    "--config", "save_to_config", is_flag=True, help="Save to config file instead of DB"
+    "--sync/--no-sync", default=True, help="Sync todo completions back to source"
 )
-def link_add(path: str, alias: str | None, sync: bool, save_to_config: bool) -> None:
-    """Add an external todo file to track.
+@click.option(
+    "--notebook", "-n", help="Virtual notebook name for notes (defaults to @alias)"
+)
+@click.option(
+    "--no-recursive", is_flag=True, help="Don't scan subdirectories (for directories)"
+)
+@click.option("--todos-only", is_flag=True, help="Only index todos (not note content)")
+@click.option("--notes-only", is_flag=True, help="Only index note content (not todos)")
+def link_add(
+    path: str,
+    alias: str | None,
+    sync: bool,
+    notebook: str | None,
+    no_recursive: bool,
+    todos_only: bool,
+    notes_only: bool,
+) -> None:
+    """Link an external file or directory.
 
-    The file will be scanned for todos and they'll appear in 'nb todo'.
+    By default, both todos and note content are indexed from linked files.
+    Use --todos-only or --notes-only to limit what gets indexed.
+
     With --sync (default), completing a todo will update the source file.
 
     Examples:
-        nb link add ~/work/project/TODO.md
-        nb link add ~/docs/tasks.md --alias work --no-sync
+        nb link add ~/work/TODO.md              # Index todos and notes
+        nb link add ~/docs/wiki --notes-only    # Only index as notes
+        nb link add ~/project/tasks.md --todos-only --no-sync
     """
-    from nb.core.links import add_linked_file
-    from nb.index.scanner import index_linked_file
+    from nb.core.links import add_linked_file, add_linked_note
+    from nb.index.scanner import index_linked_file, index_single_linked_note
+
+    p = Path(path)
+    todo_count = 0
+    note_count = 0
 
     try:
-        linked = add_linked_file(
-            Path(path),
-            alias=alias,
-            sync=sync,
-            save_to_config=save_to_config,
-        )
+        # Index todos unless notes-only
+        if not notes_only:
+            linked_todo = add_linked_file(
+                p,
+                alias=alias,
+                sync=sync,
+                save_to_config=False,
+            )
+            todo_count = index_linked_file(linked_todo.path, alias=linked_todo.alias)
+            console.print(f"[green]Linked for todos:[/green] {linked_todo.alias}")
+            console.print(f"[dim]Found {todo_count} todos.[/dim]")
+
+        # Index notes unless todos-only
+        if not todos_only:
+            # Use different alias if both are being added
+            note_alias = (
+                f"{alias or p.stem}-notes"
+                if not notes_only and not todos_only
+                else alias
+            )
+            linked_note = add_linked_note(
+                p,
+                alias=note_alias,
+                notebook=notebook,
+                recursive=not no_recursive,
+                save_to_config=False,
+            )
+            note_count = index_single_linked_note(linked_note.alias)
+            console.print(f"[green]Linked for notes:[/green] {linked_note.alias}")
+            console.print(
+                f"[dim]Indexed {note_count} notes in @{linked_note.notebook}.[/dim]"
+            )
+
     except FileNotFoundError as e:
         console.print(f"[red]{e}[/red]")
         raise SystemExit(1)
     except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
-
-    console.print(f"[green]Linked:[/green] {linked.alias} -> {linked.path}")
-
-    # Index the file
-    todo_count = index_linked_file(linked.path, alias=linked.alias)
-    console.print(f"[dim]Found {todo_count} todos.[/dim]")
+        # Alias already exists - that's OK for unified linking
+        if "already in use" in str(e) and not notes_only and not todos_only:
+            console.print(f"[dim]Note: {e}[/dim]")
+        else:
+            console.print(f"[red]{e}[/red]")
+            raise SystemExit(1)
 
 
 @link.command("remove")
@@ -915,53 +1078,95 @@ def link_remove(alias: str) -> None:
     """Stop tracking a linked external file.
 
     This does not delete the file, just removes it from tracking.
+    Works for both todo and note links.
     """
-    from nb.core.links import get_linked_file, remove_linked_file
+    from nb.core.links import (
+        get_linked_file,
+        get_linked_note,
+        remove_linked_file,
+        remove_linked_note,
+    )
+    from nb.index.scanner import remove_linked_note_from_index
     from nb.index.todos_repo import delete_todos_for_source
 
-    linked = get_linked_file(alias)
-    if not linked:
+    removed = False
+
+    # Try to remove as todo link
+    linked_todo = get_linked_file(alias)
+    if linked_todo:
+        delete_todos_for_source(linked_todo.path)
+        remove_linked_file(alias)
+        console.print(f"[green]Removed todo link:[/green] {alias}")
+        removed = True
+
+    # Try to remove as note link
+    linked_note = get_linked_note(alias)
+    if linked_note:
+        remove_linked_note_from_index(alias)
+        remove_linked_note(alias)
+        console.print(f"[green]Removed note link:[/green] {alias}")
+        removed = True
+
+    if not removed:
         console.print(f"[red]Linked file not found: {alias}[/red]")
-        raise SystemExit(1)
-
-    # Remove todos from index
-    delete_todos_for_source(linked.path)
-
-    # Remove the link
-    if remove_linked_file(alias):
-        console.print(f"[green]Removed:[/green] {alias}")
-    else:
-        console.print(f"[red]Failed to remove: {alias}[/red]")
         raise SystemExit(1)
 
 
 @link.command("sync")
 @click.argument("alias", required=False)
 def link_sync(alias: str | None) -> None:
-    """Re-scan linked files and update todo index.
+    """Re-scan linked files and update index.
 
     If ALIAS is provided, only that file is scanned.
-    Otherwise, all linked files are scanned.
+    Otherwise, all linked files (todos and notes) are scanned.
     """
-    from nb.core.links import get_linked_file, list_linked_files
-    from nb.index.scanner import index_linked_file, scan_linked_files
+    from nb.core.links import (
+        get_linked_file,
+        get_linked_note,
+        list_linked_files,
+        list_linked_notes,
+    )
+    from nb.index.scanner import (
+        index_linked_file,
+        index_single_linked_note,
+        scan_linked_files,
+        scan_linked_notes,
+    )
 
     if alias:
-        linked = get_linked_file(alias)
-        if not linked:
+        synced = False
+
+        # Try as todo link
+        linked_todo = get_linked_file(alias)
+        if linked_todo:
+            if not linked_todo.path.exists():
+                console.print(f"[red]File does not exist: {linked_todo.path}[/red]")
+                raise SystemExit(1)
+            todo_count = index_linked_file(linked_todo.path, alias=linked_todo.alias)
+            console.print(f"[green]Synced todos:[/green] {todo_count}")
+            synced = True
+
+        # Try as note link
+        linked_note = get_linked_note(alias)
+        if linked_note:
+            if not linked_note.path.exists():
+                console.print(f"[red]Path does not exist: {linked_note.path}[/red]")
+                raise SystemExit(1)
+            note_count = index_single_linked_note(alias)
+            console.print(f"[green]Synced notes:[/green] {note_count}")
+            synced = True
+
+        if not synced:
             console.print(f"[red]Linked file not found: {alias}[/red]")
             raise SystemExit(1)
-
-        if not linked.path.exists():
-            console.print(f"[red]File does not exist: {linked.path}[/red]")
-            raise SystemExit(1)
-
-        todo_count = index_linked_file(linked.path, alias=linked.alias)
-        console.print(f"[green]Synced {linked.alias}:[/green] {todo_count} todos")
     else:
-        total = scan_linked_files()
-        linked_count = len(list_linked_files())
-        console.print(f"[green]Synced {linked_count} files:[/green] {total} todos")
+        todo_total = scan_linked_files()
+        note_total = scan_linked_notes()
+        todo_count = len(list_linked_files())
+        note_count = len(list_linked_notes())
+        console.print(
+            f"[green]Synced:[/green] {todo_count} todo sources ({todo_total} todos), {note_count} note sources ({note_total} notes)"
+        )
 
 
 @link.command("enable-sync")
@@ -991,163 +1196,6 @@ def link_disable_sync(alias: str) -> None:
     else:
         console.print(f"[red]Linked file not found: {alias}[/red]")
         raise SystemExit(1)
-
-
-# -----------------------------------------------------------------------------
-# Link Note Subcommands
-# -----------------------------------------------------------------------------
-
-
-@link.group("note")
-def link_note() -> None:
-    """Manage linked external note files and directories.
-
-    Link external markdown files or directories to index them alongside
-    your notes. Linked notes are searchable and appear in their own
-    virtual notebook.
-    """
-    pass
-
-
-@link_note.command("add")
-@click.argument("path", type=click.Path(exists=True))
-@click.option(
-    "--alias", "-a", help="Short name for the link (defaults to filename/dirname)"
-)
-@click.option("--notebook", "-n", help="Virtual notebook name (defaults to @alias)")
-@click.option(
-    "--no-recursive", is_flag=True, help="Don't scan subdirectories (for directories)"
-)
-@click.option(
-    "--config", "save_to_config", is_flag=True, help="Save to config file instead of DB"
-)
-def link_note_add(
-    path: str,
-    alias: str | None,
-    notebook: str | None,
-    no_recursive: bool,
-    save_to_config: bool,
-) -> None:
-    """Link an external note file or directory.
-
-    The notes will be indexed and searchable. For directories, all .md files
-    are scanned (recursively by default).
-
-    Examples:
-        nb link note add ~/docs/wiki
-        nb link note add ~/code/project/README.md --alias project-readme
-        nb link note add ~/vault --notebook vault --no-recursive
-    """
-    from nb.core.links import add_linked_note
-    from nb.index.scanner import index_single_linked_note
-
-    try:
-        linked = add_linked_note(
-            Path(path),
-            alias=alias,
-            notebook=notebook,
-            recursive=not no_recursive,
-            save_to_config=save_to_config,
-        )
-    except FileNotFoundError as e:
-        console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
-
-    path_type = "directory" if Path(path).is_dir() else "file"
-    console.print(f"[green]Linked {path_type}:[/green] {linked.alias} -> {linked.path}")
-    console.print(f"[dim]Notebook: {linked.notebook}[/dim]")
-
-    # Index the notes
-    note_count = index_single_linked_note(linked.alias)
-    console.print(f"[dim]Indexed {note_count} notes.[/dim]")
-
-
-@link_note.command("remove")
-@click.argument("alias")
-def link_note_remove(alias: str) -> None:
-    """Stop tracking a linked note file/directory.
-
-    This does not delete the files, just removes them from the index.
-    """
-    from nb.core.links import get_linked_note, remove_linked_note
-    from nb.index.scanner import remove_linked_note_from_index
-
-    linked = get_linked_note(alias)
-    if not linked:
-        console.print(f"[red]Linked note not found: {alias}[/red]")
-        raise SystemExit(1)
-
-    # Remove notes from index
-    removed_count = remove_linked_note_from_index(alias)
-
-    # Remove the link
-    if remove_linked_note(alias):
-        console.print(f"[green]Removed:[/green] {alias} ({removed_count} notes)")
-    else:
-        console.print(f"[red]Failed to remove: {alias}[/red]")
-        raise SystemExit(1)
-
-
-@link_note.command("sync")
-@click.argument("alias", required=False)
-def link_note_sync(alias: str | None) -> None:
-    """Re-scan linked note files/directories and update index.
-
-    If ALIAS is provided, only that source is scanned.
-    Otherwise, all linked notes are scanned.
-    """
-    from nb.core.links import get_linked_note, list_linked_notes
-    from nb.index.scanner import index_single_linked_note, scan_linked_notes
-
-    if alias:
-        linked = get_linked_note(alias)
-        if not linked:
-            console.print(f"[red]Linked note not found: {alias}[/red]")
-            raise SystemExit(1)
-
-        if not linked.path.exists():
-            console.print(f"[red]Path does not exist: {linked.path}[/red]")
-            raise SystemExit(1)
-
-        note_count = index_single_linked_note(alias)
-        console.print(f"[green]Synced {linked.alias}:[/green] {note_count} notes")
-    else:
-        total = scan_linked_notes()
-        linked_count = len(list_linked_notes())
-        console.print(f"[green]Synced {linked_count} sources:[/green] {total} notes")
-
-
-@link_note.command("list")
-def link_note_list() -> None:
-    """List all linked note files/directories."""
-    from nb.core.links import list_linked_notes
-
-    linked = list_linked_notes()
-
-    if not linked:
-        console.print("[dim]No linked notes.[/dim]")
-        console.print("[dim]Use 'nb link note add <path>' to add one.[/dim]")
-        return
-
-    table = Table(show_header=True)
-    table.add_column("Alias")
-    table.add_column("Path")
-    table.add_column("Notebook")
-    table.add_column("Type")
-    table.add_column("Exists")
-
-    for ln in linked:
-        exists = "[green]yes[/green]" if ln.path.exists() else "[red]no[/red]"
-        path_type = "dir" if ln.path.is_dir() else "file"
-        if ln.path.is_dir() and ln.recursive:
-            path_type = "dir (recursive)"
-        notebook = ln.notebook or f"@{ln.alias}"
-        table.add_row(ln.alias, str(ln.path), notebook, path_type, exists)
-
-    console.print(table)
 
 
 # =============================================================================

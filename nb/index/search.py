@@ -133,6 +133,9 @@ class NoteSearch:
         k: int = 10,
         filters: dict | None = None,
         vector_weight: float = 0.7,
+        date_start: str | None = None,
+        date_end: str | None = None,
+        recency_boost: float = 0.0,
     ) -> list[SearchResult]:
         """Search notes using keyword, semantic, or hybrid search.
 
@@ -142,16 +145,32 @@ class NoteSearch:
             k: Maximum number of results to return.
             filters: Optional metadata filters (e.g., {"notebook": "daily"}).
             vector_weight: Weight for vector results in hybrid search (0-1).
+            date_start: Filter to notes on or after this date (ISO format).
+            date_end: Filter to notes on or before this date (ISO format).
+            recency_boost: Weight (0-1) to boost recent results. 0 = no boost.
 
         Returns:
-            List of search results sorted by relevance.
+            List of search results sorted by relevance (with optional recency boost).
         """
+        # Build combined filters
+        combined_filters = dict(filters) if filters else {}
+
+        # Add date range filters
+        if date_start and date_end:
+            combined_filters["date"] = {">=": date_start, "<=": date_end}
+        elif date_start:
+            combined_filters["date"] = {">=": date_start}
+        elif date_end:
+            combined_filters["date"] = {"<=": date_end}
+
         try:
+            # Fetch more results if we're going to apply recency boost
+            fetch_k = k * 3 if recency_boost > 0 else k
             results = self.db.query(
                 query,
                 search_type=search_type,
-                k=k,
-                filters=filters,
+                k=fetch_k,
+                filters=combined_filters if combined_filters else None,
                 vector_weight=vector_weight,
             )
         except Exception as e:
@@ -160,7 +179,7 @@ class NoteSearch:
                 return []
             raise
 
-        return [
+        search_results = [
             SearchResult(
                 path=r.metadata.get("path", ""),
                 title=r.metadata.get("title"),
@@ -172,6 +191,54 @@ class NoteSearch:
             )
             for r in results
         ]
+
+        # Apply recency boost if requested
+        if recency_boost > 0 and search_results:
+            search_results = self._apply_recency_boost(search_results, recency_boost)
+
+        return search_results[:k]
+
+    def _apply_recency_boost(
+        self, results: list[SearchResult], boost_weight: float
+    ) -> list[SearchResult]:
+        """Apply a recency boost to search results.
+
+        Recent documents get a score boost proportional to how recent they are.
+        The boost decays exponentially over time.
+
+        Args:
+            results: List of search results.
+            boost_weight: How much to weight recency (0-1).
+
+        Returns:
+            Results re-sorted with recency boost applied.
+        """
+        from datetime import date as date_type
+
+        today = date_type.today()
+
+        for r in results:
+            if r.date:
+                try:
+                    # Parse date and calculate age in days
+                    note_date = date_type.fromisoformat(r.date)
+                    age_days = (today - note_date).days
+
+                    # Exponential decay: half-life of ~30 days
+                    # recency_factor is 1.0 for today, ~0.5 for 30 days ago, etc.
+                    recency_factor = 2 ** (-age_days / 30)
+
+                    # Combine relevance score with recency
+                    # Final score = (1-weight)*relevance + weight*recency
+                    r.score = (
+                        1 - boost_weight
+                    ) * r.score + boost_weight * recency_factor
+                except (ValueError, TypeError):
+                    pass  # Keep original score if date parsing fails
+
+        # Re-sort by new score
+        results.sort(key=lambda x: x.score, reverse=True)
+        return results
 
     def search_by_tag(self, tag: str, k: int = 20) -> list[SearchResult]:
         """Find notes with a specific tag.
