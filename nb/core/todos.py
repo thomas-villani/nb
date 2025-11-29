@@ -94,6 +94,8 @@ def extract_todos(
     stack: list[tuple[int, Todo]] = []  # (indent_level, todo)
     in_code_block = False
     current_todo: Todo | None = None
+    current_todo_indent: int = 0  # Track indent of current todo for details capture
+    details_lines: list[str] = []  # Accumulate details lines
 
     # Determine project (notebook) from path
     from nb.core.notebooks import get_notebook_for_file
@@ -111,6 +113,13 @@ def extract_todos(
         external=external,
         alias=alias,
     )
+
+    def finalize_details() -> None:
+        """Save accumulated details to current todo."""
+        nonlocal details_lines, current_todo
+        if current_todo and details_lines:
+            current_todo.details = "\n".join(details_lines)
+            details_lines = []
 
     for line_num, line in enumerate(lines, 1):
         # Track code blocks
@@ -139,7 +148,17 @@ def extract_todos(
         # Check for todo line
         match = TODO_PATTERN.match(line)
         if not match:
+            # Not a todo line - check if it's a details line for current todo
+            if current_todo and line.strip():
+                # Calculate line's indentation
+                line_indent = len(line) - len(line.lstrip())
+                # If indented more than the todo, it's part of the details
+                if line_indent > current_todo_indent:
+                    details_lines.append(line.rstrip())
             continue
+
+        # Found a new todo - finalize details for previous todo
+        finalize_details()
 
         indent = len(match.group("indent"))
         done = match.group("done").lower() == "x"
@@ -180,6 +199,10 @@ def extract_todos(
         stack.append((indent, todo))
         todos.append(todo)
         current_todo = todo
+        current_todo_indent = indent
+
+    # Finalize details for the last todo
+    finalize_details()
 
     return todos
 

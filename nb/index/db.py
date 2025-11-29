@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 # Current schema version
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -136,6 +136,12 @@ SCHEMA_V5 = """
 ALTER TABLE notes ADD COLUMN mtime REAL;
 """
 
+# Phase 5 additions: details column for multi-line todo content
+SCHEMA_V6 = """
+-- Add details column to todos table for multi-line content
+ALTER TABLE todos ADD COLUMN details TEXT;
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -143,6 +149,7 @@ MIGRATIONS: dict[int, str] = {
     3: SCHEMA_V3,
     4: SCHEMA_V4,
     5: SCHEMA_V5,
+    6: SCHEMA_V6,
 }
 
 

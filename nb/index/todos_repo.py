@@ -38,6 +38,7 @@ def _row_to_todo(row) -> Todo:
         parent_id=row["parent_id"],
         children=[],  # Loaded separately if needed
         attachments=[],  # Loaded separately if needed
+        details=row["details"] if "details" in row.keys() else None,
     )
 
 
@@ -57,8 +58,8 @@ def upsert_todo(todo: Todo) -> None:
         INSERT OR REPLACE INTO todos (
             id, content, raw_content, completed, source_type, source_path,
             source_external, source_alias, line_number, created_date,
-            due_date, priority, project, parent_id, content_hash
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            due_date, priority, project, parent_id, content_hash, details
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             todo.id,
@@ -76,6 +77,7 @@ def upsert_todo(todo: Todo) -> None:
             todo.project,
             todo.parent_id,
             None,  # content_hash not used currently
+            todo.details,
         ),
     )
 
@@ -146,11 +148,14 @@ def query_todos(
     completed: bool | None = None,
     due_start: date | None = None,
     due_end: date | None = None,
+    created_start: date | None = None,
+    created_end: date | None = None,
     overdue: bool = False,
     priority: int | None = None,
     notebook: str | None = None,
     exclude_notebooks: list[str] | None = None,
     tag: str | None = None,
+    exclude_tags: list[str] | None = None,
     source_path: Path | None = None,
     parent_only: bool = True,
 ) -> list[Todo]:
@@ -160,11 +165,14 @@ def query_todos(
         completed: Filter by completion status
         due_start: Filter by due date >= this
         due_end: Filter by due date <= this
+        created_start: Filter by created date >= this
+        created_end: Filter by created date <= this
         overdue: Only include overdue todos
         priority: Filter by priority level (1, 2, or 3)
         notebook: Filter by notebook name (stored as project)
         exclude_notebooks: List of notebooks to exclude
         tag: Filter by tag
+        exclude_tags: List of tags to exclude
         source_path: Filter by source file path
         parent_only: If True, only return top-level todos (not subtasks)
 
@@ -196,6 +204,14 @@ def query_todos(
         conditions.append("t.due_date <= ?")
         params.append(due_end.isoformat())
 
+    if created_start:
+        conditions.append("t.created_date >= ?")
+        params.append(created_start.isoformat())
+
+    if created_end:
+        conditions.append("t.created_date <= ?")
+        params.append(created_end.isoformat())
+
     if overdue:
         conditions.append("t.due_date < ? AND t.completed = 0")
         params.append(date.today().isoformat())
@@ -212,6 +228,14 @@ def query_todos(
         placeholders = ", ".join("?" for _ in exclude_notebooks)
         conditions.append(f"(t.project IS NULL OR t.project NOT IN ({placeholders}))")
         params.extend(exclude_notebooks)
+
+    if exclude_tags:
+        # Exclude todos that have any of the specified tags
+        placeholders = ", ".join("?" for _ in exclude_tags)
+        conditions.append(
+            f"NOT EXISTS (SELECT 1 FROM todo_tags et WHERE et.todo_id = t.id AND et.tag IN ({placeholders}))"
+        )
+        params.extend([t.lower() for t in exclude_tags])
 
     if source_path:
         conditions.append("t.source_path = ?")
@@ -256,9 +280,14 @@ def get_todo_children(parent_id: str) -> list[Todo]:
 def get_sorted_todos(
     completed: bool | None = False,
     tag: str | None = None,
+    exclude_tags: list[str] | None = None,
     notebook: str | None = None,
     exclude_notebooks: list[str] | None = None,
     priority: int | None = None,
+    due_start: date | None = None,
+    due_end: date | None = None,
+    created_start: date | None = None,
+    created_end: date | None = None,
 ) -> list[Todo]:
     """Get todos sorted by the default sorting order.
 
@@ -274,9 +303,14 @@ def get_sorted_todos(
     todos = query_todos(
         completed=completed,
         tag=tag,
+        exclude_tags=exclude_tags,
         notebook=notebook,
         exclude_notebooks=exclude_notebooks,
         priority=priority,
+        due_start=due_start,
+        due_end=due_end,
+        created_start=created_start,
+        created_end=created_end,
         parent_only=True,
     )
 

@@ -124,13 +124,26 @@ Todos are extracted from markdown files using GitHub-style checkboxes:
 #### Commands
 
 ```bash
-nb todo                 # List all open todos
+nb todo                 # List all open todos (grouped by due date)
+nb todo -f              # Focus mode: hide "due later" and "no date" sections
+nb todo -a              # Include todos from all sources (even excluded notebooks)
+nb todo -c              # Include completed todos
 nb todo -n daily        # Show todos from a specific notebook
-nb todo -n personal     # View excluded notebook explicitly
-nb todo --overdue       # Show overdue todos
+nb todo --overdue       # Show overdue todos only
 nb todo -t work         # Filter by tag
+nb todo -T waiting      # Exclude todos with a tag
 nb todo -p 1            # Filter by priority (1=high, 2=medium, 3=low)
-nb todo --all           # Include completed todos
+
+# Date filters
+nb todo --created-today # Show todos created today
+nb todo --created-week  # Show todos created this week
+nb todo --due-today     # Show todos due today
+nb todo --due-week      # Show todos due this week
+
+# Sorting
+nb todo -s tag          # Sort by first tag (default: source)
+nb todo -s priority     # Sort by priority
+nb todo -s created      # Sort by creation date
 
 nb todo add "New task"  # Add to inbox (todo.md)
 nb todo add --today "Call dentist"  # Add to today's note
@@ -139,6 +152,8 @@ nb todo undone abc123   # Mark incomplete
 nb todo show abc123     # Show todo details
 nb todo edit abc123     # Open source file at todo line
 ```
+
+Todos are grouped by due date: OVERDUE, DUE TODAY, DUE THIS WEEK, DUE NEXT WEEK, DUE LATER, NO DUE DATE.
 
 Notebooks with `todo_exclude: true` are hidden from `nb todo` by default.
 Use `-n <notebook>` to view them explicitly.

@@ -82,6 +82,7 @@ class Todo:
     parent_id: str | None = None
     children: list[Todo] = field(default_factory=list)
     attachments: list[Attachment] = field(default_factory=list)
+    details: str | None = None  # Multi-line details/description below the todo
 
     @property
     def is_overdue(self) -> bool:

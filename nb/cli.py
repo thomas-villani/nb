@@ -725,81 +725,218 @@ def list_notes_cmd(notebook: str | None, week: bool, month: bool) -> None:
 
 
 @main.group(invoke_without_command=True)
-@click.option("--today", "filter_today", is_flag=True, help="Show todos created today")
-@click.option(
-    "--week", "filter_week", is_flag=True, help="Show todos created this week"
-)
+@click.option("--created-today", is_flag=True, help="Show only todos created today")
+@click.option("--created-week", is_flag=True, help="Show only todos created this week")
+@click.option("--due-today", is_flag=True, help="Show only todos due today")
+@click.option("--due-week", is_flag=True, help="Show only todos due this week")
 @click.option("--overdue", is_flag=True, help="Show only overdue todos")
 @click.option("--priority", "-p", type=int, help="Filter by priority (1, 2, or 3)")
 @click.option("--tag", "-t", help="Filter by tag")
+@click.option(
+    "--exclude-tag",
+    "-T",
+    multiple=True,
+    help="Exclude todos with this tag (can be used multiple times)",
+)
 @click.option("--notebook", "-n", help="Filter by notebook (overrides exclusions)")
-@click.option("--all", "show_all", is_flag=True, help="Include completed todos")
+@click.option(
+    "--exclude-notebook",
+    "-N",
+    multiple=True,
+    help="Exclude todos from this notebook (can be used multiple times)",
+)
+@click.option("--hide-later", is_flag=True, help="Hide todos due later than next week")
+@click.option("--hide-no-date", is_flag=True, help="Hide todos with no due date")
+@click.option(
+    "--focus",
+    "-f",
+    is_flag=True,
+    help="Focus mode: show only overdue, today, this week, and next week",
+)
+@click.option(
+    "--sort-by",
+    "-s",
+    type=click.Choice(["source", "tag", "priority", "created"]),
+    default="source",
+    help="Sort todos within groups",
+)
+@click.option(
+    "--all",
+    "-a",
+    "show_all",
+    is_flag=True,
+    help="Include todos from all sources (even excluded notebooks)",
+)
+@click.option("--include-completed", "-c", is_flag=True, help="Include completed todos")
 @click.option("-i", "--interactive", is_flag=True, help="Open interactive todo viewer")
 @click.pass_context
 def todo(
     ctx: click.Context,
-    filter_today: bool,
-    filter_week: bool,
+    created_today: bool,
+    created_week: bool,
+    due_today: bool,
+    due_week: bool,
     overdue: bool,
     priority: int | None,
     tag: str | None,
+    exclude_tag: tuple[str, ...],
     notebook: str | None,
+    exclude_notebook: tuple[str, ...],
+    hide_later: bool,
+    hide_no_date: bool,
+    focus: bool,
+    sort_by: str,
     show_all: bool,
+    include_completed: bool,
     interactive: bool,
 ) -> None:
     """Manage todos.
 
-    Run 'nb todo' without a subcommand to list todos.
-    Use -i for interactive mode with keyboard navigation.
+    Run 'nb todo' without a subcommand to list todos grouped by due date:
+    OVERDUE, DUE TODAY, DUE THIS WEEK, DUE NEXT WEEK, DUE LATER, NO DUE DATE.
+
+    \b
+    Examples:
+      nb todo                 List all open todos
+      nb todo -f              Focus mode (hide later/no-date sections)
+      nb todo -t work         Show only todos tagged #work
+      nb todo -T waiting      Exclude todos tagged #waiting
+      nb todo -p 1            Show only high priority todos
+      nb todo -n daily        Show todos from 'daily' notebook only
+      nb todo -a              Include todos from excluded notebooks
+      nb todo -c              Include completed todos
+      nb todo -s tag          Sort by tag instead of source
+      nb todo --due-today     Show only todos due today
+      nb todo --created-week  Show only todos created this week
+
+    \b
+    Date Filters:
+      --created-today   Show todos created today
+      --created-week    Show todos created this week
+      --due-today       Show todos due today
+      --due-week        Show todos due this week
+      --overdue         Show only overdue todos
+
+    \b
+    Source Filters:
+      -t, --tag TAG             Include only todos with this tag
+      -T, --exclude-tag TAG     Exclude todos with this tag (repeatable)
+      -n, --notebook NAME       Show only todos from this notebook
+      -N, --exclude-notebook    Exclude todos from this notebook (repeatable)
+      -p, --priority N          Filter by priority (1=high, 2=medium, 3=low)
+
+    \b
+    Display Filters:
+      --hide-later      Hide the "DUE LATER" section
+      --hide-no-date    Hide the "NO DUE DATE" section
+      -f, --focus       Focus mode: hide both later and no-date sections
+
+    \b
+    Output Options:
+      -s, --sort-by     Sort within groups: source (default), tag, priority, created
+      -a, --all         Include all sources (even excluded notebooks)
+      -c, --include-completed   Include completed todos
+      -i, --interactive         Launch interactive TUI viewer
 
     Notebooks with todo_exclude: true in config are hidden by default.
-    Use -n <notebook> to view a specific notebook (including excluded ones).
+    Use -a/--all to include them, or -n <notebook> to view one explicitly.
     """
     if ctx.invoked_subcommand is None:
         # Ensure todos are indexed (skip vector indexing for speed)
         index_all_notes(index_vectors=False)
 
-        # Get excluded notebooks from config (unless a specific notebook is requested)
+        # Get excluded notebooks from config (unless --all or specific notebook is requested)
         config = get_config()
-        exclude_notebooks = None if notebook else config.excluded_notebooks() or None
+        all_excluded_notebooks: list[str] | None = None
+        if not show_all and not notebook:
+            config_excluded = config.excluded_notebooks() or []
+            # Merge config exclusions with CLI exclusions
+            all_excluded_notebooks = list(set(config_excluded) | set(exclude_notebook))
+            if not all_excluded_notebooks:
+                all_excluded_notebooks = None
+
+        # Convert exclude_tag tuple to list (or None)
+        exclude_tags = list(exclude_tag) if exclude_tag else None
+
+        # Handle --focus flag (enables both --hide-later and --hide-no-date)
+        effective_hide_later = hide_later or focus
+        effective_hide_no_date = hide_no_date or focus
 
         if interactive:
             # Launch interactive viewer
             from nb.tui.todos import run_interactive_todos
 
             run_interactive_todos(
-                show_completed=show_all,
+                show_completed=include_completed,
                 tag=tag,
                 notebook=notebook,
-                exclude_notebooks=exclude_notebooks,
+                exclude_notebooks=all_excluded_notebooks,
             )
         else:
             # Default: list todos
             _list_todos(
-                filter_today=filter_today,
-                filter_week=filter_week,
+                created_today=created_today,
+                created_week=created_week,
+                due_today=due_today,
+                due_week=due_week,
                 overdue=overdue,
                 priority=priority,
                 tag=tag,
+                exclude_tags=exclude_tags,
                 notebook=notebook,
-                exclude_notebooks=exclude_notebooks,
-                show_all=show_all,
+                exclude_notebooks=all_excluded_notebooks,
+                hide_later=effective_hide_later,
+                hide_no_date=effective_hide_no_date,
+                sort_by=sort_by,
+                include_completed=include_completed,
             )
 
 
 def _list_todos(
-    filter_today: bool = False,
-    filter_week: bool = False,
+    created_today: bool = False,
+    created_week: bool = False,
+    due_today: bool = False,
+    due_week: bool = False,
     overdue: bool = False,
     priority: int | None = None,
     tag: str | None = None,
+    exclude_tags: list[str] | None = None,
     notebook: str | None = None,
     exclude_notebooks: list[str] | None = None,
-    show_all: bool = False,
+    hide_later: bool = False,
+    hide_no_date: bool = False,
+    sort_by: str = "source",
+    include_completed: bool = False,
 ) -> None:
     """List todos with optional filters."""
+    from datetime import timedelta
+
     # Determine completion filter
-    completed = None if show_all else False
+    completed = None if include_completed else False
+
+    # Calculate date ranges for filters
+    today_date = date.today()
+    week_start, week_end = get_week_range()
+
+    # Build query parameters based on filters
+    due_start: date | None = None
+    due_end: date | None = None
+    created_start: date | None = None
+    created_end: date | None = None
+
+    if created_today:
+        created_start = today_date
+        created_end = today_date
+    elif created_week:
+        created_start = week_start
+        created_end = week_end
+
+    if due_today:
+        due_start = today_date
+        due_end = today_date
+    elif due_week:
+        due_start = week_start
+        due_end = week_end
 
     if overdue:
         todos = query_todos(
@@ -807,30 +944,40 @@ def _list_todos(
             overdue=True,
             priority=priority,
             tag=tag,
+            exclude_tags=exclude_tags,
             notebook=notebook,
             exclude_notebooks=exclude_notebooks,
+            created_start=created_start,
+            created_end=created_end,
         )
     else:
         todos = get_sorted_todos(
             completed=completed,
             priority=priority,
             tag=tag,
+            exclude_tags=exclude_tags,
             notebook=notebook,
             exclude_notebooks=exclude_notebooks,
+            due_start=due_start,
+            due_end=due_end,
+            created_start=created_start,
+            created_end=created_end,
         )
 
     if not todos:
         console.print("[dim]No todos found.[/dim]")
         return
 
-    # Group todos for display
-    today_date = date.today()
-    week_start, week_end = get_week_range()
+    # Calculate next week range
+    next_week_start = week_end + timedelta(days=1)
+    next_week_end = week_end + timedelta(days=7)
 
+    # Group todos for display
     groups: dict[str, list] = {
         "OVERDUE": [],
         "DUE TODAY": [],
         "DUE THIS WEEK": [],
+        "DUE NEXT WEEK": [],
         "DUE LATER": [],
         "NO DUE DATE": [],
     }
@@ -844,8 +991,45 @@ def _list_todos(
             groups["DUE TODAY"].append(t)
         elif t.due_date <= week_end:
             groups["DUE THIS WEEK"].append(t)
+        elif t.due_date <= next_week_end:
+            groups["DUE NEXT WEEK"].append(t)
         else:
             groups["DUE LATER"].append(t)
+
+    # Apply hide filters
+    if hide_later:
+        groups["DUE LATER"] = []
+    if hide_no_date:
+        groups["NO DUE DATE"] = []
+
+    # Sort todos within each group
+    def get_sort_key(todo):
+        if sort_by == "tag":
+            return (todo.tags[0].lower() if todo.tags else "zzz", todo.content.lower())
+        elif sort_by == "priority":
+            # Priority 1 is highest, None is lowest
+            prio = todo.priority.value if todo.priority else 999
+            return (prio, todo.content.lower())
+        elif sort_by == "created":
+            return (todo.created_date or date.min, todo.content.lower())
+        else:  # source (default)
+            source_str = _format_todo_source(todo)
+            return (source_str.lower(), todo.content.lower())
+
+    for group_todos in groups.values():
+        group_todos.sort(key=get_sort_key)
+
+    # Collect all visible todos for column width calculation
+    all_visible_todos = []
+    for group_todos in groups.values():
+        all_visible_todos.extend(group_todos)
+
+    if not all_visible_todos:
+        console.print("[dim]No todos found.[/dim]")
+        return
+
+    # Calculate column widths for alignment
+    widths = _calculate_column_widths(all_visible_todos)
 
     # Display
     for group_name, group_todos in groups.items():
@@ -855,7 +1039,28 @@ def _list_todos(
         console.print(f"\n[bold]{group_name}[/bold]")
 
         for t in group_todos:
-            _print_todo(t, indent=0)
+            _print_todo(t, indent=0, widths=widths)
+
+
+def _calculate_column_widths(todos: list) -> dict[str, int]:
+    """Calculate column widths for aligned todo output."""
+    widths = {
+        "content": 0,
+        "source": 0,
+        "created": 5,  # Fixed: "+MM/DD"
+        "due": 6,  # Fixed: "Mon DD"
+        "priority": 2,  # Fixed: "!N"
+    }
+
+    for t in todos:
+        widths["content"] = max(widths["content"], len(t.content))
+        source_str = _format_todo_source(t)
+        widths["source"] = max(widths["source"], len(source_str))
+
+    # Cap content width to avoid very long lines
+    widths["content"] = min(widths["content"], 60)
+
+    return widths
 
 
 def _format_todo_source(t) -> str:
@@ -881,59 +1086,65 @@ def _format_todo_source(t) -> str:
             return t.source.path.stem
 
 
-def _print_todo(t, indent: int = 0) -> None:
+def _print_todo(t, indent: int = 0, widths: dict[str, int] | None = None) -> None:
     """Print a single todo with formatting."""
     prefix = "  " * indent
     checkbox = "[green]x[/green]" if t.completed else "[dim]o[/dim]"
 
-    # Build content line
+    # Build content - truncate if needed for alignment
     content = t.content
+    content_width = widths["content"] if widths else len(content)
+    if len(content) > content_width:
+        content_display = content[: content_width - 1] + "…"
+    else:
+        content_display = content.ljust(content_width)
 
-    # Add metadata
-    meta_parts = []
-
-    # Add source info
+    # Build source column
     source_str = _format_todo_source(t)
-    if source_str:
-        meta_parts.append(f"[blue]{source_str}[/blue]")
+    source_width = widths["source"] if widths else len(source_str)
+    source_padded = source_str.ljust(source_width) if source_str else " " * source_width
 
-    # Add created date
+    # Build metadata columns with fixed widths
+    created_str = ""
     if t.created_date:
-        created_str = t.created_date.strftime("%m/%d")
-        meta_parts.append(f"[dim]+{created_str}[/dim]")
+        created_str = f"+{t.created_date.strftime('%m/%d')}"
 
+    due_str = ""
+    due_color = "red"
     if t.due_date:
         due_str = t.due_date.strftime("%b %d")
-        if t.is_overdue:
-            meta_parts.append(f"[red]{due_str}[/red]")
-        elif t.is_due_today:
-            meta_parts.append(f"[yellow]{due_str}[/yellow]")
-        else:
-            meta_parts.append(f"[dim]{due_str}[/dim]")
 
+    priority_str = ""
     if t.priority:
-        meta_parts.append(f"[magenta]!{t.priority.value}[/magenta]")
+        priority_str = f"!{t.priority.value}"
 
+    tags_str = ""
     if t.tags:
-        meta_parts.append(" ".join(f"[cyan]#{tag}[/cyan]" for tag in t.tags[:3]))
+        tags_str = " ".join(f"#{tag}" for tag in t.tags[:3])
 
-    meta_str = "  ".join(meta_parts)
-
-    # Print with short ID (6 chars is plenty for personal use)
+    # Build the formatted line with alignment
     short_id = t.id[:6]
+
+    # Format with Rich markup and padding
     if t.completed:
-        console.print(
-            f"{prefix}{checkbox} [strikethrough]{content}[/strikethrough]  {meta_str}  [dim]{short_id}[/dim]"
-        )
+        content_part = f"[strikethrough]{content_display}[/strikethrough]"
     else:
-        console.print(
-            f"{prefix}{checkbox} {content}  {meta_str}  [dim]{short_id}[/dim]"
-        )
+        content_part = content_display
+
+    source_part = f"[blue]{source_padded}[/blue]" if source_str else " " * source_width
+    created_part = f"[dim]{created_str:>6}[/dim]" if created_str else " " * 6
+    due_part = f"[{due_color}]{due_str:>6}[/{due_color}]" if due_str else " " * 6
+    priority_part = f"[magenta]{priority_str:>2}[/magenta]" if priority_str else "  "
+    tags_part = f"  [cyan]{tags_str}[/cyan]" if tags_str else ""
+
+    console.print(
+        f"{prefix}{checkbox} {content_part}  {source_part}  {created_part}  {due_part}  {priority_part}  [dim]{short_id}[/dim]{tags_part}"
+    )
 
     # Print children
     children = get_todo_children(t.id)
     for child in children:
-        _print_todo(child, indent=indent + 1)
+        _print_todo(child, indent=indent + 1, widths=widths)
 
 
 @todo.command("add")
@@ -947,11 +1158,19 @@ def _print_todo(t, indent: int = 0) -> None:
 def todo_add(text: str, add_today: bool) -> None:
     """Add a new todo to the inbox (or today's note with --today).
 
-    TEXT can include metadata like @due(friday), @priority(1), or #tags.
+    TEXT can include inline metadata:
 
+    \b
+      @due(DATE)      Set due date (today, tomorrow, friday, 2024-12-25)
+      @priority(N)    Set priority (1=high, 2=medium, 3=low)
+      #tag            Add tags
+
+    \b
     Examples:
-        nb todo add "Review PR @due(friday) #work"
-        nb todo add --today "Call dentist @priority(1)"
+      nb todo add "Review PR"
+      nb todo add "Review PR @due(friday) #work"
+      nb todo add "Urgent task @priority(1) @due(today)"
+      nb todo add --today "Call dentist"
     """
     if add_today:
         t = add_todo_to_daily_note(text)
@@ -981,7 +1200,13 @@ def todo_add_alias(text: str, add_today: bool) -> None:
 def todo_done(todo_id: str) -> None:
     """Mark a todo as completed.
 
-    TODO_ID can be the full ID or a prefix (e.g., first 8 characters).
+    TODO_ID can be the full ID or just the first few characters.
+    The 6-character ID shown in 'nb todo' output is usually sufficient.
+
+    \b
+    Examples:
+      nb todo done abc123
+      nb todo done abc123def456...
     """
     t = _find_todo(todo_id)
     if not t:
@@ -1009,9 +1234,13 @@ def todo_done(todo_id: str) -> None:
 @todo.command("undone")
 @click.argument("todo_id")
 def todo_undone(todo_id: str) -> None:
-    """Mark a todo as incomplete.
+    """Mark a todo as incomplete (reopen it).
 
-    TODO_ID can be the full ID or a prefix (e.g., first 8 characters).
+    TODO_ID can be the full ID or just the first few characters.
+
+    \b
+    Examples:
+      nb todo undone abc123
     """
     t = _find_todo(todo_id)
     if not t:
@@ -1039,7 +1268,15 @@ def todo_undone(todo_id: str) -> None:
 @todo.command("show")
 @click.argument("todo_id")
 def todo_show(todo_id: str) -> None:
-    """Show details of a todo."""
+    """Show detailed information about a todo.
+
+    Displays the todo's content, status, source file, due date,
+    priority, tags, project, and any subtasks.
+
+    \b
+    Examples:
+      nb todo show abc123
+    """
     t = _find_todo(todo_id)
     if not t:
         console.print(f"[red]Todo not found: {todo_id}[/red]")
@@ -1059,6 +1296,10 @@ def todo_show(todo_id: str) -> None:
     if t.project:
         console.print(f"Project: {t.project}")
 
+    if t.details:
+        console.print("\n[bold]Details:[/bold]")
+        console.print(f"[dim]{t.details}[/dim]")
+
     children = get_todo_children(t.id)
     if children:
         console.print("\n[bold]Subtasks:[/bold]")
@@ -1070,7 +1311,15 @@ def todo_show(todo_id: str) -> None:
 @todo.command("edit")
 @click.argument("todo_id")
 def todo_edit(todo_id: str) -> None:
-    """Open the source file at the todo's line."""
+    """Open the source file at the todo's line in your editor.
+
+    Opens the markdown file containing the todo, jumping directly
+    to the line where the todo is defined.
+
+    \b
+    Examples:
+      nb todo edit abc123
+    """
     t = _find_todo(todo_id)
     if not t:
         console.print(f"[red]Todo not found: {todo_id}[/red]")

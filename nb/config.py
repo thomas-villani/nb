@@ -157,10 +157,10 @@ notebooks:
   - name: projects
     date_based: false
   - name: work
-    date_based: false    # Set to true for daily work logs
+    date_based: true
   - name: personal
-    date_based: false
-    todo_exclude: true  # Uncomment to hide from `nb todo` by default
+    date_based: true
+    todo_exclude: true
   # External notebook example:
   # - name: obsidian
   #   path: ~/Documents/Obsidian/vault
