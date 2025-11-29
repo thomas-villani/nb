@@ -1,3 +1,6 @@
+---
+todo_exclude: true
+---
 # nb-cli Development Todo
 
 ## Completed
@@ -58,12 +61,12 @@
 - [ ] Git integration for version history
 - [ ] Mobile companion app / sync story
 - [ ] Calendar view for due dates
-- [ ] Pomodoro timer integration
+- [ ] Pomodoro timer integration?? What is this?
 
 ---
 
 ## Technical Debt
-- [ ] Add comprehensive test suite
+- [x] Add comprehensive test suite
 - [ ] Add type hints throughout (mypy strict mode)
 - [ ] Performance optimization for large note collections
 - [ ] Better error messages and user feedback

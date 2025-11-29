@@ -3,22 +3,20 @@
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
 
 import pytest
 
 from nb.core.notebooks import (
-    list_notebooks,
-    get_notebook_notes,
     create_notebook,
-    notebook_exists,
-    get_notebook_stats,
-    is_notebook_date_based,
+    ensure_notebook_note,
     get_notebook_for_file,
     get_notebook_note_path,
-    ensure_notebook_note,
+    get_notebook_notes,
+    get_notebook_stats,
+    is_notebook_date_based,
+    list_notebooks,
+    notebook_exists,
 )
-from nb.config import NotebookConfig
 
 
 class TestListNotebooks:

@@ -4,14 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from nb.utils.hashing import (
-    normalize_path,
     hash_content,
-    make_todo_id,
-    make_note_hash,
     make_attachment_id,
+    make_note_hash,
+    make_todo_id,
+    normalize_path,
 )
 
 

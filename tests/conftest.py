@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from datetime import date
 from pathlib import Path
 from typing import Generator
@@ -10,7 +9,7 @@ from typing import Generator
 import pytest
 
 from nb import config as config_module
-from nb.config import Config, NotebookConfig, EmbeddingsConfig
+from nb.config import Config, EmbeddingsConfig, NotebookConfig
 
 
 @pytest.fixture

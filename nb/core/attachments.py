@@ -69,6 +69,7 @@ def copy_file_to_attachments(source: Path, target_name: str | None = None) -> Pa
     Raises:
         FileNotFoundError: If source doesn't exist.
         IsADirectoryError: If source is a directory.
+
     """
     if not source.exists():
         raise FileNotFoundError(f"File not found: {source}")
@@ -119,6 +120,7 @@ def create_attachment(
 
     Raises:
         FileNotFoundError: If path doesn't exist (for non-URLs).
+
     """
     # Determine type
     if is_url(path_or_url):
@@ -173,6 +175,7 @@ def attach_to_note(
 
     Returns:
         The created Attachment object.
+
     """
     from nb.utils.hashing import make_note_hash
 
@@ -217,6 +220,7 @@ def attach_to_todo(
 
     Returns:
         The created Attachment object.
+
     """
     from nb.utils.hashing import make_todo_id
 
@@ -266,6 +270,7 @@ def list_attachments_in_file(path: Path) -> list[tuple[int, str]]:
 
     Returns:
         List of (line_number, path) tuples.
+
     """
     if not path.exists():
         return []
@@ -297,6 +302,7 @@ def remove_attachment_from_file(path: Path, line_number: int) -> bool:
 
     Returns:
         True if removed, False otherwise.
+
     """
     if not path.exists():
         return False
@@ -324,6 +330,7 @@ def open_attachment(attachment: Attachment) -> bool:
 
     Returns:
         True if opened successfully, False otherwise.
+
     """
     import subprocess
     import sys

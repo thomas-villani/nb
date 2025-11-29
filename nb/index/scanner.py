@@ -10,7 +10,7 @@ from pathlib import Path
 from nb.config import get_config
 from nb.core.notes import get_note
 from nb.core.todos import extract_todos
-from nb.index.db import get_db, Database
+from nb.index.db import Database, get_db
 from nb.index.todos_repo import delete_todos_for_source, upsert_todo
 from nb.utils.hashing import make_note_hash
 
@@ -138,6 +138,7 @@ def index_note(
         path: Path to the note file.
         notes_root: Override notes root directory.
         index_vectors: Whether to also index to localvectordb for search.
+
     """
     if notes_root is None:
         notes_root = get_config().notes_root
@@ -163,13 +164,22 @@ def index_note(
     except OSError:
         mtime = None
 
+    # Check for todo_exclude in frontmatter
+    from nb.utils.markdown import extract_todo_exclude, parse_note_file
+
+    try:
+        meta, _ = parse_note_file(full_path)
+        todo_exclude = 1 if extract_todo_exclude(meta) else 0
+    except Exception:
+        todo_exclude = 0
+
     db = get_db()
 
-    # Upsert note (now includes content and mtime columns)
+    # Upsert note (now includes content, mtime, and todo_exclude columns)
     db.execute(
         """
-        INSERT OR REPLACE INTO notes (path, title, date, notebook, content_hash, content, mtime, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO notes (path, title, date, notebook, content_hash, content, mtime, todo_exclude, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             str(note.path),
@@ -179,6 +189,7 @@ def index_note(
             note.content_hash,
             content,
             mtime,
+            todo_exclude,
             datetime.now().isoformat(),
         ),
     )
@@ -250,6 +261,7 @@ def index_all_notes(
 
     Returns:
         Number of files indexed.
+
     """
     if notes_root is None:
         notes_root = get_config().notes_root
@@ -329,14 +341,23 @@ def _index_note_thread_safe(
     except OSError:
         mtime = None
 
+    # Check for todo_exclude in frontmatter
+    from nb.utils.markdown import extract_todo_exclude, parse_note_file
+
+    try:
+        meta, _ = parse_note_file(full_path)
+        todo_exclude = 1 if extract_todo_exclude(meta) else 0
+    except Exception:
+        todo_exclude = 0
+
     # Use thread-local database connection
     db = _get_thread_db()
 
     # Upsert note
     db.execute(
         """
-        INSERT OR REPLACE INTO notes (path, title, date, notebook, content_hash, content, mtime, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO notes (path, title, date, notebook, content_hash, content, mtime, todo_exclude, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             str(note.path),
@@ -346,6 +367,7 @@ def _index_note_thread_safe(
             note.content_hash,
             content,
             mtime,
+            todo_exclude,
             datetime.now().isoformat(),
         ),
     )
@@ -406,6 +428,7 @@ def rebuild_search_index(notes_root: Path | None = None) -> int:
 
     Returns:
         Number of notes indexed.
+
     """
     if notes_root is None:
         notes_root = get_config().notes_root
@@ -536,6 +559,7 @@ def index_linked_file(path: Path, alias: str | None = None) -> int:
 
     Returns:
         Number of todos indexed.
+
     """
     if not path.exists():
         return 0
@@ -622,6 +646,7 @@ def index_linked_note(
         alias: Alias of the linked note source.
         notes_root: Override notes root directory.
         index_vectors: Whether to index for vector search.
+
     """
     if notes_root is None:
         notes_root = get_config().notes_root
@@ -744,6 +769,7 @@ def index_single_linked_note(alias: str) -> int:
 
     Returns:
         Number of notes indexed.
+
     """
     from nb.core.links import get_linked_note, scan_linked_note_files
 
@@ -772,6 +798,7 @@ def remove_linked_note_from_index(alias: str) -> int:
 
     Returns:
         Number of notes removed.
+
     """
     db = get_db()
 

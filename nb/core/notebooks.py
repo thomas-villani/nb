@@ -39,6 +39,7 @@ def get_notebook_notes(notebook: str, notes_root: Path | None = None) -> list[Pa
         List of paths to notes in the notebook.
         For internal notebooks: relative paths from notes_root.
         For external notebooks: absolute paths.
+
     """
     config = get_config()
     if notes_root is None:
@@ -97,6 +98,7 @@ def create_notebook(name: str, notes_root: Path | None = None) -> Path:
 
     Raises:
         FileExistsError: If the notebook already exists.
+
     """
     if notes_root is None:
         notes_root = get_config().notes_root
@@ -126,6 +128,7 @@ def get_notebook_stats(notebook: str, notes_root: Path | None = None) -> dict[st
         Dictionary with:
         - note_count: Number of notes
         - todo_count: Number of todos (requires indexing)
+
     """
     notes = get_notebook_notes(notebook, notes_root)
     return {
@@ -141,6 +144,7 @@ def is_notebook_date_based(notebook: str) -> bool:
 
     Returns:
         True if the notebook uses YYYY/MM/YYYY-MM-DD.md structure.
+
     """
     config = get_config()
     nb_config = config.get_notebook(notebook)
@@ -160,6 +164,7 @@ def get_notebook_for_file(path: Path) -> str | None:
 
     Returns:
         Notebook name, or None if not in any notebook.
+
     """
     config = get_config()
 
@@ -202,6 +207,7 @@ def get_notebook_note_path(
 
     Raises:
         ValueError: If name is required but not provided, or notebook doesn't exist.
+
     """
     from nb.utils.dates import get_week_folder_name
 
@@ -247,6 +253,7 @@ def ensure_notebook_note(
 
     Returns:
         Path to the note file.
+
     """
     path = get_notebook_note_path(notebook, dt=dt, name=name)
 

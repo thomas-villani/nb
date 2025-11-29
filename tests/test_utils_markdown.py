@@ -5,20 +5,18 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-import pytest
-
 from nb.utils.markdown import (
-    parse_note_file,
-    extract_title,
+    H1_PATTERN,
+    INLINE_TAG_PATTERN,
+    WIKI_LINK_PATTERN,
+    create_daily_note_template,
+    create_note_template,
     extract_date,
     extract_tags,
+    extract_title,
     extract_wiki_links,
     generate_frontmatter,
-    create_note_template,
-    create_daily_note_template,
-    WIKI_LINK_PATTERN,
-    INLINE_TAG_PATTERN,
-    H1_PATTERN,
+    parse_note_file,
 )
 
 

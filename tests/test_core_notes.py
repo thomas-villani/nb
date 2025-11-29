@@ -8,15 +8,14 @@ from pathlib import Path
 import pytest
 
 from nb.core.notes import (
-    get_daily_note_path,
-    ensure_daily_note,
     create_note,
+    ensure_daily_note,
+    get_daily_note_path,
     get_note,
     get_notebook_for_path,
-    list_notes,
     list_daily_notes,
+    list_notes,
 )
-from nb.models import Note
 
 
 class TestGetDailyNotePath:

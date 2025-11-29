@@ -10,7 +10,6 @@ from pathlib import Path
 from nb.config import LinkedNoteConfig, LinkedTodoConfig, get_config, save_config
 from nb.index.db import get_db
 
-
 # =============================================================================
 # Linked Todo Files
 # =============================================================================
@@ -53,6 +52,7 @@ def get_linked_file(alias: str) -> LinkedTodoConfig | None:
 
     Returns:
         The linked file config, or None if not found.
+
     """
     config = get_config()
 
@@ -98,6 +98,7 @@ def add_linked_file(
     Raises:
         FileNotFoundError: If the path doesn't exist.
         ValueError: If the alias is already in use.
+
     """
     # Resolve and validate path
     path = path.resolve()
@@ -143,6 +144,7 @@ def remove_linked_file(alias: str) -> bool:
 
     Returns:
         True if the file was removed, False if not found.
+
     """
     config = get_config()
 
@@ -173,6 +175,7 @@ def update_linked_file_sync(alias: str, sync: bool) -> bool:
 
     Returns:
         True if updated, False if not found.
+
     """
     config = get_config()
 
@@ -202,6 +205,7 @@ def get_linked_file_by_path(path: Path) -> LinkedTodoConfig | None:
 
     Returns:
         The linked file config, or None if not found.
+
     """
     path = path.resolve()
     config = get_config()
@@ -271,6 +275,7 @@ def get_linked_note(alias: str) -> LinkedNoteConfig | None:
 
     Returns:
         The linked note config, or None if not found.
+
     """
     config = get_config()
 
@@ -319,6 +324,7 @@ def add_linked_note(
     Raises:
         FileNotFoundError: If the path doesn't exist.
         ValueError: If the alias is already in use.
+
     """
     # Resolve and validate path
     path = path.resolve()
@@ -373,6 +379,7 @@ def remove_linked_note(alias: str) -> bool:
 
     Returns:
         True if the link was removed, False if not found.
+
     """
     config = get_config()
 
@@ -402,6 +409,7 @@ def get_linked_note_by_path(path: Path) -> LinkedNoteConfig | None:
 
     Returns:
         The linked note config, or None if not found.
+
     """
     path = path.resolve()
     config = get_config()
@@ -437,6 +445,7 @@ def scan_linked_note_files(linked: LinkedNoteConfig) -> list[Path]:
 
     Returns:
         List of markdown file paths.
+
     """
     if not linked.path.exists():
         return []

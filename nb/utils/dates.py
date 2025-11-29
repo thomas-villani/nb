@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from typing import Callable
 
 from dateutil import parser as dateutil_parser
-from dateutil.relativedelta import relativedelta, MO, TU, WE, TH, FR, SA, SU
+from dateutil.relativedelta import FR, MO, SA, SU, TH, TU, WE, relativedelta
 
 # Weekday name to dateutil weekday constant
 WEEKDAYS: dict[str, int] = {
@@ -185,6 +185,7 @@ def parse_week_folder_name(folder_name: str, year: int) -> tuple[date, date] | N
 
     Returns:
         Tuple of (start_date, end_date) or None if parsing fails.
+
     """
     match = re.match(r"^([A-Za-z]{3})(\d{1,2})-([A-Za-z]{3})(\d{1,2})$", folder_name)
     if not match:
@@ -220,6 +221,7 @@ def get_weeks_ago(n: int) -> tuple[date, date]:
 
     Returns:
         Tuple of (start_date, end_date) for that week.
+
     """
     today = date.today()
     target = today - timedelta(weeks=n)

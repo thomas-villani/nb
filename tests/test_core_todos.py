@@ -3,24 +3,21 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from pathlib import Path
-
-import pytest
 
 from nb.core.todos import (
-    TODO_PATTERN,
+    ATTACH_PATTERN,
     DUE_PATTERN,
     PRIORITY_PATTERN,
     TAG_PATTERN,
-    ATTACH_PATTERN,
+    TODO_PATTERN,
+    add_todo_to_inbox,
     clean_todo_content,
+    extract_todos,
+    get_inbox_path,
     parse_due_date,
     parse_priority,
     parse_tags,
-    extract_todos,
     toggle_todo_in_file,
-    add_todo_to_inbox,
-    get_inbox_path,
 )
 from nb.models import Priority
 

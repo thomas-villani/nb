@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 # Current schema version
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -142,6 +142,22 @@ SCHEMA_V6 = """
 ALTER TABLE todos ADD COLUMN details TEXT;
 """
 
+# Phase 6 additions: note view history and per-note todo exclusion
+SCHEMA_V7 = """
+-- Note view history for recently viewed tracking
+CREATE TABLE IF NOT EXISTS note_views (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    note_path TEXT NOT NULL,
+    viewed_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_note_views_path ON note_views(note_path);
+CREATE INDEX IF NOT EXISTS idx_note_views_time ON note_views(viewed_at);
+
+-- Per-note todo exclusion flag
+ALTER TABLE notes ADD COLUMN todo_exclude INTEGER DEFAULT 0;
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -150,6 +166,7 @@ MIGRATIONS: dict[int, str] = {
     4: SCHEMA_V4,
     5: SCHEMA_V5,
     6: SCHEMA_V6,
+    7: SCHEMA_V7,
 }
 
 
@@ -283,6 +300,7 @@ def rebuild_db(db: Database) -> None:
         "todo_tags",
         "note_tags",
         "note_links",
+        "note_views",
         "attachments",
         "todos",
         "notes",

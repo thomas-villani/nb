@@ -7,13 +7,13 @@ from pathlib import Path
 import pytest
 
 from nb.index.db import (
-    Database,
     SCHEMA_VERSION,
-    get_schema_version,
-    set_schema_version,
+    Database,
     apply_migrations,
+    get_schema_version,
     init_db,
     rebuild_db,
+    set_schema_version,
 )
 
 

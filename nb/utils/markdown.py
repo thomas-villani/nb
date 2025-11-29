@@ -74,6 +74,15 @@ def extract_date(meta: dict[str, Any], path: Path) -> date | None:
     return parse_date_from_filename(path.name)
 
 
+def extract_todo_exclude(meta: dict[str, Any]) -> bool:
+    """Check if note has todo_exclude: true in frontmatter.
+
+    Returns True if todos from this note should be excluded from
+    default 'nb todo' display.
+    """
+    return bool(meta.get("todo_exclude", False))
+
+
 def extract_tags(meta: dict[str, Any], body: str) -> list[str]:
     """Extract all tags from a note.
 
@@ -141,6 +150,7 @@ def create_note_template(
         title: Optional title for the note
         dt: Date for the note (defaults to today)
         tags: Optional list of tags
+
     """
     if dt is None:
         dt = date.today()

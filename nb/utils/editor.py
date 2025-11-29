@@ -70,6 +70,7 @@ def open_in_editor(
         path: Path to the file to open
         line: Optional line number to open at
         editor: Editor command (uses get_editor() if not specified)
+
     """
     if editor is None:
         editor = get_editor()

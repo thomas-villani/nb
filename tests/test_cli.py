@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
 
-from nb.cli import main
 from nb import config as config_module
-from nb.config import Config, NotebookConfig, EmbeddingsConfig
-from nb.index.db import reset_db
+from nb.cli import main
+from nb.config import Config, EmbeddingsConfig, NotebookConfig
 from nb.index import scanner as scanner_module
+from nb.index.db import reset_db
 
 
 @pytest.fixture

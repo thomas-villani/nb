@@ -446,6 +446,7 @@ def add_notebook(
 
     Raises:
         ValueError: If notebook name already exists
+
     """
     config = get_config()
 
@@ -483,6 +484,7 @@ def remove_notebook(name: str) -> bool:
 
     Returns:
         True if removed, False if not found
+
     """
     config = get_config()
 
@@ -514,3 +516,100 @@ def reset_config() -> None:
     """Reset the cached configuration (useful for testing)."""
     global _config
     _config = None
+
+
+# Configurable settings with descriptions
+CONFIGURABLE_SETTINGS = {
+    "editor": "Text editor command (e.g., code, vim, micro)",
+    "date_format": "Date display format (e.g., %Y-%m-%d)",
+    "time_format": "Time display format (e.g., %H:%M)",
+    "embeddings.provider": "Embeddings provider (ollama or openai)",
+    "embeddings.model": "Embeddings model name (e.g., nomic-embed-text)",
+    "embeddings.base_url": "Custom embeddings API endpoint URL",
+    "embeddings.api_key": "API key for embeddings provider (OpenAI)",
+}
+
+
+def get_config_value(key: str) -> Any:
+    """Get a config value by dot-notation key.
+
+    Args:
+        key: Configuration key (e.g., 'editor', 'embeddings.provider')
+
+    Returns:
+        The configuration value, or None if not found.
+
+    """
+    config = get_config()
+    parts = key.split(".")
+
+    if len(parts) == 1:
+        # Top-level setting
+        if key == "editor":
+            return config.editor
+        elif key == "date_format":
+            return config.date_format
+        elif key == "time_format":
+            return config.time_format
+        elif key == "notes_root":
+            return str(config.notes_root)
+    elif parts[0] == "embeddings" and len(parts) == 2:
+        # Embeddings setting
+        attr = parts[1]
+        if hasattr(config.embeddings, attr):
+            return getattr(config.embeddings, attr)
+
+    return None
+
+
+def set_config_value(key: str, value: str) -> bool:
+    """Set a config value by dot-notation key.
+
+    Args:
+        key: Configuration key (e.g., 'editor', 'embeddings.provider')
+        value: Value to set
+
+    Returns:
+        True if successful, False if key not recognized.
+
+    """
+    config = get_config()
+    parts = key.split(".")
+
+    if len(parts) == 1:
+        # Top-level setting
+        if key == "editor":
+            config.editor = value
+        elif key == "date_format":
+            config.date_format = value
+        elif key == "time_format":
+            config.time_format = value
+        else:
+            return False
+    elif parts[0] == "embeddings" and len(parts) == 2:
+        # Embeddings setting
+        attr = parts[1]
+        if attr in ("provider", "model", "base_url", "api_key"):
+            setattr(config.embeddings, attr, value if value else None)
+        else:
+            return False
+    else:
+        return False
+
+    save_config(config)
+    reset_config()  # Clear cache to reload with new values
+    return True
+
+
+def list_config_settings() -> dict[str, tuple[str, Any]]:
+    """List all configurable settings with their current values.
+
+    Returns:
+        Dict mapping key to (description, current_value).
+
+    """
+    result = {}
+    for key, description in CONFIGURABLE_SETTINGS.items():
+        value = get_config_value(key)
+        result[key] = (description, value)
+    return result

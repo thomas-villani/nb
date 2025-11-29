@@ -5,9 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from pathlib import Path
 
-import pytest
-
-from nb.models import Priority, Attachment, Note, TodoSource, Todo
+from nb.models import Attachment, Note, Priority, Todo, TodoSource
 
 
 class TestPriority:

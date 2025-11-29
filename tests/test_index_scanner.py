@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import date
-from pathlib import Path
-
 import pytest
 
-from nb.index.db import Database, init_db, reset_db, get_db
 from nb.index import scanner as scanner_module
+from nb.index.db import get_db, reset_db
 from nb.index.scanner import (
-    scan_notes,
     get_file_hash,
-    needs_reindex,
-    index_note,
     index_all_notes,
+    index_note,
     index_todos_from_file,
+    needs_reindex,
     remove_deleted_notes,
+    scan_notes,
 )
 
 
@@ -219,7 +216,7 @@ See [[other-note]] and [[path/to/note|Display]].
             "SELECT target_path FROM note_links WHERE source_path = ?",
             (rel_path,)
         )
-        link_list = [l["target_path"] for l in links]
+        link_list = [lnk["target_path"] for lnk in links]
 
         assert "other-note" in link_list
         assert "path/to/note" in link_list

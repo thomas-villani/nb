@@ -304,6 +304,7 @@ def run_interactive_todos(
         tag: Filter by tag.
         notebook: Filter by notebook.
         exclude_notebooks: Notebooks to exclude.
+
     """
     from nb.utils.editor import open_in_editor
 

@@ -258,6 +258,7 @@ def run_note_stream(
     Args:
         notes: List of notes to stream through.
         notes_root: Root directory for notes.
+
     """
     from nb.config import get_config
     from nb.utils.editor import open_in_editor

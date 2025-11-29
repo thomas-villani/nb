@@ -26,6 +26,7 @@ def hash_content(content: str, length: int = 8) -> str:
 
     This provides a reasonably unique identifier while remaining
     short enough to be human-readable in IDs.
+
     """
     return hashlib.sha256(content.encode("utf-8")).hexdigest()[:length]
 
@@ -65,6 +66,7 @@ def make_attachment_id(path: str, parent_type: str, parent_id: str) -> str:
         path: Path or URL of the attachment
         parent_type: "note" or "todo"
         parent_id: ID of the parent note or todo
+
     """
     combined = f"{parent_type}:{parent_id}:{path}"
     return hash_content(combined)

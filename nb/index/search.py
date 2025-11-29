@@ -66,6 +66,7 @@ class NoteSearch:
 
         Args:
             config: Application configuration with embedding settings.
+
         """
         self.config = config
         self._db: VectorDB | None = None
@@ -99,6 +100,7 @@ class NoteSearch:
         Args:
             note: The note to index.
             content: The full text content of the note.
+
         """
         self.db.upsert(
             documents=[content],
@@ -119,6 +121,7 @@ class NoteSearch:
 
         Args:
             path: The path of the note to remove.
+
         """
         try:
             self.db.delete([path])
@@ -151,6 +154,7 @@ class NoteSearch:
 
         Returns:
             List of search results sorted by relevance (with optional recency boost).
+
         """
         # Build combined filters
         combined_filters = dict(filters) if filters else {}
@@ -212,6 +216,7 @@ class NoteSearch:
 
         Returns:
             Results re-sorted with recency boost applied.
+
         """
         from datetime import date as date_type
 
@@ -249,6 +254,7 @@ class NoteSearch:
 
         Returns:
             List of notes containing the tag.
+
         """
         try:
             docs = self.db.filter(
@@ -297,6 +303,7 @@ def grep_notes(
 
     Returns:
         List of grep results with matched lines and context.
+
     """
     results = []
     flags = 0 if case_sensitive else re.IGNORECASE

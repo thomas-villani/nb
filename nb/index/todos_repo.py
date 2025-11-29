@@ -158,6 +158,7 @@ def query_todos(
     exclude_tags: list[str] | None = None,
     source_path: Path | None = None,
     parent_only: bool = True,
+    exclude_note_excluded: bool = True,
 ) -> list[Todo]:
     """Query todos with filters.
 
@@ -175,21 +176,33 @@ def query_todos(
         exclude_tags: List of tags to exclude
         source_path: Filter by source file path
         parent_only: If True, only return top-level todos (not subtasks)
+        exclude_note_excluded: If True, exclude todos from notes with todo_exclude=true
 
     Returns:
         List of matching Todo objects.
+
     """
     db = get_db()
 
     sql = "SELECT DISTINCT t.* FROM todos t"
     params: list = []
     conditions: list[str] = []
+    joins: list[str] = []
 
     # Join with tags if filtering by tag
     if tag:
-        sql += " JOIN todo_tags tt ON t.id = tt.todo_id"
+        joins.append("JOIN todo_tags tt ON t.id = tt.todo_id")
         conditions.append("tt.tag = ?")
         params.append(tag.lower())
+
+    # Join with notes if filtering by note-level todo_exclude
+    if exclude_note_excluded:
+        joins.append("LEFT JOIN notes n ON t.source_path = n.path")
+        conditions.append("(n.todo_exclude IS NULL OR n.todo_exclude = 0)")
+
+    # Add joins to SQL
+    if joins:
+        sql += " " + " ".join(joins)
 
     # Filter conditions
     if completed is not None:
@@ -288,6 +301,7 @@ def get_sorted_todos(
     due_end: date | None = None,
     created_start: date | None = None,
     created_end: date | None = None,
+    exclude_note_excluded: bool = True,
 ) -> list[Todo]:
     """Get todos sorted by the default sorting order.
 
@@ -312,6 +326,7 @@ def get_sorted_todos(
         created_start=created_start,
         created_end=created_end,
         parent_only=True,
+        exclude_note_excluded=exclude_note_excluded,
     )
 
     today = date.today()

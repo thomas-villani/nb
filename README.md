@@ -75,6 +75,16 @@ nb show friday            # Show Friday's daily note
 nb show -n work           # Show today in work notebook
 nb show friday -n work    # Show Friday in work notebook
 nb show myproject -n ideas  # Show ideas/myproject.md
+
+nb last                   # Open last modified note
+nb last -s                # Show last modified note in console
+nb last -n work           # Last modified note in work notebook
+nb last --viewed          # Open last viewed note (instead of modified)
+nb last --viewed -n work  # Last viewed note in work notebook
+
+nb history                # Show recently viewed notes
+nb history -l 50          # Show last 50 viewed notes
+nb history -n work        # Filter by notebook
 ```
 
 Date-based notebooks organize notes by work week:
@@ -155,8 +165,11 @@ nb todo edit abc123     # Open source file at todo line
 
 Todos are grouped by due date: OVERDUE, DUE TODAY, DUE THIS WEEK, DUE NEXT WEEK, DUE LATER, NO DUE DATE.
 
-Notebooks with `todo_exclude: true` are hidden from `nb todo` by default.
-Use `-n <notebook>` to view them explicitly.
+Todos can be hidden from `nb todo` at two levels:
+- **Notebook-level**: Set `todo_exclude: true` in notebook config
+- **Note-level**: Set `todo_exclude: true` in note frontmatter
+
+Use `-a/--all` to include all todos, or `-n <notebook>` to view a specific notebook.
 
 #### Interactive Mode
 
@@ -237,7 +250,24 @@ nb index              # Rebuild notes and todos index
 nb index --force      # Force full reindex
 nb index --rebuild    # Drop and recreate database (for schema changes)
 nb index --embeddings # Rebuild search embeddings
-nb config             # Open config file
+```
+
+### Configuration Commands
+
+```bash
+nb config                       # Open config file in editor
+nb config get editor            # Get a setting value
+nb config set editor code       # Set a setting value
+nb config list                  # List all configurable settings
+
+# Configurable settings:
+nb config set editor vim        # Text editor command
+nb config set date_format "%Y-%m-%d"  # Date display format
+nb config set time_format "%H:%M"     # Time display format
+nb config set embeddings.provider ollama  # Embeddings provider
+nb config set embeddings.model nomic-embed-text  # Embeddings model
+nb config set embeddings.base_url http://localhost:11434  # Custom endpoint
+nb config set embeddings.api_key sk-...  # API key (for OpenAI)
 ```
 
 ## Configuration
@@ -334,6 +364,7 @@ Frontmatter is optional YAML metadata at the top of the file:
 date: 2025-11-27
 title: Meeting Notes
 tags: [meeting, project, quarterly]
+todo_exclude: true  # Hide todos from this note in nb todo
 ---
 ```
 
@@ -342,6 +373,7 @@ tags: [meeting, project, quarterly]
 | `date` | Note date (YYYY-MM-DD format) |
 | `title` | Note title (used in search results) |
 | `tags` | List of tags for filtering |
+| `todo_exclude` | Hide todos from `nb todo` (use `-a` or `-n` to view) |
 
 ### Todos
 
@@ -353,6 +385,34 @@ Todos use GitHub-style checkboxes with optional metadata:
   - [ ] Nested subtask
   - [x] Completed subtask
 ```
+
+#### Multi-line Details
+
+Indented content below a todo is captured as details. This is useful for adding context, notes, or sub-items that aren't separate todos:
+
+```markdown
+- [ ] Develop presentation for sales:
+   - need to include intro slides
+   - use the new images
+   It would be best to build off the 2024 deck
+- [ ] Update website
+```
+
+The indented lines become part of the first todo's details. View them with `nb todo show <id>`:
+
+```
+Develop presentation for sales:
+ID: abc123
+Status: Open
+Source: daily/2025-11-27.md:5
+
+Details:
+   - need to include intro slides
+   - use the new images
+   It would be best to build off the 2024 deck
+```
+
+Note: Indented `- [ ]` checkboxes are treated as subtasks, not details.
 
 #### Todo Metadata
 
@@ -424,6 +484,7 @@ Reviewed the roadmap and assigned initial tasks.
 |-------|---------|
 | `t` | `today` |
 | `y` | `yesterday` |
+| `l` | `last` |
 | `o` | `open` |
 | `s` | `search` |
 | `ss` | `search --semantic` |

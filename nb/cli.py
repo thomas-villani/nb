@@ -95,7 +95,7 @@ def today(ctx: click.Context, notebook: str | None) -> None:
       nb today           # Today's note in 'daily'
       nb today -n work   # Today's note in 'work' notebook
     """
-    from nb.core.notebooks import is_notebook_date_based, ensure_notebook_note
+    from nb.core.notebooks import ensure_notebook_note, is_notebook_date_based
 
     dt = date.today()
 
@@ -152,6 +152,128 @@ def yesterday_alias(ctx: click.Context) -> None:
     ctx.invoke(yesterday)
 
 
+@main.command("last")
+@click.option(
+    "-s", "--show", is_flag=True, help="Print note to console instead of opening editor"
+)
+@click.option("--notebook", "-n", help="Filter by notebook")
+@click.option("--viewed", is_flag=True, help="Use last viewed instead of last modified")
+def last_note(show: bool, notebook: str | None, viewed: bool) -> None:
+    """Open the most recently modified (or viewed) note.
+
+    By default opens the last modified note. Use --viewed to open
+    the last viewed note instead.
+
+    \b
+    Examples:
+      nb last                # Open last modified note
+      nb last -s             # Show last modified note (print to console)
+      nb last -n work        # Last modified note in 'work' notebook
+      nb last --viewed       # Last viewed note
+      nb last --viewed -n daily  # Last viewed note in 'daily' notebook
+    """
+    from nb.core.notes import get_last_modified_note, get_last_viewed_note
+
+    # Get the appropriate note
+    if viewed:
+        path = get_last_viewed_note(notebook=notebook)
+        if not path:
+            console.print("[dim]No viewed notes found.[/dim]")
+            if notebook:
+                console.print("[dim]Try without -n to search all notebooks.[/dim]")
+            raise SystemExit(1)
+    else:
+        path = get_last_modified_note(notebook=notebook)
+        if not path:
+            console.print("[dim]No notes found.[/dim]")
+            if notebook:
+                console.print("[dim]Try 'nb index' to ensure notes are indexed.[/dim]")
+            raise SystemExit(1)
+
+    config = get_config()
+    try:
+        rel_path = path.relative_to(config.notes_root)
+    except ValueError:
+        rel_path = path
+
+    if show:
+        print_note(path)
+    else:
+        console.print(f"[dim]Opening {rel_path}...[/dim]")
+        open_note(path)
+
+
+@main.command("l")
+@click.option(
+    "-s", "--show", is_flag=True, help="Print note to console instead of opening editor"
+)
+@click.option("--notebook", "-n", help="Filter by notebook")
+@click.option("--viewed", is_flag=True, help="Use last viewed instead of last modified")
+def last_alias(show: bool, notebook: str | None, viewed: bool) -> None:
+    """Alias for 'last'."""
+    from nb.core.notes import get_last_modified_note, get_last_viewed_note
+
+    if viewed:
+        path = get_last_viewed_note(notebook=notebook)
+        if not path:
+            console.print("[dim]No viewed notes found.[/dim]")
+            raise SystemExit(1)
+    else:
+        path = get_last_modified_note(notebook=notebook)
+        if not path:
+            console.print("[dim]No notes found.[/dim]")
+            raise SystemExit(1)
+
+    config = get_config()
+    try:
+        rel_path = path.relative_to(config.notes_root)
+    except ValueError:
+        rel_path = path
+
+    if show:
+        print_note(path)
+    else:
+        console.print(f"[dim]Opening {rel_path}...[/dim]")
+        open_note(path)
+
+
+@main.command("history")
+@click.option("--limit", "-l", default=20, help="Number of entries to show")
+@click.option("--notebook", "-n", help="Filter by notebook")
+def history_cmd(limit: int, notebook: str | None) -> None:
+    """Show recently viewed notes.
+
+    Displays a list of notes you've recently opened, with timestamps.
+
+    \b
+    Examples:
+      nb history             # Show last 20 viewed notes
+      nb history -l 50       # Show last 50 viewed notes
+      nb history -n work     # Show recently viewed notes in 'work' notebook
+    """
+    from nb.core.notes import get_recently_viewed_notes
+
+    views = get_recently_viewed_notes(limit=limit, notebook=notebook)
+
+    if not views:
+        console.print("[dim]No view history found.[/dim]")
+        return
+
+    config = get_config()
+
+    console.print("\n[bold]Recently Viewed Notes[/bold]\n")
+
+    for path, viewed_at in views:
+        try:
+            rel_path = path.relative_to(config.notes_root)
+        except ValueError:
+            rel_path = path
+
+        # Format the timestamp
+        time_str = viewed_at.strftime("%Y-%m-%d %H:%M")
+        console.print(f"  [dim]{time_str}[/dim]  {rel_path}")
+
+
 @main.command("open")
 @click.argument("note_ref")
 @click.option("--notebook", "-n", help="Notebook to open the note from")
@@ -173,9 +295,9 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
       nb open friday -n work      # Open Friday in work notebook
     """
     from nb.core.notebooks import (
-        is_notebook_date_based,
         ensure_notebook_note,
         get_notebook_note_path,
+        is_notebook_date_based,
     )
 
     config = get_config()
@@ -287,9 +409,9 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
       nb show myproject -n ideas  # Show ideas/myproject.md
     """
     from nb.core.notebooks import (
-        is_notebook_date_based,
         ensure_notebook_note,
         get_notebook_note_path,
+        is_notebook_date_based,
     )
 
     config = get_config()
@@ -382,7 +504,7 @@ def new_note(path: str | None, notebook: str | None, title: str | None) -> None:
       nb new ideas -n projects  # projects/ideas.md
       nb new projects/roadmap   # projects/roadmap.md
     """
-    from nb.core.notebooks import is_notebook_date_based, ensure_notebook_note
+    from nb.core.notebooks import ensure_notebook_note, is_notebook_date_based
 
     config = get_config()
 
@@ -566,6 +688,7 @@ def notebooks_create(
         nb notebooks create work-log --date-based
         nb notebooks create obsidian --from ~/Documents/Obsidian/vault
         nb notebooks create personal --todo-exclude
+
     """
     from nb.config import add_notebook, expand_path
 
@@ -652,17 +775,104 @@ def notebooks_alias(ctx: click.Context) -> None:
     ctx.invoke(notebooks_cmd)
 
 
-@main.command("config")
-def config_cmd() -> None:
-    """Open the configuration file in the editor."""
-    config = get_config()
+@main.group("config", invoke_without_command=True)
+@click.pass_context
+def config_cmd(ctx: click.Context) -> None:
+    """Manage configuration settings.
 
-    # Ensure config exists
-    if not config.config_path.exists():
-        init_config(config.notes_root)
+    When called without a subcommand, opens the config file in the editor.
 
-    console.print(f"[dim]Opening {config.config_path}...[/dim]")
-    open_in_editor(config.config_path, editor=config.editor)
+    \b
+    Subcommands:
+      get <key>           Get a configuration value
+      set <key> <value>   Set a configuration value
+      list                List all configurable settings
+
+    \b
+    Examples:
+      nb config              # Open config file in editor
+      nb config get editor   # Show current editor setting
+      nb config set editor code  # Set editor to 'code'
+      nb config list         # Show all configurable settings
+    """
+    if ctx.invoked_subcommand is None:
+        # Default: open config file in editor
+        config = get_config()
+
+        # Ensure config exists
+        if not config.config_path.exists():
+            init_config(config.notes_root)
+
+        console.print(f"[dim]Opening {config.config_path}...[/dim]")
+        open_in_editor(config.config_path, editor=config.editor)
+
+
+@config_cmd.command("get")
+@click.argument("key")
+def config_get(key: str) -> None:
+    """Get a configuration value.
+
+    \b
+    Available keys:
+      editor                Text editor command
+      date_format           Date display format
+      time_format           Time display format
+      embeddings.provider   Embeddings provider
+      embeddings.model      Embeddings model
+      embeddings.base_url   Custom API endpoint
+      embeddings.api_key    API key
+    """
+    from nb.config import get_config_value
+
+    value = get_config_value(key)
+    if value is None:
+        console.print(f"[red]Unknown setting:[/red] {key}")
+        console.print("[dim]Use 'nb config list' to see available settings.[/dim]")
+        raise SystemExit(1)
+
+    console.print(f"{key} = {value}")
+
+
+@config_cmd.command("set")
+@click.argument("key")
+@click.argument("value")
+def config_set(key: str, value: str) -> None:
+    """Set a configuration value.
+
+    \b
+    Available keys:
+      editor                Text editor command
+      date_format           Date display format
+      time_format           Time display format
+      embeddings.provider   Embeddings provider
+      embeddings.model      Embeddings model
+      embeddings.base_url   Custom API endpoint
+      embeddings.api_key    API key
+    """
+    from nb.config import set_config_value
+
+    if set_config_value(key, value):
+        console.print(f"[green]Set[/green] {key} = {value}")
+    else:
+        console.print(f"[red]Unknown setting:[/red] {key}")
+        console.print("[dim]Use 'nb config list' to see available settings.[/dim]")
+        raise SystemExit(1)
+
+
+@config_cmd.command("list")
+def config_list() -> None:
+    """List all configurable settings."""
+    from nb.config import list_config_settings
+
+    settings = list_config_settings()
+
+    console.print("\n[bold]Configurable Settings[/bold]\n")
+    for key, (description, value) in settings.items():
+        value_str = str(value) if value is not None else "[dim]<not set>[/dim]"
+        console.print(f"  [cyan]{key}[/cyan]")
+        console.print(f"    {description}")
+        console.print(f"    Current: {value_str}")
+        console.print()
 
 
 @main.command("add")
@@ -839,6 +1049,7 @@ def todo(
       -i, --interactive         Launch interactive TUI viewer
 
     Notebooks with todo_exclude: true in config are hidden by default.
+    Notes with todo_exclude: true in frontmatter are also hidden.
     Use -a/--all to include them, or -n <notebook> to view one explicitly.
     """
     if ctx.invoked_subcommand is None:
@@ -873,6 +1084,10 @@ def todo(
                 exclude_notebooks=all_excluded_notebooks,
             )
         else:
+            # Determine if we should exclude notes with todo_exclude
+            # Don't exclude when --all or specific notebook is requested
+            exclude_note_excluded = not show_all and not notebook
+
             # Default: list todos
             _list_todos(
                 created_today=created_today,
@@ -889,6 +1104,7 @@ def todo(
                 hide_no_date=effective_hide_no_date,
                 sort_by=sort_by,
                 include_completed=include_completed,
+                exclude_note_excluded=exclude_note_excluded,
             )
 
 
@@ -907,6 +1123,7 @@ def _list_todos(
     hide_no_date: bool = False,
     sort_by: str = "source",
     include_completed: bool = False,
+    exclude_note_excluded: bool = True,
 ) -> None:
     """List todos with optional filters."""
     from datetime import timedelta
@@ -949,6 +1166,7 @@ def _list_todos(
             exclude_notebooks=exclude_notebooks,
             created_start=created_start,
             created_end=created_end,
+            exclude_note_excluded=exclude_note_excluded,
         )
     else:
         todos = get_sorted_todos(
@@ -962,6 +1180,7 @@ def _list_todos(
             due_end=due_end,
             created_start=created_start,
             created_end=created_end,
+            exclude_note_excluded=exclude_note_excluded,
         )
 
     if not todos:
@@ -969,7 +1188,7 @@ def _list_todos(
         return
 
     # Calculate next week range
-    next_week_start = week_end + timedelta(days=1)
+    # next_week_start = week_end + timedelta(days=1)
     next_week_end = week_end + timedelta(days=7)
 
     # Group todos for display
@@ -1415,6 +1634,7 @@ def search_cmd(
         nb search -s "project ideas" --recent
         nb search "TODO" --when "last 2 weeks"
         nb search "meeting notes" --since "last monday"
+
     """
     from nb.index.search import get_search
     from nb.utils.dates import parse_date_range, parse_fuzzy_date
@@ -1562,6 +1782,7 @@ def grep_cmd(pattern: str, context_lines: int, ignore_case: bool) -> None:
         nb grep "TODO.*urgent"
         nb grep "def\\s+\\w+" -C 5
         nb grep "API_KEY" --case-sensitive
+
     """
     from nb.index.search import grep_notes
 
@@ -1693,19 +1914,20 @@ def stream_notes(
     q              - Quit
 
     Examples:
-
     \b
       nb stream                      # Stream all notes
       nb stream -n daily             # Stream daily notes
       nb stream -w "last week"       # Last week's notes
       nb stream -w "this week"       # This week's notes
       nb stream -n daily -w "last 2 weeks"  # Daily notes from last 2 weeks
+
     """
+    from datetime import date as date_type
+
     from nb.index.db import get_db
     from nb.models import Note
     from nb.tui.stream import run_note_stream
-    from nb.utils.dates import parse_fuzzy_date, parse_date_range
-    from datetime import date as date_type
+    from nb.utils.dates import parse_date_range, parse_fuzzy_date
 
     config = get_config()
     db = get_db()
@@ -1865,6 +2087,7 @@ def link_add(
         nb link add ~/work/TODO.md              # Index todos and notes
         nb link add ~/docs/wiki --notes-only    # Only index as notes
         nb link add ~/project/tasks.md --todos-only --no-sync
+
     """
     from nb.core.links import add_linked_file, add_linked_note
     from nb.index.scanner import index_linked_file, index_single_linked_note
@@ -2076,6 +2299,7 @@ def attach_file(
         nb attach file ./document.pdf
         nb attach file ~/image.png --to daily/2025-11-27.md
         nb attach file report.pdf --to abc12345 --copy
+
     """
     from nb.core.attachments import attach_to_note, attach_to_todo
 
@@ -2136,6 +2360,7 @@ def attach_url(url: str, target: str | None, title: str | None) -> None:
     Examples:
         nb attach url https://example.com/doc
         nb attach url https://github.com/repo --to projects/myproject.md
+
     """
     from nb.core.attachments import attach_to_note, attach_to_todo
 
@@ -2191,6 +2416,7 @@ def attach_list(target: str | None) -> None:
     Examples:
         nb attach list
         nb attach list daily/2025-11-27.md
+
     """
     from nb.core.attachments import list_attachments_in_file, resolve_attachment_path
     from nb.models import Attachment
@@ -2244,6 +2470,7 @@ def attach_open(target: str, line: int | None) -> None:
 
     Examples:
         nb attach open daily/2025-11-27.md --line 15
+
     """
     from nb.core.attachments import list_attachments_in_file, open_attachment
     from nb.models import Attachment

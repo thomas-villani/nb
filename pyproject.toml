@@ -53,3 +53,24 @@ exclude_lines = [
 
 [tool.uv.sources]
 localvectordb = { path = "wheels/localvectordb-1.0.0-py3-none-any.whl" }
+
+
+[tool.ruff]
+# Target Python version
+target-version = "py312"
+# Maximum line length (compatible with black)
+line-length = 120
+
+# Enable fixing issues automatically when possible
+fix = true
+
+
+ignore = [
+
+]
+
+# Relax rules for test files
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "F841"
+]

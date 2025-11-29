@@ -80,6 +80,7 @@ def extract_todos(
 
     Returns:
         List of Todo objects with hierarchy built.
+
     """
     if notes_root is None:
         notes_root = get_config().notes_root
@@ -215,6 +216,7 @@ def can_toggle_linked_file(path: Path) -> bool:
 
     Returns:
         True if the file can be modified, False if it's a linked file with sync disabled.
+
     """
     from nb.core.links import get_linked_file_by_path
 
@@ -244,6 +246,7 @@ def toggle_todo_in_file(
 
     Raises:
         PermissionError: If the file is a linked file with sync disabled.
+
     """
     if not path.exists():
         return False
@@ -289,6 +292,7 @@ def add_todo_to_inbox(text: str, notes_root: Path | None = None) -> Todo:
 
     Returns:
         The created Todo object.
+
     """
     if notes_root is None:
         notes_root = get_config().notes_root
@@ -354,6 +358,7 @@ def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
 
     Returns:
         The created Todo object.
+
     """
     from nb.core.notes import ensure_daily_note
 
