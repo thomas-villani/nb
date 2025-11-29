@@ -51,10 +51,10 @@ todo_exclude: true
 - [x] Need a way to toggle include/exclude of todo for specific notes from CLI
 - [x] Allow defining a color (and/or icon?) for each notebook that is used in display listings (especially `nb todo`)
 - [x] Do todos inherit the tag from the note? They probably should.
-- [ ] Refactor cli.py - split into submodules
+- [x] Refactor cli.py - split into submodules
 - [ ] Allow todo "views" to be defined with specific filters and quick from cli like `nb todo -v <VIEWNAME>`
-- [ ] Fuzzy finding for notebooks and notes from cli input
-- [ ] Add a way to signal todo in progress, e.g `[^]` and update `nb todo` with a section for `IN PROGRESS`
+- [ ] Fuzzy finding for notebooks and notes from cli input (if not a fuzzy date). E.g. `nb open <NOTE> -n <NOTEBOOK>` should give suggestions if similar note/notebook is found but not exact match (difflib has a fuzzy matcher I think)
+- [ ] Add a way to signal todo in progress, (I typically mark `[^]` for todos in progress) and update `nb todo` with a section for `IN PROGRESS`
 - [ ] Templates for notes - allow to define templates and create from a template with `nb new ... --template <template_name>`
 - [x] Command Line completion!!
 - [ ] Toml for config instead of yaml

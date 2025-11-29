@@ -1,0 +1,271 @@
+"""Attachment-related CLI commands."""
+
+from __future__ import annotations
+
+from datetime import date
+
+import click
+
+from nb.cli.utils import console, find_todo
+from nb.config import get_config
+from nb.core.notes import ensure_daily_note
+
+
+def register_attachment_commands(cli: click.Group) -> None:
+    """Register all attachment-related commands with the CLI."""
+    cli.add_command(attach)
+
+
+@click.group()
+def attach() -> None:
+    """Manage file attachments.
+
+    Attach files or URLs to notes and todos. Files can be linked
+    (referenced in place) or copied to the attachments directory.
+    """
+    pass
+
+
+@attach.command("file")
+@click.argument("file_path", type=click.Path(exists=True))
+@click.option("--to", "target", help="Note path or todo ID to attach to")
+@click.option("--title", "-t", help="Display title for the attachment")
+@click.option("--copy", "-c", is_flag=True, help="Copy file to attachments directory")
+def attach_file(
+    file_path: str, target: str | None, title: str | None, copy: bool
+) -> None:
+    """Attach a file to a note or todo.
+
+    By default attaches to today's daily note. Use --to to specify a target.
+
+    Examples:
+        nb attach file ./document.pdf
+        nb attach file ~/image.png --to daily/2025-11-27.md
+        nb attach file report.pdf --to abc12345 --copy
+
+    """
+    from nb.core.attachments import attach_to_note, attach_to_todo
+
+    config = get_config()
+
+    # Determine target
+    if target is None:
+        # Default to today's note
+        note_path = ensure_daily_note(date.today())
+    elif len(target) >= 8 and "/" not in target and "\\" not in target:
+        # Looks like a todo ID - try to find it
+        t = find_todo(target)
+        if t:
+            try:
+                attachment = attach_to_todo(
+                    t.source.path,
+                    t.line_number,
+                    file_path,
+                    title=title,
+                    copy=copy,
+                )
+                console.print(f"[green]Attached:[/green] {attachment.path}")
+                console.print(f"[dim]To todo: {t.content[:50]}...[/dim]")
+                return
+            except FileNotFoundError as e:
+                console.print(f"[red]{e}[/red]")
+                raise SystemExit(1)
+        # Fall through to try as note path
+        note_path = config.notes_root / target
+    else:
+        note_path = config.notes_root / target
+
+    if not note_path.suffix:
+        note_path = note_path.with_suffix(".md")
+
+    if not note_path.exists():
+        console.print(f"[red]Note not found: {target}[/red]")
+        raise SystemExit(1)
+
+    try:
+        attachment = attach_to_note(note_path, file_path, title=title, copy=copy)
+        console.print(f"[green]Attached:[/green] {attachment.path}")
+        console.print(f"[dim]To: {note_path.name}[/dim]")
+    except FileNotFoundError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+
+
+@attach.command("url")
+@click.argument("url")
+@click.option("--to", "target", help="Note path or todo ID to attach to")
+@click.option("--title", "-t", help="Display title for the URL")
+def attach_url(url: str, target: str | None, title: str | None) -> None:
+    """Attach a URL to a note or todo.
+
+    By default attaches to today's daily note. Use --to to specify a target.
+
+    Examples:
+        nb attach url https://example.com/doc
+        nb attach url https://github.com/repo --to projects/myproject.md
+
+    """
+    from nb.core.attachments import attach_to_note, attach_to_todo
+
+    config = get_config()
+
+    # Determine target (same logic as attach_file)
+    if target is None:
+        note_path = ensure_daily_note(date.today())
+    elif len(target) >= 8 and "/" not in target and "\\" not in target:
+        t = find_todo(target)
+        if t:
+            try:
+                attachment = attach_to_todo(
+                    t.source.path,
+                    t.line_number,
+                    url,
+                    title=title,
+                    copy=False,
+                )
+                console.print(f"[green]Attached:[/green] {attachment.path}")
+                console.print(f"[dim]To todo: {t.content[:50]}...[/dim]")
+                return
+            except Exception as e:
+                console.print(f"[red]{e}[/red]")
+                raise SystemExit(1)
+        note_path = config.notes_root / target
+    else:
+        note_path = config.notes_root / target
+
+    if not note_path.suffix:
+        note_path = note_path.with_suffix(".md")
+
+    if not note_path.exists():
+        console.print(f"[red]Note not found: {target}[/red]")
+        raise SystemExit(1)
+
+    try:
+        attachment = attach_to_note(note_path, url, title=title, copy=False)
+        console.print(f"[green]Attached:[/green] {attachment.path}")
+        console.print(f"[dim]To: {note_path.name}[/dim]")
+    except Exception as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+
+
+@attach.command("list")
+@click.argument("target", required=False)
+def attach_list(target: str | None) -> None:
+    """List attachments in a note.
+
+    Shows all @attach lines in the specified note (or today's note by default).
+
+    Examples:
+        nb attach list
+        nb attach list daily/2025-11-27.md
+
+    """
+    from nb.core.attachments import list_attachments_in_file, resolve_attachment_path
+    from nb.models import Attachment
+
+    config = get_config()
+
+    if target is None:
+        note_path = ensure_daily_note(date.today())
+    else:
+        note_path = config.notes_root / target
+        if not note_path.suffix:
+            note_path = note_path.with_suffix(".md")
+
+    if not note_path.exists():
+        console.print(f"[red]Note not found: {target}[/red]")
+        raise SystemExit(1)
+
+    attachments = list_attachments_in_file(note_path)
+
+    if not attachments:
+        console.print("[dim]No attachments found.[/dim]")
+        return
+
+    console.print(f"\n[bold]Attachments in {note_path.name}:[/bold]\n")
+
+    for line_num, path in attachments:
+        # Check if file exists
+        from nb.core.attachments import is_url
+
+        if is_url(path):
+            status = "[cyan]url[/cyan]"
+        else:
+            # Create a temp attachment to resolve path
+            temp = Attachment(id="", type="file", path=path)
+            resolved = resolve_attachment_path(temp)
+            if resolved:
+                status = "[green]ok[/green]"
+            else:
+                status = "[red]missing[/red]"
+
+        console.print(f"  {line_num:4d}: {path}  {status}")
+
+
+@attach.command("open")
+@click.argument("target")
+@click.option("--line", "-l", type=int, help="Line number of the attachment")
+def attach_open(target: str, line: int | None) -> None:
+    """Open an attachment with the system default handler.
+
+    TARGET can be a note path. Use --line to specify which attachment.
+
+    Examples:
+        nb attach open daily/2025-11-27.md --line 15
+
+    """
+    from nb.core.attachments import list_attachments_in_file, open_attachment
+    from nb.models import Attachment
+
+    config = get_config()
+    note_path = config.notes_root / target
+    if not note_path.suffix:
+        note_path = note_path.with_suffix(".md")
+
+    if not note_path.exists():
+        console.print(f"[red]Note not found: {target}[/red]")
+        raise SystemExit(1)
+
+    attachments = list_attachments_in_file(note_path)
+
+    if not attachments:
+        console.print("[dim]No attachments in this note.[/dim]")
+        return
+
+    if line is None:
+        if len(attachments) == 1:
+            line = attachments[0][0]
+        else:
+            console.print(
+                "[yellow]Multiple attachments found. Use --line to specify:[/yellow]"
+            )
+            for ln, path in attachments:
+                console.print(f"  {ln:4d}: {path}")
+            return
+
+    # Find attachment at line
+    found = None
+    for ln, path in attachments:
+        if ln == line:
+            found = path
+            break
+
+    if found is None:
+        console.print(f"[red]No attachment at line {line}[/red]")
+        raise SystemExit(1)
+
+    # Determine type and open
+    from nb.core.attachments import is_url
+
+    attachment = Attachment(
+        id="",
+        type="url" if is_url(found) else "file",
+        path=found,
+    )
+
+    if open_attachment(attachment):
+        console.print(f"[green]Opened:[/green] {found}")
+    else:
+        console.print(f"[red]Failed to open:[/red] {found}")
+        raise SystemExit(1)
