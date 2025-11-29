@@ -78,11 +78,12 @@ class Todo:
     due_date: date | None = None
     priority: Priority | None = None
     tags: list[str] = field(default_factory=list)
-    project: str | None = None
+    notebook: str | None = None  # Database column is 'project' for legacy reasons
     parent_id: str | None = None
     children: list[Todo] = field(default_factory=list)
     attachments: list[Attachment] = field(default_factory=list)
     details: str | None = None  # Multi-line details/description below the todo
+    section: str | None = None  # Section heading above the todo
 
     @property
     def is_overdue(self) -> bool:

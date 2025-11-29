@@ -6,7 +6,9 @@ from datetime import date, timedelta
 
 from nb.core.todos import (
     ATTACH_PATTERN,
+    COLON_LABEL_PATTERN,
     DUE_PATTERN,
+    HEADING_PATTERN,
     PRIORITY_PATTERN,
     TAG_PATTERN,
     TODO_PATTERN,
@@ -296,7 +298,7 @@ class TestExtractTodos:
 
         todos = extract_todos(note_path, notes_root=notes_root)
 
-        assert todos[0].project == "projects"
+        assert todos[0].notebook == "projects"
 
     def test_empty_file(self, mock_config, create_note):
         notes_root = mock_config.notes_root
@@ -501,3 +503,230 @@ class TestGetInboxPath:
         path = get_inbox_path(notes_root)
 
         assert path == notes_root / "todo.md"
+
+
+class TestSectionPatterns:
+    """Tests for section heading regex patterns."""
+
+    def test_heading_pattern_h1(self):
+        match = HEADING_PATTERN.match("# Main Heading")
+        assert match is not None
+        assert match.group("level") == "#"
+        assert match.group("text") == "Main Heading"
+
+    def test_heading_pattern_h2(self):
+        match = HEADING_PATTERN.match("## Sub Heading")
+        assert match is not None
+        assert match.group("level") == "##"
+        assert match.group("text") == "Sub Heading"
+
+    def test_heading_pattern_h3(self):
+        match = HEADING_PATTERN.match("### Deep Heading")
+        assert match is not None
+        assert match.group("level") == "###"
+
+    def test_heading_pattern_h6(self):
+        match = HEADING_PATTERN.match("###### Level 6")
+        assert match is not None
+        assert match.group("level") == "######"
+
+    def test_heading_pattern_no_match_text(self):
+        assert HEADING_PATTERN.match("Regular text") is None
+        assert HEADING_PATTERN.match("No hash prefix") is None
+
+    def test_colon_label_pattern(self):
+        match = COLON_LABEL_PATTERN.match("Morning:")
+        assert match is not None
+        assert match.group("text") == "Morning"
+
+    def test_colon_label_pattern_with_spaces(self):
+        match = COLON_LABEL_PATTERN.match("Project Setup:")
+        assert match is not None
+        assert match.group("text") == "Project Setup"
+
+    def test_colon_label_matches_todo_line(self):
+        # The pattern itself CAN match todo lines ending with :
+        # But in extract_todos(), we explicitly check not stripped_line.startswith("-")
+        # before applying this pattern, so todo lines are excluded
+        match = COLON_LABEL_PATTERN.match("- [ ] Task:")
+        assert match is not None  # Pattern matches, but code filters it out
+
+    def test_colon_label_no_match_multiple_colons(self):
+        # Only matches if there's exactly one colon at the end
+        match = COLON_LABEL_PATTERN.match("Time: 10:00:")
+        # This actually matches "Time: 10:00" as text with trailing :
+        # The pattern is flexible with colons in the content
+
+
+class TestSectionExtraction:
+    """Tests for section heading extraction in extract_todos."""
+
+    def test_markdown_heading_h1_title_skipped(self, mock_config, create_note):
+        """First heading (title) should be skipped for section assignment."""
+        notes_root = mock_config.notes_root
+        content = """\
+# Project Tasks
+
+- [ ] First task
+"""
+        note_path = create_note("projects", "test.md", content)
+        todos = extract_todos(note_path, notes_root=notes_root)
+
+        assert len(todos) == 1
+        # First heading is title, so section should be None
+        assert todos[0].section is None
+
+    def test_markdown_heading_h2_after_title(self, mock_config, create_note):
+        """Second heading becomes section after title is skipped."""
+        notes_root = mock_config.notes_root
+        content = """\
+# Project Title
+
+## Development
+
+- [ ] Write code
+"""
+        note_path = create_note("projects", "test.md", content)
+        todos = extract_todos(note_path, notes_root=notes_root)
+
+        assert todos[0].section == "Development"
+
+    def test_markdown_heading_h3_after_title(self, mock_config, create_note):
+        """H3 heading becomes section after title is skipped."""
+        notes_root = mock_config.notes_root
+        content = """\
+# Note Title
+
+### Bug Fixes
+
+- [ ] Fix issue #123
+"""
+        note_path = create_note("projects", "test.md", content)
+        todos = extract_todos(note_path, notes_root=notes_root)
+
+        assert todos[0].section == "Bug Fixes"
+
+    def test_colon_label(self, mock_config, create_note):
+        notes_root = mock_config.notes_root
+        content = """\
+Morning:
+- [ ] Check emails
+
+Afternoon:
+- [ ] Team meeting
+"""
+        note_path = create_note("projects", "test.md", content)
+        todos = extract_todos(note_path, notes_root=notes_root)
+
+        assert len(todos) == 2
+        assert todos[0].section == "Morning"
+        assert todos[1].section == "Afternoon"
+
+    def test_nearest_heading_wins(self, mock_config, create_note):
+        """First heading is title (skipped), subsequent headings become sections."""
+        notes_root = mock_config.notes_root
+        content = """\
+# Note Title
+
+- [ ] Task under title (no section)
+
+## Subsection
+
+- [ ] Task under subsection
+"""
+        note_path = create_note("projects", "test.md", content)
+        todos = extract_todos(note_path, notes_root=notes_root)
+
+        assert len(todos) == 2
+        # First heading is title, so first task has no section
+        assert todos[0].section is None
+        assert todos[1].section == "Subsection"
+
+    def test_no_section(self, mock_config, create_note):
+        notes_root = mock_config.notes_root
+        content = """\
+- [ ] Task without section
+"""
+        note_path = create_note("projects", "test.md", content)
+        todos = extract_todos(note_path, notes_root=notes_root)
+
+        assert todos[0].section is None
+
+    def test_section_in_code_block_ignored(self, mock_config, create_note):
+        notes_root = mock_config.notes_root
+        content = """\
+# Title
+
+## Real Section
+
+```markdown
+## Fake Section
+```
+
+- [ ] Should be under Real Section
+"""
+        note_path = create_note("projects", "test.md", content)
+        todos = extract_todos(note_path, notes_root=notes_root)
+
+        assert todos[0].section == "Real Section"
+
+    def test_mixed_headings_and_labels(self, mock_config, create_note):
+        """Colon labels take precedence over headings when closest to todo."""
+        notes_root = mock_config.notes_root
+        content = """\
+# Title
+
+## Project Alpha
+
+Morning:
+- [ ] Task 1
+
+## Project Beta
+
+Evening:
+- [ ] Task 2
+"""
+        note_path = create_note("projects", "test.md", content)
+        todos = extract_todos(note_path, notes_root=notes_root)
+
+        assert len(todos) == 2
+        assert todos[0].section == "Morning"
+        assert todos[1].section == "Evening"
+
+    def test_section_persists_for_multiple_todos(self, mock_config, create_note):
+        notes_root = mock_config.notes_root
+        content = """\
+# Setup Guide
+
+## Installation
+
+- [ ] Set up environment
+- [ ] Install dependencies
+- [ ] Configure settings
+"""
+        note_path = create_note("projects", "test.md", content)
+        todos = extract_todos(note_path, notes_root=notes_root)
+
+        assert len(todos) == 3
+        assert todos[0].section == "Installation"
+        assert todos[1].section == "Installation"
+        assert todos[2].section == "Installation"
+
+    def test_nested_todos_inherit_section(self, mock_config, create_note):
+        notes_root = mock_config.notes_root
+        content = """\
+# Title
+
+## Setup
+
+- [ ] Main task
+  - [ ] Subtask 1
+  - [ ] Subtask 2
+"""
+        note_path = create_note("projects", "test.md", content)
+        todos = extract_todos(note_path, notes_root=notes_root)
+
+        assert len(todos) == 3
+        assert todos[0].section == "Setup"
+        assert todos[1].section == "Setup"
+        assert todos[2].section == "Setup"

@@ -39,38 +39,38 @@ todo_exclude: true
 - [x] Add a command to open the source of a todo by id, `nb todo edit <ID>`
 - [x] Need CLI command to configure notebooks and other settings
 - [x] Allow toggling excluding a specific note from todo list in frontmatter.
-
+- [x] Meetings?? This is probably best as a date-based notebook with some special metadata
     
-## In Progress / Next Up
+## Phase 4: In Progress / Next Up
  
-- [ ] Associate todo list with section heading.
+- [x] Associate todo list with section heading.
     Capture whatever the prior heading associated with the todo is (if exists)
-- [ ] The `nb list` command is exactly the same as the `nb notebooks` command when no flags are used. Should list the last 5 notes from each notebook unless a flag is given.
-- [ ] Watcher service in background for indexing.
-- [ ] Allow defining a color for each notebook that is used in display listings (especially `nb todo`)
+  - [x] Need to skip this if the heading is the first heading in the document
+- [ ] The `nb list` command is basically exactly the same as the `nb notebooks` command when no flags are used. Should list the latest 3 notes from each notebook unless a flag is given.
+- [ ] Allow defining a color (and/or icon?) for each notebook that is used in display listings (especially `nb todo`)
 - [ ] Capture url and other file attachments as markdown using all2md
-- [ ] Meetings?? This is probably best as a date-based notebook with some special metadata
 - [ ] Templates for notes - allow to define templates and create from a template with `nb new ... --template <template_name>`
-- [ ] Integrate git and some kind of backup
-- [ ] Would it be possible to integrate more directly into the email/calendar/outlook contacts? Is there any benefit?
-- [ ] Web viewer - this would be easy with the all2md library.
-- [ ] How do we make it available via the cloud?
-- [^] Command Line completion!!
+- [ ] Do todos inherit the tag from the note? They probably should.
+- [x] Command Line completion!!
 - [ ] Fuzzy finding for notebooks and notes from cli input
 - [ ] Toml for config instead of yaml
 - [ ] Add a way from command line to open with other editor (e.g. nb open <note> --notepad)
-- [ ] Note titles should be visible in listing notes if they say more than default.
+- [ ] Note titles -- how to integrate and use them as a way to open notes too? Or at least display in list?
 - [ ] Add a way to signal todo in progress, e.g `[^]`
+- [ ] `nb stats` command for overview statistics
+- [ ] `nb tags` command to list all tags with counts
+- [ ] Refactor cli.py - split into submodules
+- [ ] Need a way to toggle include/exclude of todo for specific notes from CLI
+- [ ] Allow todo "views" to be defined with specific filters and quick from cli like `nb todo v <VIEWNAME>`
 
-### Phase 4: Advanced TUI
+### Phase 5: Advanced TUI
 - [ ] Full Wijjit-based todo list view with richer interactions
+- [ ] Full Wijjit based editor for notes
 - [x] Stream/continuous view (`nb stream`) with lazy loading
 - [ ] Grep search within stream view
 - [ ] Interactive filtering UI
 - [ ] Navigation and links
-- [ ] Due date reminders (optional notifications)
-- [ ] `nb stats` command for overview statistics
-- [ ] `nb tags` command to list all tags with counts
+- [ ] Integrate git and some kind of backup
 
 ## Technical Debt
 - [x] Add comprehensive test suite
@@ -82,10 +82,14 @@ todo_exclude: true
 ### Future Enhancements
 - [ ] Recurring todos (`@recur(weekly)`)
 - [ ] Export to various formats (HTML, PDF)
-- [ ] Git integration for version history
 - [ ] Mobile companion app / sync story
 - [ ] Calendar view for due dates
 - [ ] Pomodoro timer integration?? What is this?
+- [ ] Due date reminders (optional notifications)
+- [ ] Watcher service in background for indexing.
+- [ ] Would it be possible to integrate more directly into the email/calendar/outlook contacts? Is there any benefit?
+- [ ] Web viewer - this would be easy with the all2md library.
+- [ ] How do we make it available via the cloud?
 
 ---
 
@@ -97,3 +101,24 @@ todo_exclude: true
 3. Attachments searchable in vector database
 4. DONE: Consider shorter IDs for display
 5. Add TOML support as alternative to YAML config
+
+---
+
+A “Pomodoro timer integration” in the context of a notebook app means building a Pomodoro-style work timer into the notebook so users can run timed focus sessions that are directly        
+associated with notes, tasks, or document sections. It’s not just a standalone timer — it’s linked to the notebook’s content, metadata, history and UX so users can start/stop sessions from
+a note, track productive time per note/task, and use that data for planning and analytics.                                                                                                  
+
+Below is a concise guide to what that entails, why it’s useful, recommended features, UX patterns, data model/events, platform considerations, and implementation notes.                    
+
+What the Pomodoro technique is (brief)                                                                                                                                                      
+
+ • Work in focused intervals (typically 25 minutes) separated by short breaks (5 minutes). After several cycles take a longer break (15–30 minutes).                                        
+ • The technique emphasizes focus, regular rest, and measuring productive time.                                                                                                             
+
+Why integrate it into a notebook app                                                                                                                                                        
+
+ • Contextual focus: start a timer directly from the note or task you’re working on.                                                                                                        
+ • Automatic time tracking per note/task/tag/project.                                                                                                                                       
+ • Makes notes actionable (task → focused work session).                                                                                                                                    
+ • Enables analytics: time spent on topics, productivity trends, session history.                                                                                                           
+ • Reduces context switching between apps.     

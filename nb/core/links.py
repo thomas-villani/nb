@@ -515,6 +515,41 @@ def get_linked_note_by_path(path: Path) -> LinkedNoteConfig | None:
     return None
 
 
+def get_linked_note_by_notebook(notebook: str) -> LinkedNoteConfig | None:
+    """Get a linked note by its notebook name.
+
+    Args:
+        notebook: The notebook name of the linked note.
+
+    Returns:
+        The linked note config, or None if not found.
+
+    """
+    for ln in list_linked_notes():
+        ln_notebook = ln.notebook or f"@{ln.alias}"
+        if ln_notebook == notebook:
+            return ln
+    return None
+
+
+def get_linked_note_in_notebook(notebook: str, alias: str) -> LinkedNoteConfig | None:
+    """Get a linked note by notebook and alias.
+
+    Args:
+        notebook: The notebook name of the linked note.
+        alias: The alias of the linked note.
+
+    Returns:
+        The linked note config, or None if not found.
+
+    """
+    for ln in list_linked_notes():
+        ln_notebook = ln.notebook or f"@{ln.alias}"
+        if ln_notebook == notebook and ln.alias == alias:
+            return ln
+    return None
+
+
 def scan_linked_note_files(linked: LinkedNoteConfig) -> list[Path]:
     """Get all markdown files from a linked note path.
 

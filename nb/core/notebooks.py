@@ -88,7 +88,7 @@ def get_notebook_notes(notebook: str, notes_root: Path | None = None) -> list[Pa
 
 def get_notebook_notes_with_linked(
     notebook: str, notes_root: Path | None = None
-) -> list[tuple[Path, bool]]:
+) -> list[tuple[Path, bool, str | None]]:
     """List all notes in a specific notebook, including linked notes.
 
     Args:
@@ -96,9 +96,11 @@ def get_notebook_notes_with_linked(
         notes_root: Override notes root directory
 
     Returns:
-        List of (path, is_linked) tuples for notes in the notebook.
+        List of (path, is_linked, alias) tuples for notes in the notebook.
+        For linked notes, alias is the linked note alias; for regular notes, it's None.
 
     """
+    from nb.core.links import list_linked_notes
     from nb.index.db import get_db
 
     config = get_config()
@@ -107,7 +109,22 @@ def get_notebook_notes_with_linked(
 
     # Get regular notebook notes first
     regular_notes = get_notebook_notes(notebook, notes_root)
-    results: list[tuple[Path, bool]] = [(p, False) for p in regular_notes]
+    results: list[tuple[Path, bool, str | None]] = [
+        (p, False, None) for p in regular_notes
+    ]
+
+    # Build a map of paths to aliases for linked notes in this notebook
+    path_to_alias: dict[str, str] = {}
+    for ln in list_linked_notes():
+        ln_notebook = ln.notebook or f"@{ln.alias}"
+        if ln_notebook == notebook:
+            # For single-file links, map the file path
+            if ln.path.is_file():
+                path_to_alias[str(ln.path.resolve())] = ln.alias
+            else:
+                # For directory links, we'll match by checking if path is under ln.path
+                # Store the base path and alias for later matching
+                path_to_alias[f"dir:{ln.path.resolve()}"] = ln.alias
 
     # Also check for linked notes with this notebook name
     db = get_db()
@@ -117,7 +134,30 @@ def get_notebook_notes_with_linked(
     )
 
     for row in rows:
-        results.append((Path(row["path"]), True))
+        note_path = Path(row["path"])
+        # Try to find the alias for this path
+        alias = None
+        resolved = (
+            str(note_path.resolve()) if note_path.is_absolute() else str(note_path)
+        )
+
+        # Check direct path match
+        if resolved in path_to_alias:
+            alias = path_to_alias[resolved]
+        else:
+            # Check if it's under a linked directory
+            for key, value in path_to_alias.items():
+                if key.startswith("dir:"):
+                    dir_path = key[4:]
+                    try:
+                        if note_path.is_absolute():
+                            note_path.relative_to(dir_path)
+                        alias = value
+                        break
+                    except ValueError:
+                        continue
+
+        results.append((note_path, True, alias))
 
     # Sort by path
     return sorted(results, key=lambda x: str(x[0]))

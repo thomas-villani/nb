@@ -21,6 +21,12 @@ ATTACH_PATTERN = re.compile(r"^\s*@attach:\s*(.+)$")
 # Pattern to detect fenced code blocks
 CODE_FENCE_PATTERN = re.compile(r"^```")
 
+# Patterns for section heading detection
+# Markdown headings: # H1, ## H2, ### H3, etc.
+HEADING_PATTERN = re.compile(r"^(?P<level>#{1,6})\s+(?P<text>.+)$")
+# Colon labels: any non-todo line ending with : (e.g., "Morning:", "Installation:")
+COLON_LABEL_PATTERN = re.compile(r"^(?P<text>[^:\n]+):$")
+
 
 def clean_todo_content(content: str) -> str:
     """Remove metadata markers from todo content.
@@ -68,6 +74,7 @@ def extract_todos(
     external: bool = False,
     alias: str | None = None,
     notes_root: Path | None = None,
+    notebook: str | None = None,
 ) -> list[Todo]:
     """Extract all todos from a markdown file.
 
@@ -77,6 +84,7 @@ def extract_todos(
         external: Whether this is an external file
         alias: Optional alias for linked files
         notes_root: Notes root for determining project
+        notebook: Override notebook/project name (for linked notes)
 
     Returns:
         List of Todo objects with hierarchy built.
@@ -97,11 +105,16 @@ def extract_todos(
     current_todo: Todo | None = None
     current_todo_indent: int = 0  # Track indent of current todo for details capture
     details_lines: list[str] = []  # Accumulate details lines
+    current_section: str | None = None  # Track current section heading
+    first_heading_seen = False  # Track if we've seen the title heading
 
-    # Determine project (notebook) from path
-    from nb.core.notebooks import get_notebook_for_file
+    # Determine project (notebook) from path, or use override
+    if notebook:
+        project = notebook
+    else:
+        from nb.core.notebooks import get_notebook_for_file
 
-    project = get_notebook_for_file(path)
+        project = get_notebook_for_file(path)
 
     # Get created date from file or parse from filename
     from nb.utils.dates import parse_date_from_filename
@@ -130,6 +143,29 @@ def extract_todos(
 
         if in_code_block:
             continue
+
+        # Check for section headings (before checking for todos)
+        # Markdown heading pattern: # H1, ## H2, ### H3, etc.
+        heading_match = HEADING_PATTERN.match(line)
+        if heading_match:
+            heading_text = heading_match.group("text").strip()
+            if heading_text:  # Ignore empty headings
+                if not first_heading_seen:
+                    # Skip the first heading (title) - it's redundant as section
+                    first_heading_seen = True
+                else:
+                    current_section = heading_text
+            continue
+
+        # Colon label pattern: "Label:" (only non-indented, non-todo lines)
+        stripped_line = line.strip()
+        if stripped_line and not stripped_line.startswith("-"):
+            colon_match = COLON_LABEL_PATTERN.match(stripped_line)
+            if colon_match:
+                label_text = colon_match.group("text").strip()
+                if label_text:  # Ignore empty labels
+                    current_section = label_text
+                continue
 
         # Check for attachment line (belongs to previous todo)
         attach_match = ATTACH_PATTERN.match(line)
@@ -182,10 +218,11 @@ def extract_todos(
             due_date=due_date,
             priority=priority,
             tags=tags,
-            project=project,
+            notebook=project,  # Local var is 'project' for legacy reasons
             parent_id=None,
             children=[],
             attachments=[],
+            section=current_section,
         )
 
         # Handle nesting - find parent based on indentation
@@ -346,10 +383,11 @@ def add_todo_to_inbox(text: str, notes_root: Path | None = None) -> Todo:
         due_date=parse_due_date(text),
         priority=parse_priority(text),
         tags=parse_tags(text),
-        project=None,
+        notebook=None,
         parent_id=None,
         children=[],
         attachments=[],
+        section=None,
     )
 
 
@@ -411,8 +449,9 @@ def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
         due_date=parse_due_date(text),
         priority=parse_priority(text),
         tags=parse_tags(text),
-        project="daily",
+        notebook="daily",
         parent_id=None,
         children=[],
         attachments=[],
+        section=None,
     )

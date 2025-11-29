@@ -6,6 +6,7 @@ import pytest
 
 from nb.index import scanner as scanner_module
 from nb.index.db import get_db, reset_db
+from nb.utils.hashing import normalize_path
 from nb.index.scanner import (
     get_file_hash,
     index_all_notes,
@@ -160,7 +161,7 @@ Some content here.
 
         db = get_db()
         # Use path relative to notes_root (may use OS-specific separators)
-        rel_path = str(note_path.relative_to(notes_root))
+        rel_path = normalize_path(note_path.relative_to(notes_root))
         row = db.fetchone("SELECT * FROM notes WHERE path = ?", (rel_path,))
 
         assert row is not None
@@ -187,7 +188,7 @@ tags:
         index_note(note_path, notes_root, index_vectors=False)
 
         db = get_db()
-        rel_path = str(note_path.relative_to(notes_root))
+        rel_path = normalize_path(note_path.relative_to(notes_root))
         tags = db.fetchall("SELECT tag FROM note_tags WHERE note_path = ?", (rel_path,))
         tag_list = [t["tag"] for t in tags]
 
@@ -208,7 +209,7 @@ See [[other-note]] and [[path/to/note|Display]].
         index_note(note_path, notes_root, index_vectors=False)
 
         db = get_db()
-        rel_path = str(note_path.relative_to(notes_root))
+        rel_path = normalize_path(note_path.relative_to(notes_root))
         links = db.fetchall(
             "SELECT target_path FROM note_links WHERE source_path = ?", (rel_path,)
         )
@@ -250,7 +251,7 @@ See [[other-note]] and [[path/to/note|Display]].
         index_note(note_path, notes_root, index_vectors=False)
 
         db = get_db()
-        rel_path = str(note_path.relative_to(notes_root))
+        rel_path = normalize_path(note_path.relative_to(notes_root))
         row = db.fetchone("SELECT * FROM notes WHERE path = ?", (rel_path,))
 
         assert row["title"] == "New Title"

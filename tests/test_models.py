@@ -360,7 +360,7 @@ class TestTodo:
             source=source,
             line_number=1,
             created_date=date(2025, 11, 20),
-            project="nb-cli",
+            notebook="nb-cli",
         )
 
-        assert todo.project == "nb-cli"
+        assert todo.notebook == "nb-cli"

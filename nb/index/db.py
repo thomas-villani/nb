@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 # Current schema version
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -165,6 +165,12 @@ ALTER TABLE linked_notes ADD COLUMN todo_exclude INTEGER DEFAULT 0;
 ALTER TABLE linked_notes ADD COLUMN sync INTEGER DEFAULT 1;
 """
 
+# Phase 8 additions: section heading tracking for todos
+SCHEMA_V9 = """
+-- Add section column to todos table for heading tracking
+ALTER TABLE todos ADD COLUMN section TEXT;
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -175,6 +181,7 @@ MIGRATIONS: dict[int, str] = {
     6: SCHEMA_V6,
     7: SCHEMA_V7,
     8: SCHEMA_V8,
+    9: SCHEMA_V9,
 }
 
 

@@ -31,7 +31,7 @@ from nb.index.todos_repo import (
 from nb.utils.dates import get_week_range, parse_fuzzy_date
 from nb.utils.editor import open_in_editor
 
-console = Console()
+console = Console(highlight=False)
 
 
 def print_note(path: Path) -> None:
@@ -285,6 +285,7 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
     - A date like "2025-11-26" or "nov 26"
     - A relative date like "friday" or "last monday"
     - A note name (when used with -n for non-date-based notebooks)
+    - A linked note alias (when used with -n for the linked note's notebook)
     - A path to a note file
 
     \b
@@ -293,7 +294,9 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
       nb open "last monday"       # Open last Monday's note
       nb open myproject -n ideas  # Open ideas/myproject.md
       nb open friday -n work      # Open Friday in work notebook
+      nb open mytodo -n nbcli     # Open linked note 'mytodo' in notebook 'nbcli'
     """
+    from nb.core.links import get_linked_note_in_notebook
     from nb.core.notebooks import (
         ensure_notebook_note,
         get_notebook_note_path,
@@ -305,6 +308,18 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
 
     # If notebook is specified, handle it
     if notebook:
+        # Check if note_ref matches a linked note alias in this notebook
+        linked = get_linked_note_in_notebook(notebook, note_ref)
+        if linked:
+            # Found linked note by alias - open the linked file
+            if show:
+                print_note(linked.path)
+            else:
+                ln_notebook = linked.notebook or f"@{linked.alias}"
+                console.print(f"[dim]Opening {ln_notebook}/{linked.alias}...[/dim]")
+                open_note(linked.path)
+            return
+
         # Check if it's a date-based notebook
         if is_notebook_date_based(notebook):
             # Try to parse as a date
@@ -397,6 +412,7 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
     - A date like "2025-11-26" or "nov 26"
     - A relative date like "friday" or "last monday"
     - A note name (when used with -n for non-date-based notebooks)
+    - A linked note alias (when used with -n for the linked note's notebook)
     - A path to a note file
     - Omitted to show today's note
 
@@ -407,7 +423,9 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
       nb show -n work             # Show today's note in work notebook
       nb show friday -n work      # Show Friday in work notebook
       nb show myproject -n ideas  # Show ideas/myproject.md
+      nb show mytodo -n nbcli     # Show linked note 'mytodo' in notebook 'nbcli'
     """
+    from nb.core.links import get_linked_note_in_notebook
     from nb.core.notebooks import (
         ensure_notebook_note,
         get_notebook_note_path,
@@ -436,6 +454,13 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
 
     # If notebook is specified, handle it
     if notebook:
+        # Check if note_ref matches a linked note alias in this notebook
+        linked = get_linked_note_in_notebook(notebook, note_ref)
+        if linked:
+            # Found linked note by alias - show the linked file
+            print_note(linked.path)
+            return
+
         if is_notebook_date_based(notebook):
             # Try to parse as a date
             parsed = parse_fuzzy_date(note_ref)
@@ -921,9 +946,12 @@ def list_notes_cmd(notebook: str | None, week: bool, month: bool) -> None:
             console.print(f"[dim]No notes in {notebook}.[/dim]")
             return
 
-        for note_path, is_linked in notes:
+        for note_path, is_linked, alias in notes:
             if is_linked:
-                console.print(f"[cyan]{note_path}[/cyan] [dim](linked)[/dim]")
+                if alias:
+                    console.print(f"[cyan]{alias}[/cyan] [dim]({note_path})[/dim]")
+                else:
+                    console.print(f"[cyan]{note_path}[/cyan] [dim](linked)[/dim]")
             else:
                 console.print(str(note_path))
     else:
@@ -1303,9 +1331,37 @@ def _calculate_column_widths(todos: list) -> dict[str, int]:
 
 
 def _format_todo_source(t) -> str:
-    """Format the source of a todo for display."""
-    if not t.source:
+    """Format the source of a todo for display (plain text, used for sorting).
+
+    Format: notebook/note_title::Section (if section exists)
+            notebook/note_title (if no section)
+    """
+    parts = _get_todo_source_parts(t)
+    if not parts["notebook"] and not parts["note"]:
         return ""
+
+    base_source = ""
+    if parts["notebook"] and parts["note"]:
+        base_source = f"{parts['notebook']}/{parts['note']}"
+    elif parts["notebook"]:
+        base_source = parts["notebook"]
+    elif parts["note"]:
+        base_source = parts["note"]
+
+    if parts["section"]:
+        return f"{base_source}::{parts['section']}"
+    return base_source
+
+
+def _get_todo_source_parts(t) -> dict[str, str]:
+    """Extract source parts (notebook, note, section) from a todo.
+
+    Returns a dict with keys: notebook, note, section (all may be empty strings).
+    """
+    result = {"notebook": "", "note": "", "section": t.section or ""}
+
+    if not t.source:
+        return result
 
     if t.source.alias:
         # Linked file - show notebook/alias (look up from linked notes)
@@ -1313,32 +1369,76 @@ def _format_todo_source(t) -> str:
 
         linked = get_linked_note(t.source.alias)
         if linked:
-            notebook = linked.notebook or f"@{linked.alias}"
-            # For single files, just show notebook/alias
-            # For directories, show notebook/filename
+            result["notebook"] = linked.notebook or f"@{linked.alias}"
+            # For single files, just show alias
+            # For directories, show filename
             if linked.path.is_file():
-                return f"{notebook}/{linked.alias}"
+                result["note"] = linked.alias
             else:
-                # Show notebook/relative_path_stem
+                # Show relative_path_stem
                 try:
                     rel = t.source.path.relative_to(linked.path)
-                    return f"{notebook}/{rel.stem}"
+                    result["note"] = rel.stem
                 except ValueError:
-                    return f"{notebook}/{t.source.path.stem}"
-        return f"@{t.source.alias}"
+                    result["note"] = t.source.path.stem
+        else:
+            result["notebook"] = f"@{t.source.alias}"
     elif t.source.type == "inbox":
-        return "inbox"
+        result["notebook"] = "inbox"
     else:
         # Regular note - show notebook/filename
         config = get_config()
         try:
             rel_path = t.source.path.relative_to(config.notes_root)
             if len(rel_path.parts) > 1:
-                return f"{rel_path.parts[0]}/{rel_path.stem}"
+                result["notebook"] = rel_path.parts[0]
+                result["note"] = rel_path.stem
             else:
-                return rel_path.stem
+                result["note"] = rel_path.stem
         except ValueError:
-            return t.source.path.stem
+            result["note"] = t.source.path.stem
+
+    return result
+
+
+def _format_colored_todo_source(t, width: int = 0) -> str:
+    """Format the source of a todo with colors for display.
+
+    Colors: notebook=magenta, note=blue, section=cyan
+
+    Args:
+        t: Todo object
+        width: Minimum width for padding (0 = no padding)
+
+    Returns:
+        Rich-formatted string with colors.
+    """
+    parts = _get_todo_source_parts(t)
+
+    # Build colored source string
+    colored_parts = []
+
+    if parts["notebook"]:
+        colored_parts.append(f"[magenta]{parts['notebook']}[/magenta]")
+
+    if parts["note"]:
+        if colored_parts:
+            colored_parts.append("/")
+        colored_parts.append(f"[blue]{parts['note']}[/blue]")
+
+    if parts["section"]:
+        colored_parts.append("::")
+        colored_parts.append(f"[cyan]{parts['section']}[/cyan]")
+
+    colored = "".join(colored_parts)
+
+    # Calculate plain length for padding
+    if width > 0:
+        plain_len = len(_format_todo_source(t))
+        if plain_len < width:
+            colored += " " * (width - plain_len)
+
+    return colored
 
 
 def _print_todo(t, indent: int = 0, widths: dict[str, int] | None = None) -> None:
@@ -1354,10 +1454,9 @@ def _print_todo(t, indent: int = 0, widths: dict[str, int] | None = None) -> Non
     else:
         content_display = content.ljust(content_width)
 
-    # Build source column
+    # Build source column (colored)
     source_str = _format_todo_source(t)
     source_width = widths["source"] if widths else len(source_str)
-    source_padded = source_str.ljust(source_width) if source_str else " " * source_width
 
     # Build metadata columns with fixed widths
     created_str = ""
@@ -1386,7 +1485,11 @@ def _print_todo(t, indent: int = 0, widths: dict[str, int] | None = None) -> Non
     else:
         content_part = content_display
 
-    source_part = f"[blue]{source_padded}[/blue]" if source_str else " " * source_width
+    source_part = (
+        _format_colored_todo_source(t, source_width)
+        if source_str
+        else " " * source_width
+    )
     created_part = f"[dim]{created_str:>6}[/dim]" if created_str else " " * 6
     due_part = f"[{due_color}]{due_str:>6}[/{due_color}]" if due_str else " " * 6
     priority_part = f"[magenta]{priority_str:>2}[/magenta]" if priority_str else "  "
@@ -1548,8 +1651,8 @@ def todo_show(todo_id: str) -> None:
         console.print(f"Priority: {t.priority.value}")
     if t.tags:
         console.print(f"Tags: {', '.join(t.tags)}")
-    if t.project:
-        console.print(f"Project: {t.project}")
+    if t.notebook:
+        console.print(f"Notebook: {t.notebook}")
 
     if t.details:
         console.print("\n[bold]Details:[/bold]")

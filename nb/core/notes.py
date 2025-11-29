@@ -8,7 +8,7 @@ from pathlib import Path
 from nb.config import get_config
 from nb.models import Note
 from nb.utils.editor import open_in_editor
-from nb.utils.hashing import make_note_hash
+from nb.utils.hashing import make_note_hash, normalize_path
 from nb.utils.markdown import (
     create_daily_note_template,
     create_note_template,
@@ -168,7 +168,7 @@ def update_note_mtime(path: Path, notes_root: Path | None = None) -> None:
     db = get_db()
     db.execute(
         "UPDATE notes SET mtime = ? WHERE path = ?",
-        (mtime, str(relative_path)),
+        (mtime, normalize_path(relative_path)),
     )
     db.commit()
 
@@ -348,6 +348,7 @@ def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
     from nb.index.todos_repo import delete_todos_for_source, upsert_todo
 
     # Determine source type
+    notebook = None
     try:
         rel_path = path.relative_to(notes_root)
         # Check if it's the inbox
@@ -367,11 +368,13 @@ def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
         for ln in list_linked_notes():
             if ln.path.is_file() and ln.path.resolve() == path.resolve():
                 alias = ln.alias
+                notebook = ln.notebook or f"@{ln.alias}"
                 break
             elif ln.path.is_dir():
                 try:
                     path.relative_to(ln.path)
                     alias = ln.alias
+                    notebook = ln.notebook or f"@{ln.alias}"
                     break
                 except ValueError:
                     continue
@@ -384,6 +387,7 @@ def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
         external=external,
         alias=alias,
         notes_root=notes_root,
+        notebook=notebook,
     )
     for todo in todos:
         upsert_todo(todo)

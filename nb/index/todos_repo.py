@@ -34,11 +34,12 @@ def _row_to_todo(row) -> Todo:
         due_date=date.fromisoformat(row["due_date"]) if row["due_date"] else None,
         priority=Priority.from_int(row["priority"]) if row["priority"] else None,
         tags=[],  # Loaded separately
-        project=row["project"],
+        notebook=row["project"],  # DB column is 'project'
         parent_id=row["parent_id"],
         children=[],  # Loaded separately if needed
         attachments=[],  # Loaded separately if needed
         details=row["details"] if "details" in row.keys() else None,
+        section=row["section"] if "section" in row.keys() else None,
     )
 
 
@@ -74,8 +75,8 @@ def upsert_todo(todo: Todo) -> None:
         INSERT OR REPLACE INTO todos (
             id, content, raw_content, completed, source_type, source_path,
             source_external, source_alias, line_number, created_date,
-            due_date, priority, project, parent_id, content_hash, details
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            due_date, priority, project, parent_id, content_hash, details, section
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             todo.id,
@@ -90,10 +91,11 @@ def upsert_todo(todo: Todo) -> None:
             created_date,
             todo.due_date.isoformat() if todo.due_date else None,
             todo.priority.value if todo.priority else None,
-            todo.project,
+            todo.notebook,
             todo.parent_id,
             None,  # content_hash not used currently
             todo.details,
+            todo.section,
         ),
     )
 

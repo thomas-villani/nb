@@ -12,7 +12,7 @@ from nb.core.notes import get_note
 from nb.core.todos import extract_todos
 from nb.index.db import Database, get_db
 from nb.index.todos_repo import delete_todos_for_source, upsert_todo
-from nb.utils.hashing import make_note_hash
+from nb.utils.hashing import make_note_hash, normalize_path
 
 # Thread-local storage for database connections
 _thread_local = threading.local()
@@ -110,7 +110,7 @@ def needs_reindex(path: Path, notes_root: Path | None = None) -> bool:
     db = get_db()
     row = db.fetchone(
         "SELECT mtime, content_hash FROM notes WHERE path = ?",
-        (str(relative),),
+        (normalize_path(relative),),
     )
 
     if not row:
@@ -176,13 +176,15 @@ def index_note(
     db = get_db()
 
     # Upsert note (now includes content, mtime, and todo_exclude columns)
+    # Use normalize_path for consistent path format with todos table
+    normalized_note_path = normalize_path(note.path)
     db.execute(
         """
         INSERT OR REPLACE INTO notes (path, title, date, notebook, content_hash, content, mtime, todo_exclude, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            str(note.path),
+            normalized_note_path,
             note.title,
             note.date.isoformat() if note.date else None,
             note.notebook,
@@ -195,19 +197,19 @@ def index_note(
     )
 
     # Update tags
-    db.execute("DELETE FROM note_tags WHERE note_path = ?", (str(note.path),))
+    db.execute("DELETE FROM note_tags WHERE note_path = ?", (normalized_note_path,))
     if note.tags:
         db.executemany(
             "INSERT INTO note_tags (note_path, tag) VALUES (?, ?)",
-            [(str(note.path), tag) for tag in note.tags],
+            [(normalized_note_path, tag) for tag in note.tags],
         )
 
     # Update links
-    db.execute("DELETE FROM note_links WHERE source_path = ?", (str(note.path),))
+    db.execute("DELETE FROM note_links WHERE source_path = ?", (normalized_note_path,))
     if note.links:
         db.executemany(
             "INSERT INTO note_links (source_path, target_path, display_text) VALUES (?, ?, ?)",
-            [(str(note.path), link, link) for link in note.links],
+            [(normalized_note_path, link, link) for link in note.links],
         )
 
     db.commit()
@@ -354,13 +356,15 @@ def _index_note_thread_safe(
     db = _get_thread_db()
 
     # Upsert note
+    # Use normalize_path for consistent path format with todos table
+    normalized_note_path = normalize_path(note.path)
     db.execute(
         """
         INSERT OR REPLACE INTO notes (path, title, date, notebook, content_hash, content, mtime, todo_exclude, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            str(note.path),
+            normalized_note_path,
             note.title,
             note.date.isoformat() if note.date else None,
             note.notebook,
@@ -373,19 +377,19 @@ def _index_note_thread_safe(
     )
 
     # Update tags
-    db.execute("DELETE FROM note_tags WHERE note_path = ?", (str(note.path),))
+    db.execute("DELETE FROM note_tags WHERE note_path = ?", (normalized_note_path,))
     if note.tags:
         db.executemany(
             "INSERT INTO note_tags (note_path, tag) VALUES (?, ?)",
-            [(str(note.path), tag) for tag in note.tags],
+            [(normalized_note_path, tag) for tag in note.tags],
         )
 
     # Update links
-    db.execute("DELETE FROM note_links WHERE source_path = ?", (str(note.path),))
+    db.execute("DELETE FROM note_links WHERE source_path = ?", (normalized_note_path,))
     if note.links:
         db.executemany(
             "INSERT INTO note_links (source_path, target_path, display_text) VALUES (?, ?, ?)",
-            [(str(note.path), link, link) for link in note.links],
+            [(normalized_note_path, link, link) for link in note.links],
         )
 
     db.commit()
@@ -671,10 +675,40 @@ def index_linked_note(
     except OSError:
         mtime = None
 
+    # Determine effective todo_exclude with proper precedence:
+    # 1. If frontmatter explicitly sets todo_exclude (true OR false), use that
+    # 2. Otherwise, inherit from link config OR notebook config
+    from nb.utils.markdown import parse_note_file
+
+    frontmatter_has_explicit_value = False
+    frontmatter_exclude = False
+
+    try:
+        meta, _ = parse_note_file(path)
+        if "todo_exclude" in meta:
+            frontmatter_has_explicit_value = True
+            frontmatter_exclude = bool(meta.get("todo_exclude", False))
+    except Exception:
+        pass
+
+    # Check notebook-level todo_exclude from config.yaml
+    config = get_config()
+    nb_config = config.get_notebook(notebook)
+    notebook_exclude = nb_config.todo_exclude if nb_config else False
+
+    # Precedence: frontmatter > link config/notebook config
+    if frontmatter_has_explicit_value:
+        # Frontmatter explicitly set - use its value (can be True OR False)
+        effective_todo_exclude = frontmatter_exclude
+    else:
+        # Inherit from link config OR notebook config
+        effective_todo_exclude = todo_exclude or notebook_exclude
+
     db = get_db()
 
-    # Use absolute path as the unique identifier for external notes
-    note_path = str(path)
+    # Use normalized path as the unique identifier for external notes
+    # This ensures consistency with how todos store source_path
+    note_path = normalize_path(path)
 
     # Upsert note with external flag and todo_exclude
     db.execute(
@@ -693,7 +727,7 @@ def index_linked_note(
             mtime,
             1,  # external = True
             alias,
-            1 if todo_exclude else 0,
+            1 if effective_todo_exclude else 0,
             datetime.now().isoformat(),
         ),
     )
@@ -731,7 +765,12 @@ def index_linked_note(
     # Also index todos from this file
     delete_todos_for_source(path)
     todos = extract_todos(
-        path, source_type="linked", external=True, alias=alias, notes_root=notes_root
+        path,
+        source_type="linked",
+        external=True,
+        alias=alias,
+        notes_root=notes_root,
+        notebook=notebook,
     )
     for todo in todos:
         upsert_todo(todo)
