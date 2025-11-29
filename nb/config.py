@@ -18,6 +18,8 @@ class NotebookConfig:
     date_based: bool = False  # If True, uses YYYY/Week/YYYY-MM-DD.md structure
     todo_exclude: bool = False  # If True, exclude from `nb todo` by default
     path: Path | None = None  # External path (None = inside notes_root)
+    color: str | None = None  # Display color (e.g., "blue", "green", "#ff5500")
+    icon: str | None = None  # Display icon/emoji (e.g., "📝", "🔧")
 
     @property
     def is_external(self) -> bool:
@@ -155,16 +157,23 @@ editor: micro
 # Set date_based: true to use YYYY/Week/YYYY-MM-DD.md structure
 # Set todo_exclude: true to exclude from `nb todo` by default
 # Set path: to use an external directory as a notebook
+# Set color: to customize display color (e.g., blue, green, #ff5500)
+# Set icon: to add an emoji/icon prefix (e.g., 📝, 🔧)
 notebooks:
   - name: daily
     date_based: true     # Uses date-organized structure
+    icon: 📅
   - name: projects
     date_based: false
+    color: cyan
+    icon: 🔧
   - name: work
     date_based: true
+    color: blue
   - name: personal
     date_based: true
     todo_exclude: true
+    color: green
   # External notebook example:
   # - name: obsidian
   #   path: ~/Documents/Obsidian/vault
@@ -246,6 +255,8 @@ def _parse_notebooks(data: list[Any]) -> list[NotebookConfig]:
                     date_based=item.get("date_based", False),
                     todo_exclude=item.get("todo_exclude", False),
                     path=ext_path,
+                    color=item.get("color"),
+                    icon=item.get("icon"),
                 )
             )
     return result
@@ -365,6 +376,10 @@ def save_config(config: Config) -> None:
             nb_dict["todo_exclude"] = True
         if nb.path is not None:
             nb_dict["path"] = str(nb.path)
+        if nb.color is not None:
+            nb_dict["color"] = nb.color
+        if nb.icon is not None:
+            nb_dict["icon"] = nb.icon
         notebooks_data.append(nb_dict)
 
     data = {
@@ -440,6 +455,8 @@ def add_notebook(
     date_based: bool = False,
     todo_exclude: bool = False,
     path: Path | None = None,
+    color: str | None = None,
+    icon: str | None = None,
 ) -> NotebookConfig:
     """Add a new notebook to the configuration.
 
@@ -448,6 +465,8 @@ def add_notebook(
         date_based: Whether to use date-based organization
         todo_exclude: Whether to exclude from nb todo by default
         path: External path (None for internal notebook)
+        color: Display color for the notebook
+        icon: Display icon/emoji for the notebook
 
     Returns:
         The created NotebookConfig
@@ -468,6 +487,8 @@ def add_notebook(
         date_based=date_based,
         todo_exclude=todo_exclude,
         path=path,
+        color=color,
+        icon=icon,
     )
 
     # Add to config and save
@@ -537,12 +558,136 @@ CONFIGURABLE_SETTINGS = {
     "embeddings.api_key": "API key for embeddings provider (OpenAI)",
 }
 
+# Notebook-specific settings (accessed via notebook.<name>.<setting>)
+NOTEBOOK_SETTINGS = {
+    "color": "Display color (e.g., blue, green, #ff5500)",
+    "icon": "Display icon/emoji (e.g., 📝, 🔧, or name like 'wrench')",
+    "date_based": "Use date-based organization (true/false)",
+    "todo_exclude": "Exclude from nb todo by default (true/false)",
+}
+
+# Map of emoji names to emoji characters for convenient CLI input
+EMOJI_ALIASES = {
+    # Common icons
+    "calendar": "📅",
+    "note": "📝",
+    "notes": "📝",
+    "book": "📕",
+    "books": "📚",
+    "folder": "📁",
+    "file": "📄",
+    # Tools
+    "wrench": "🔧",
+    "hammer": "🔨",
+    "gear": "⚙️",
+    "tools": "🛠️",
+    # Status
+    "star": "⭐",
+    "check": "✅",
+    "pin": "📌",
+    "flag": "🚩",
+    "bell": "🔔",
+    # Categories
+    "work": "💼",
+    "home": "🏠",
+    "personal": "👤",
+    "idea": "💡",
+    "bulb": "💡",
+    # Activities
+    "code": "💻",
+    "computer": "💻",
+    "rocket": "🚀",
+    "target": "🎯",
+    "brain": "🧠",
+    # Nature/misc
+    "sun": "☀️",
+    "moon": "🌙",
+    "fire": "🔥",
+    "heart": "❤️",
+    "sparkle": "✨",
+}
+
+
+def resolve_emoji(value: str) -> str:
+    """Resolve an emoji alias to its character, or return as-is.
+
+    Args:
+        value: Either an emoji character or an alias name
+
+    Returns:
+        The emoji character (resolved from alias if applicable)
+
+    """
+    return EMOJI_ALIASES.get(value.lower(), value)
+
+
+# Valid Rich color names (standard + bright variants)
+VALID_COLORS = {
+    # Standard colors
+    "black",
+    "red",
+    "green",
+    "yellow",
+    "blue",
+    "magenta",
+    "cyan",
+    "white",
+    # Bright variants
+    "bright_black",
+    "bright_red",
+    "bright_green",
+    "bright_yellow",
+    "bright_blue",
+    "bright_magenta",
+    "bright_cyan",
+    "bright_white",
+    # Common aliases
+    "grey",
+    "gray",
+    "purple",
+    "orange",
+    "pink",
+}
+
+
+def is_valid_color(color: str) -> bool:
+    """Check if a color value is valid for Rich.
+
+    Accepts:
+    - Named colors (red, blue, cyan, etc.)
+    - Hex colors (#ff5500, #f50)
+    - RGB notation (rgb(255,85,0))
+
+    """
+    color_lower = color.lower()
+
+    # Named color
+    if color_lower in VALID_COLORS:
+        return True
+
+    # Hex color (#RGB or #RRGGBB)
+    if color.startswith("#"):
+        hex_part = color[1:]
+        if len(hex_part) in (3, 6):
+            try:
+                int(hex_part, 16)
+                return True
+            except ValueError:
+                pass
+
+    # RGB notation
+    if color_lower.startswith("rgb(") and color_lower.endswith(")"):
+        return True  # Let Rich validate the exact format
+
+    return False
+
 
 def get_config_value(key: str) -> Any:
     """Get a config value by dot-notation key.
 
     Args:
-        key: Configuration key (e.g., 'editor', 'embeddings.provider')
+        key: Configuration key (e.g., 'editor', 'embeddings.provider',
+             'notebook.daily.color')
 
     Returns:
         The configuration value, or None if not found.
@@ -566,6 +711,12 @@ def get_config_value(key: str) -> Any:
         attr = parts[1]
         if hasattr(config.embeddings, attr):
             return getattr(config.embeddings, attr)
+    elif parts[0] == "notebook" and len(parts) == 3:
+        # Notebook-specific setting: notebook.<name>.<setting>
+        nb_name, setting = parts[1], parts[2]
+        nb = config.get_notebook(nb_name)
+        if nb is not None and setting in NOTEBOOK_SETTINGS:
+            return getattr(nb, setting, None)
 
     return None
 
@@ -574,11 +725,15 @@ def set_config_value(key: str, value: str) -> bool:
     """Set a config value by dot-notation key.
 
     Args:
-        key: Configuration key (e.g., 'editor', 'embeddings.provider')
-        value: Value to set
+        key: Configuration key (e.g., 'editor', 'embeddings.provider',
+             'notebook.daily.color')
+        value: Value to set (use empty string or 'none' to clear)
 
     Returns:
         True if successful, False if key not recognized.
+
+    Raises:
+        ValueError: If the value is invalid for the setting type.
 
     """
     config = get_config()
@@ -601,6 +756,34 @@ def set_config_value(key: str, value: str) -> bool:
             setattr(config.embeddings, attr, value if value else None)
         else:
             return False
+    elif parts[0] == "notebook" and len(parts) == 3:
+        # Notebook-specific setting: notebook.<name>.<setting>
+        nb_name, setting = parts[1], parts[2]
+        nb = config.get_notebook(nb_name)
+        if nb is None:
+            raise ValueError(f"Notebook '{nb_name}' not found")
+        if setting not in NOTEBOOK_SETTINGS:
+            return False
+
+        # Handle boolean settings
+        if setting in ("date_based", "todo_exclude"):
+            bool_value = value.lower() in ("true", "1", "yes")
+            setattr(nb, setting, bool_value)
+        elif setting == "color":
+            # Validate and set color
+            if value.lower() in ("", "none"):
+                nb.color = None
+            elif is_valid_color(value):
+                nb.color = value
+            else:
+                valid = ", ".join(sorted(VALID_COLORS)[:10]) + ", ... or #hex"
+                raise ValueError(f"Invalid color '{value}'. Valid: {valid}")
+        elif setting == "icon":
+            # Resolve emoji alias and set
+            if value.lower() in ("", "none"):
+                nb.icon = None
+            else:
+                nb.icon = resolve_emoji(value)
     else:
         return False
 
@@ -620,4 +803,13 @@ def list_config_settings() -> dict[str, tuple[str, Any]]:
     for key, description in CONFIGURABLE_SETTINGS.items():
         value = get_config_value(key)
         result[key] = (description, value)
+
+    # Add notebook-specific settings
+    config = get_config()
+    for nb in config.notebooks:
+        for setting, description in NOTEBOOK_SETTINGS.items():
+            key = f"notebook.{nb.name}.{setting}"
+            value = getattr(nb, setting, None)
+            result[key] = (description, value)
+
     return result

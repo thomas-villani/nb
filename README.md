@@ -100,8 +100,11 @@ nb new -n work             # Create today's note in work notebook
 nb new -n ideas my-idea    # Create named note in notebook
 nb edit daily/2025-11-27   # Edit an existing note
 nb add "Quick thought"     # Append text to today's note
+nb list                    # List latest 3 notes per notebook (with colors/tags)
+nb list --all              # List all notes in all notebooks
 nb list --week             # List this week's daily notes
 nb list -n work            # List notes in work notebook
+nb list -n work --week     # List this week's notes in work notebook
 
 nb stream                  # Browse all notes interactively
 nb stream -n daily         # Browse daily notes
@@ -289,6 +292,21 @@ nb config set embeddings.provider ollama  # Embeddings provider
 nb config set embeddings.model nomic-embed-text  # Embeddings model
 nb config set embeddings.base_url http://localhost:11434  # Custom endpoint
 nb config set embeddings.api_key sk-...  # API key (for OpenAI)
+
+# Notebook-specific settings (notebook.<name>.<setting>):
+nb config set notebook.work.color blue      # Set display color
+nb config set notebook.projects.icon wrench # Set icon (emoji alias)
+nb config set notebook.daily.icon 📅        # Set icon (direct emoji)
+nb config get notebook.work.color           # Get notebook color
+
+# Available icon aliases: calendar, note, book, wrench, hammer, gear,
+#   star, check, pin, flag, work, home, code, rocket, target, brain, etc.
+
+# Todo exclusion (for notebooks or individual notes)
+nb config exclude personal      # Exclude notebook from nb todo
+nb config include personal      # Re-include notebook in nb todo
+nb config exclude projects/old-idea  # Exclude specific note (updates frontmatter)
+nb config include projects/old-idea  # Re-include specific note
 ```
 
 ## Configuration
@@ -303,13 +321,18 @@ editor: micro  # or vim, code, etc.
 notebooks:
   - name: daily
     date_based: true          # Uses YYYY/Week/YYYY-MM-DD.md structure
+    icon: 📅                  # Display icon in listings
   - name: projects
     date_based: false
+    color: cyan               # Display color (blue, green, cyan, etc.)
+    icon: 🔧
   - name: work
     date_based: true
+    color: blue
   - name: personal
     date_based: false
     todo_exclude: true        # Hidden from `nb todo` by default
+    color: green
   - name: obsidian
     path: ~/Documents/Obsidian/vault   # External directory
     date_based: false
@@ -344,6 +367,8 @@ embeddings:
 | `date_based` | Use week-based date organization |
 | `todo_exclude` | Exclude from `nb todo` by default |
 | `path` | External directory path (makes notebook external) |
+| `color` | Display color in listings (e.g., blue, green, cyan, magenta, #ff5500) |
+| `icon` | Display icon/emoji prefix (e.g., 📅, 🔧, 📝) |
 
 ### Environment Variables
 
@@ -447,6 +472,8 @@ Metadata can be added inline after the todo text:
 | Due date | `@due(...)` | `@due(friday)`, `@due(2025-12-01)`, `@due(next week)`, `@due(tomorrow)` |
 | Priority | `@priority(1\|2\|3)` | `@priority(1)` (1=high, 2=medium, 3=low) |
 | Tags | `#tag` | `#work`, `#urgent`, `#project-alpha` |
+
+**Tag Inheritance**: Todos automatically inherit tags from their note's frontmatter. For example, if a note has `tags: [project, urgent]` in frontmatter, all todos in that note will have those tags in addition to any inline `#tags`.
 
 Example todos with metadata:
 

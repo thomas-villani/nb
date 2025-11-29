@@ -88,6 +88,7 @@ def extract_todos(
 
     Returns:
         List of Todo objects with hierarchy built.
+        Todos inherit tags from note frontmatter in addition to inline tags.
 
     """
     if notes_root is None:
@@ -98,6 +99,16 @@ def extract_todos(
 
     content = path.read_text(encoding="utf-8")
     lines = content.splitlines()
+
+    # Extract tags from note frontmatter to inherit to todos
+    note_tags: list[str] = []
+    try:
+        from nb.utils.markdown import extract_tags, parse_note_file
+
+        meta, body = parse_note_file(path)
+        note_tags = extract_tags(meta, body)
+    except Exception:
+        pass  # If frontmatter parsing fails, continue without inherited tags
 
     todos: list[Todo] = []
     stack: list[tuple[int, Todo]] = []  # (indent_level, todo)
@@ -205,7 +216,9 @@ def extract_todos(
         clean_content = clean_todo_content(raw_content)
         due_date = parse_due_date(raw_content)
         priority = parse_priority(raw_content)
-        tags = parse_tags(raw_content)
+        inline_tags = parse_tags(raw_content)
+        # Merge inherited note tags with inline tags (deduplicated)
+        all_tags = list(dict.fromkeys(note_tags + inline_tags))
 
         todo = Todo(
             id=make_todo_id(path, clean_content),
@@ -217,7 +230,7 @@ def extract_todos(
             created_date=created_date,
             due_date=due_date,
             priority=priority,
-            tags=tags,
+            tags=all_tags,
             notebook=project,  # Local var is 'project' for legacy reasons
             parent_id=None,
             children=[],

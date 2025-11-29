@@ -136,6 +136,96 @@ def get_last_modified_note(
     return None
 
 
+def get_latest_notes_per_notebook(
+    limit: int = 3,
+    notes_root: Path | None = None,
+) -> dict[str, list[tuple[Path, str | None, list[str]]]]:
+    """Get the latest N notes from each notebook.
+
+    Args:
+        limit: Maximum number of notes to return per notebook
+        notes_root: Override notes root directory
+
+    Returns:
+        Dict mapping notebook name to list of (path, title, tags) tuples,
+        ordered by modification time descending.
+
+    """
+    from nb.index.db import get_db
+
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    db = get_db()
+
+    # Get all notebooks with notes
+    notebooks = db.fetchall(
+        "SELECT DISTINCT notebook FROM notes WHERE notebook IS NOT NULL AND notebook != ''"
+    )
+
+    result: dict[str, list[tuple[Path, str | None, list[str]]]] = {}
+
+    for nb_row in notebooks:
+        notebook = nb_row["notebook"]
+        rows = db.fetchall(
+            """SELECT path, title FROM notes
+               WHERE notebook = ? AND mtime IS NOT NULL
+               ORDER BY mtime DESC LIMIT ?""",
+            (notebook, limit),
+        )
+        if rows:
+            notes_with_tags = []
+            for row in rows:
+                # Get tags for this note
+                tag_rows = db.fetchall(
+                    "SELECT tag FROM note_tags WHERE note_path = ?",
+                    (row["path"],),
+                )
+                tags = [t["tag"] for t in tag_rows]
+                notes_with_tags.append((notes_root / row["path"], row["title"], tags))
+            result[notebook] = notes_with_tags
+
+    return result
+
+
+def get_all_notes(
+    notes_root: Path | None = None,
+) -> list[tuple[Path, str | None, str, list[str]]]:
+    """Get all notes from all notebooks.
+
+    Args:
+        notes_root: Override notes root directory
+
+    Returns:
+        List of (path, title, notebook, tags) tuples, ordered by notebook then mtime descending.
+
+    """
+    from nb.index.db import get_db
+
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    db = get_db()
+
+    rows = db.fetchall(
+        """SELECT path, title, notebook FROM notes
+           WHERE notebook IS NOT NULL AND notebook != ''
+           ORDER BY notebook, mtime DESC"""
+    )
+
+    result = []
+    for row in rows:
+        # Get tags for this note
+        tag_rows = db.fetchall(
+            "SELECT tag FROM note_tags WHERE note_path = ?",
+            (row["path"],),
+        )
+        tags = [t["tag"] for t in tag_rows]
+        result.append((notes_root / row["path"], row["title"], row["notebook"], tags))
+
+    return result
+
+
 def update_note_mtime(path: Path, notes_root: Path | None = None) -> None:
     """Update a note's mtime in the database from the filesystem.
 
@@ -337,7 +427,8 @@ def open_note(path: Path, line: int | None = None) -> None:
 def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
     """Re-index a note after it has been edited.
 
-    This extracts and updates todos from the note.
+    For internal notes, this extracts and updates todos.
+    For linked notes, this does a full re-index (note metadata + todos).
 
     Args:
         path: Absolute path to the note
@@ -347,47 +438,61 @@ def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
     from nb.core.todos import extract_todos
     from nb.index.todos_repo import delete_todos_for_source, upsert_todo
 
-    # Determine source type
-    notebook = None
+    # Check if this is a linked note (external file)
     try:
         rel_path = path.relative_to(notes_root)
-        # Check if it's the inbox
-        if rel_path.name == "todo.md" and len(rel_path.parts) == 1:
-            source_type = "inbox"
-        else:
-            source_type = "note"
-        external = False
-        alias = None
+        is_external = False
     except ValueError:
-        # External file - check if it's a linked note
-        from nb.core.links import list_linked_notes
+        is_external = True
 
-        source_type = "linked"
-        external = True
-        alias = None
+    if is_external:
+        # For linked notes, do a full re-index to update note metadata + todos
+        from nb.core.links import list_linked_notes
+        from nb.index.scanner import index_linked_note
+
         for ln in list_linked_notes():
             if ln.path.is_file() and ln.path.resolve() == path.resolve():
-                alias = ln.alias
                 notebook = ln.notebook or f"@{ln.alias}"
-                break
+                index_linked_note(
+                    path,
+                    notebook=notebook,
+                    alias=ln.alias,
+                    notes_root=notes_root,
+                    todo_exclude=ln.todo_exclude,
+                )
+                return
             elif ln.path.is_dir():
                 try:
                     path.relative_to(ln.path)
-                    alias = ln.alias
                     notebook = ln.notebook or f"@{ln.alias}"
-                    break
+                    index_linked_note(
+                        path,
+                        notebook=notebook,
+                        alias=ln.alias,
+                        notes_root=notes_root,
+                        todo_exclude=ln.todo_exclude,
+                    )
+                    return
                 except ValueError:
                     continue
+        # Not a linked note, nothing to do
+        return
+
+    # Internal note - determine source type and re-extract todos
+    if rel_path.name == "todo.md" and len(rel_path.parts) == 1:
+        source_type = "inbox"
+    else:
+        source_type = "note"
 
     # Delete existing todos and re-extract
     delete_todos_for_source(path)
     todos = extract_todos(
         path,
         source_type=source_type,
-        external=external,
-        alias=alias,
+        external=False,
+        alias=None,
         notes_root=notes_root,
-        notebook=notebook,
+        notebook=None,
     )
     for todo in todos:
         upsert_todo(todo)
@@ -546,3 +651,48 @@ def list_daily_notes(
     # Sort by date descending
     notes.sort(key=lambda x: x[0], reverse=True)
     return [path for _, path in notes]
+
+
+def list_notebook_notes_by_date(
+    notebook: str,
+    start: date | None = None,
+    end: date | None = None,
+    notes_root: Path | None = None,
+) -> list[Path]:
+    """List notes from a notebook within a date range.
+
+    Uses the note's date (from frontmatter or filename) to filter.
+
+    Args:
+        notebook: Notebook name to filter
+        start: Start date (inclusive)
+        end: End date (inclusive)
+        notes_root: Override notes root directory
+
+    Returns:
+        List of paths to notes, sorted by date descending.
+
+    """
+    from nb.index.db import get_db
+
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    db = get_db()
+
+    # Build query with optional date filters
+    query = "SELECT path, date FROM notes WHERE notebook = ?"
+    params: list[str] = [notebook]
+
+    if start:
+        query += " AND date >= ?"
+        params.append(start.isoformat())
+    if end:
+        query += " AND date <= ?"
+        params.append(end.isoformat())
+
+    query += " ORDER BY date DESC"
+
+    rows = db.fetchall(query, tuple(params))
+
+    return [notes_root / row["path"] for row in rows if row["path"]]

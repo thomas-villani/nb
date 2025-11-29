@@ -46,22 +46,23 @@ todo_exclude: true
 - [x] Associate todo list with section heading.
     Capture whatever the prior heading associated with the todo is (if exists)
   - [x] Need to skip this if the heading is the first heading in the document
-- [ ] The `nb list` command is basically exactly the same as the `nb notebooks` command when no flags are used. Should list the latest 3 notes from each notebook unless a flag is given.
-- [ ] Allow defining a color (and/or icon?) for each notebook that is used in display listings (especially `nb todo`)
-- [ ] Capture url and other file attachments as markdown using all2md
-- [ ] Templates for notes - allow to define templates and create from a template with `nb new ... --template <template_name>`
-- [ ] Do todos inherit the tag from the note? They probably should.
-- [x] Command Line completion!!
+  - [x] Reindexing doesn't appear to update sections, it needs to.
+- [x] The `nb list` command is basically exactly the same as the `nb notebooks` command when no flags are used. Should list the latest 3 notes from each notebook unless a flag is given.
+- [x] Need a way to toggle include/exclude of todo for specific notes from CLI
+- [x] Allow defining a color (and/or icon?) for each notebook that is used in display listings (especially `nb todo`)
+- [x] Do todos inherit the tag from the note? They probably should.
+- [ ] Refactor cli.py - split into submodules
+- [ ] Allow todo "views" to be defined with specific filters and quick from cli like `nb todo -v <VIEWNAME>`
 - [ ] Fuzzy finding for notebooks and notes from cli input
+- [ ] Add a way to signal todo in progress, e.g `[^]` and update `nb todo` with a section for `IN PROGRESS`
+- [ ] Templates for notes - allow to define templates and create from a template with `nb new ... --template <template_name>`
+- [x] Command Line completion!!
 - [ ] Toml for config instead of yaml
 - [ ] Add a way from command line to open with other editor (e.g. nb open <note> --notepad)
-- [ ] Note titles -- how to integrate and use them as a way to open notes too? Or at least display in list?
-- [ ] Add a way to signal todo in progress, e.g `[^]`
+- [ ] Note titles -- how to integrate and use them as a way to open notes too? Or at least display in list? This already seems to be the case.
 - [ ] `nb stats` command for overview statistics
 - [ ] `nb tags` command to list all tags with counts
-- [ ] Refactor cli.py - split into submodules
-- [ ] Need a way to toggle include/exclude of todo for specific notes from CLI
-- [ ] Allow todo "views" to be defined with specific filters and quick from cli like `nb todo v <VIEWNAME>`
+- [x] predefine a list of common emojis to set as icon from config for project
 
 ### Phase 5: Advanced TUI
 - [ ] Full Wijjit-based todo list view with richer interactions
@@ -71,6 +72,7 @@ todo_exclude: true
 - [ ] Interactive filtering UI
 - [ ] Navigation and links
 - [ ] Integrate git and some kind of backup
+- [ ] Capture url and other file attachments as markdown using all2md
 
 ## Technical Debt
 - [x] Add comprehensive test suite

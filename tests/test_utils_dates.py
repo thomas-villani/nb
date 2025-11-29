@@ -52,15 +52,16 @@ class TestParseFuzzyDate:
         assert result == fixed_today  # Today is Friday
 
         result = parse_fuzzy_date("monday")
-        # Next Monday from Friday is 3 days away
-        assert result == fixed_today + timedelta(days=3)
+        # Last Monday from Friday is 4 days ago (most recent occurrence)
+        assert result == fixed_today - timedelta(days=4)
 
     def test_weekday_names_short(self, fixed_today: date):
         result = parse_fuzzy_date("fri")
         assert result == fixed_today
 
         result = parse_fuzzy_date("mon")
-        assert result == fixed_today + timedelta(days=3)
+        # Last Monday from Friday is 4 days ago (most recent occurrence)
+        assert result == fixed_today - timedelta(days=4)
 
     def test_next_weekday(self, fixed_today: date):
         # "next friday" on a Friday returns THIS Friday (same day)

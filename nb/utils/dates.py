@@ -80,15 +80,20 @@ def parse_fuzzy_date(text: str) -> date | None:
             weekday = WEEKDAYS[weekday_name]
             return date.today() + relativedelta(weekday=weekday(-1))
 
-    # Plain weekday name - means next occurrence
+    # Plain weekday name - means most recent occurrence (past or today)
     if text in WEEKDAYS:
         weekday = WEEKDAYS[text]
-        target = date.today() + relativedelta(weekday=weekday(+1))
-        # If today is that weekday, return today
-        if target == date.today():
-            return target
-        # Otherwise return next occurrence
-        return target
+        # Check if today is that weekday
+        today = date.today()
+        today_weekday = today.weekday()  # Monday=0, Sunday=6
+        target_weekday = weekday.weekday  # MO=0, TU=1, ..., SU=6
+
+        if today_weekday == target_weekday:
+            # Today is that weekday
+            return today
+        else:
+            # Return the most recent past occurrence
+            return today + relativedelta(weekday=weekday(-1))
 
     # Try dateutil parser for everything else
     try:

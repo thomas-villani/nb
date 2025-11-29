@@ -846,6 +846,13 @@ def config_get(key: str) -> None:
       embeddings.model      Embeddings model
       embeddings.base_url   Custom API endpoint
       embeddings.api_key    API key
+
+    \b
+    Notebook-specific keys (notebook.<name>.<setting>):
+      notebook.<name>.color        Display color
+      notebook.<name>.icon         Display icon/emoji
+      notebook.<name>.date_based   Date-based organization
+      notebook.<name>.todo_exclude Exclude from nb todo
     """
     from nb.config import get_config_value
 
@@ -873,14 +880,31 @@ def config_set(key: str, value: str) -> None:
       embeddings.model      Embeddings model
       embeddings.base_url   Custom API endpoint
       embeddings.api_key    API key
+
+    \b
+    Notebook-specific keys (notebook.<name>.<setting>):
+      notebook.<name>.color        Display color
+      notebook.<name>.icon         Display icon/emoji (or name like 'wrench')
+      notebook.<name>.date_based   Date-based organization (true/false)
+      notebook.<name>.todo_exclude Exclude from nb todo (true/false)
+
+    \b
+    Examples:
+      nb config set notebook.work.color blue
+      nb config set notebook.projects.icon wrench
+      nb config set notebook.daily.icon calendar
     """
     from nb.config import set_config_value
 
-    if set_config_value(key, value):
-        console.print(f"[green]Set[/green] {key} = {value}")
-    else:
-        console.print(f"[red]Unknown setting:[/red] {key}")
-        console.print("[dim]Use 'nb config list' to see available settings.[/dim]")
+    try:
+        if set_config_value(key, value):
+            console.print(f"[green]Set[/green] {key} = {value}")
+        else:
+            console.print(f"[red]Unknown setting:[/red] {key}")
+            console.print("[dim]Use 'nb config list' to see available settings.[/dim]")
+            raise SystemExit(1)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
         raise SystemExit(1)
 
 
@@ -900,6 +924,132 @@ def config_list() -> None:
         console.print()
 
 
+@config_cmd.command("exclude")
+@click.argument("target")
+def config_exclude(target: str) -> None:
+    """Exclude a notebook or note from 'nb todo'.
+
+    TARGET can be:
+    - A notebook name (e.g., 'personal') - updates config.yaml
+    - A note path (e.g., 'projects/myproject.md') - updates frontmatter
+
+    \b
+    Examples:
+      nb config exclude personal              # Exclude 'personal' notebook
+      nb config exclude projects/myproject    # Exclude specific note
+    """
+    config = get_config()
+
+    # Check if target is a notebook name
+    nb_config = config.get_notebook(target)
+    if nb_config:
+        # Update notebook config
+        if nb_config.todo_exclude:
+            console.print(f"[dim]Notebook '{target}' is already excluded.[/dim]")
+            return
+
+        nb_config.todo_exclude = True
+        from nb.config import save_config
+
+        save_config(config)
+        console.print(f"[green]Excluded notebook:[/green] {target}")
+        return
+
+    # Treat as a note path - update frontmatter
+    note_path = Path(target)
+    if not note_path.suffix:
+        note_path = note_path.with_suffix(".md")
+
+    # Try to resolve the path
+    if not note_path.is_absolute():
+        full_path = config.notes_root / note_path
+    else:
+        full_path = note_path
+
+    if not full_path.exists():
+        console.print(f"[red]Not found:[/red] {target}")
+        console.print("[dim]Specify a notebook name or path to a note.[/dim]")
+        raise SystemExit(1)
+
+    # Update frontmatter
+    _set_note_todo_exclude(full_path, True)
+    console.print(f"[green]Excluded note:[/green] {note_path}")
+
+
+@config_cmd.command("include")
+@click.argument("target")
+def config_include(target: str) -> None:
+    """Include a notebook or note in 'nb todo'.
+
+    TARGET can be:
+    - A notebook name (e.g., 'personal') - updates config.yaml
+    - A note path (e.g., 'projects/myproject.md') - updates frontmatter
+
+    \b
+    Examples:
+      nb config include personal              # Include 'personal' notebook
+      nb config include projects/myproject    # Include specific note
+    """
+    config = get_config()
+
+    # Check if target is a notebook name
+    nb_config = config.get_notebook(target)
+    if nb_config:
+        # Update notebook config
+        if not nb_config.todo_exclude:
+            console.print(f"[dim]Notebook '{target}' is already included.[/dim]")
+            return
+
+        nb_config.todo_exclude = False
+        from nb.config import save_config
+
+        save_config(config)
+        console.print(f"[green]Included notebook:[/green] {target}")
+        return
+
+    # Treat as a note path - update frontmatter
+    note_path = Path(target)
+    if not note_path.suffix:
+        note_path = note_path.with_suffix(".md")
+
+    # Try to resolve the path
+    if not note_path.is_absolute():
+        full_path = config.notes_root / note_path
+    else:
+        full_path = note_path
+
+    if not full_path.exists():
+        console.print(f"[red]Not found:[/red] {target}")
+        console.print("[dim]Specify a notebook name or path to a note.[/dim]")
+        raise SystemExit(1)
+
+    # Update frontmatter
+    _set_note_todo_exclude(full_path, False)
+    console.print(f"[green]Included note:[/green] {note_path}")
+
+
+def _set_note_todo_exclude(path: Path, exclude: bool) -> None:
+    """Set or remove todo_exclude in a note's frontmatter.
+
+    Args:
+        path: Path to the note file
+        exclude: True to exclude, False to include
+    """
+    import frontmatter
+
+    with open(path, encoding="utf-8") as f:
+        post = frontmatter.load(f)
+
+    if exclude:
+        post.metadata["todo_exclude"] = True
+    else:
+        # Remove the key if it exists (False is the default)
+        post.metadata.pop("todo_exclude", None)
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(frontmatter.dumps(post))
+
+
 @cli.command("add")
 @click.argument("text")
 def add_to_today(text: str) -> None:
@@ -916,14 +1066,29 @@ def add_to_today(text: str) -> None:
 
 @cli.command("list")
 @click.option("--notebook", "-n", help="Filter by notebook")
-@click.option("--week", is_flag=True, help="Show this week's daily notes")
-@click.option("--month", is_flag=True, help="Show this month's daily notes")
-def list_notes_cmd(notebook: str | None, week: bool, month: bool) -> None:
-    """List notes."""
+@click.option(
+    "--all", "-a", "all_notes", is_flag=True, help="List all notes in all notebooks"
+)
+@click.option("--week", is_flag=True, help="Show this week's notes")
+@click.option("--month", is_flag=True, help="Show this month's notes")
+def list_notes_cmd(
+    notebook: str | None, all_notes: bool, week: bool, month: bool
+) -> None:
+    """List notes.
+
+    By default, shows the 3 most recent notes from each notebook.
+    Use --all to list all notes, or --notebook to filter by a specific notebook.
+    Use --week or --month to filter by date (defaults to daily notebook if no --notebook given).
+    """
     from nb.core.notebooks import get_notebook_notes_with_linked
+    from nb.core.notes import (
+        get_all_notes,
+        get_latest_notes_per_notebook,
+        list_notebook_notes_by_date,
+    )
 
     if week or month:
-        # List daily notes
+        # Get date range
         from nb.utils.dates import get_month_range, get_week_range
 
         if week:
@@ -931,11 +1096,20 @@ def list_notes_cmd(notebook: str | None, week: bool, month: bool) -> None:
         else:
             start, end = get_month_range()
 
-        notes = list_daily_notes(start=start, end=end)
-
-        if not notes:
-            console.print("[dim]No daily notes found.[/dim]")
-            return
+        if notebook:
+            # Filter specific notebook by date
+            notes = list_notebook_notes_by_date(notebook, start=start, end=end)
+            if not notes:
+                console.print(
+                    f"[dim]No notes found in {notebook} for this {'week' if week else 'month'}.[/dim]"
+                )
+                return
+        else:
+            # Default to daily notes
+            notes = list_daily_notes(start=start, end=end)
+            if not notes:
+                console.print("[dim]No daily notes found.[/dim]")
+                return
 
         for note_path in notes:
             console.print(str(note_path))
@@ -954,27 +1128,52 @@ def list_notes_cmd(notebook: str | None, week: bool, month: bool) -> None:
                     console.print(f"[cyan]{note_path}[/cyan] [dim](linked)[/dim]")
             else:
                 console.print(str(note_path))
+    elif all_notes:
+        # List all notes in all notebooks (one line each)
+        notes = get_all_notes()
+
+        if not notes:
+            console.print("[dim]No notes found.[/dim]")
+            return
+
+        current_notebook = None
+        for note_path, title, nb_name, tags in notes:
+            if nb_name != current_notebook:
+                if current_notebook is not None:
+                    console.print()  # Blank line between notebooks
+                color, icon = _get_notebook_display_info(nb_name)
+                icon_prefix = f"{icon} " if icon else ""
+                console.print(f"[bold {color}]{icon_prefix}{nb_name}[/bold {color}]")
+                current_notebook = nb_name
+            display = title if title else note_path.stem
+            tags_str = " ".join(f"[yellow]#{t}[/yellow]" for t in tags) if tags else ""
+            if tags_str:
+                console.print(f"  {display} {tags_str} [dim]({note_path})[/dim]")
+            else:
+                console.print(f"  {display} [dim]({note_path})[/dim]")
     else:
-        # List all notebooks with counts (including linked notebooks)
-        from nb.core.links import list_linked_notes
+        # Default: List latest 3 notes from each notebook
+        notes_by_notebook = get_latest_notes_per_notebook(limit=3)
 
-        nbs = list_notebooks()
-        for nb in nbs:
-            notes = get_notebook_notes(nb)
-            console.print(f"{nb}: {len(notes)} notes")
+        if not notes_by_notebook:
+            console.print("[dim]No notes found.[/dim]")
+            return
 
-        # Also list linked note notebooks
-        linked_notes = list_linked_notes()
-        linked_notebooks: dict[str, int] = {}
-        for ln in linked_notes:
-            notebook_name = ln.notebook or f"@{ln.alias}"
-            from nb.core.links import scan_linked_note_files
-
-            files = scan_linked_note_files(ln)
-            linked_notebooks[notebook_name] = len(files)
-
-        for nb_name, count in sorted(linked_notebooks.items()):
-            console.print(f"[cyan]{nb_name}[/cyan]: {count} notes [dim](linked)[/dim]")
+        for nb_name in sorted(notes_by_notebook.keys()):
+            notes = notes_by_notebook[nb_name]
+            color, icon = _get_notebook_display_info(nb_name)
+            icon_prefix = f"{icon} " if icon else ""
+            console.print(f"[bold {color}]{icon_prefix}{nb_name}[/bold {color}]")
+            for note_path, title, tags in notes:
+                display = title if title else note_path.stem
+                tags_str = (
+                    " ".join(f"[yellow]#{t}[/yellow]" for t in tags) if tags else ""
+                )
+                if tags_str:
+                    console.print(f"  {display} {tags_str} [dim]({note_path})[/dim]")
+                else:
+                    console.print(f"  {display} [dim]({note_path})[/dim]")
+            console.print()  # Blank line between notebooks
 
 
 # =============================================================================
@@ -1401,10 +1600,30 @@ def _get_todo_source_parts(t) -> dict[str, str]:
     return result
 
 
+def _get_notebook_display_info(notebook_name: str) -> tuple[str, str | None]:
+    """Get display color and icon for a notebook.
+
+    Args:
+        notebook_name: Name of the notebook
+
+    Returns:
+        Tuple of (color, icon). Color defaults to "magenta", icon may be None.
+    """
+    config = get_config()
+    nb_config = config.get_notebook(notebook_name)
+    if nb_config:
+        color = nb_config.color or "magenta"
+        icon = nb_config.icon
+    else:
+        color = "magenta"
+        icon = None
+    return color, icon
+
+
 def _format_colored_todo_source(t, width: int = 0) -> str:
     """Format the source of a todo with colors for display.
 
-    Colors: notebook=magenta, note=blue, section=cyan
+    Uses configured notebook colors and icons.
 
     Args:
         t: Todo object
@@ -1419,7 +1638,9 @@ def _format_colored_todo_source(t, width: int = 0) -> str:
     colored_parts = []
 
     if parts["notebook"]:
-        colored_parts.append(f"[magenta]{parts['notebook']}[/magenta]")
+        color, icon = _get_notebook_display_info(parts["notebook"])
+        icon_prefix = f"{icon} " if icon else ""
+        colored_parts.append(f"[{color}]{icon_prefix}{parts['notebook']}[/{color}]")
 
     if parts["note"]:
         if colored_parts:
@@ -2005,6 +2226,13 @@ def index_cmd(force: bool, rebuild: bool, embeddings: bool) -> None:
     console.print("[dim]Indexing notes...[/dim]")
     count = index_all_notes(force=force)
     console.print(f"[green]Indexed {count} files.[/green]")
+
+    # Also reindex linked notes
+    from nb.index.scanner import scan_linked_notes
+
+    linked_count = scan_linked_notes()
+    if linked_count:
+        console.print(f"[green]Indexed {linked_count} linked notes.[/green]")
 
     if embeddings:
         console.print("[dim]Rebuilding search index...[/dim]")
