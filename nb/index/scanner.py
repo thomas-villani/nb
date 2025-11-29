@@ -637,6 +637,7 @@ def index_linked_note(
     alias: str,
     notes_root: Path | None = None,
     index_vectors: bool = True,
+    todo_exclude: bool = False,
 ) -> None:
     """Index a single linked (external) note file.
 
@@ -646,6 +647,7 @@ def index_linked_note(
         alias: Alias of the linked note source.
         notes_root: Override notes root directory.
         index_vectors: Whether to index for vector search.
+        todo_exclude: Whether to exclude todos from this linked note.
 
     """
     if notes_root is None:
@@ -674,12 +676,12 @@ def index_linked_note(
     # Use absolute path as the unique identifier for external notes
     note_path = str(path)
 
-    # Upsert note with external flag
+    # Upsert note with external flag and todo_exclude
     db.execute(
         """
         INSERT OR REPLACE INTO notes
-        (path, title, date, notebook, content_hash, content, mtime, external, source_alias, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (path, title, date, notebook, content_hash, content, mtime, external, source_alias, todo_exclude, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             note_path,
@@ -691,6 +693,7 @@ def index_linked_note(
             mtime,
             1,  # external = True
             alias,
+            1 if todo_exclude else 0,
             datetime.now().isoformat(),
         ),
     )
@@ -727,7 +730,9 @@ def index_linked_note(
 
     # Also index todos from this file
     delete_todos_for_source(path)
-    todos = extract_todos(path, source_type="linked", notes_root=notes_root)
+    todos = extract_todos(
+        path, source_type="linked", external=True, alias=alias, notes_root=notes_root
+    )
     for todo in todos:
         upsert_todo(todo)
 
@@ -755,6 +760,7 @@ def scan_linked_notes() -> int:
                 file_path,
                 notebook=notebook,
                 alias=linked.alias,
+                todo_exclude=linked.todo_exclude,
             )
             total_notes += 1
 
@@ -785,13 +791,14 @@ def index_single_linked_note(alias: str) -> int:
             file_path,
             notebook=notebook,
             alias=linked.alias,
+            todo_exclude=linked.todo_exclude,
         )
 
     return len(files)
 
 
 def remove_linked_note_from_index(alias: str) -> int:
-    """Remove all notes from a linked source from the index.
+    """Remove all notes and todos from a linked source from the index.
 
     Args:
         alias: Alias of the linked note source.
@@ -809,11 +816,18 @@ def remove_linked_note_from_index(alias: str) -> int:
     )
     paths = [row["path"] for row in rows]
 
-    # Remove from database
+    # Remove notes from database
     cursor = db.execute(
         "DELETE FROM notes WHERE source_alias = ?",
         (alias,),
     )
+
+    # Also remove todos from this linked source
+    db.execute(
+        "DELETE FROM todos WHERE source_alias = ?",
+        (alias,),
+    )
+
     db.commit()
 
     # Remove from vector index

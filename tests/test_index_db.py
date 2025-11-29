@@ -68,8 +68,7 @@ class TestDatabase:
         try:
             db.execute("CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)")
             db.executemany(
-                "INSERT INTO test (name) VALUES (?)",
-                [("one",), ("two",), ("three",)]
+                "INSERT INTO test (name) VALUES (?)", [("one",), ("two",), ("three",)]
             )
             db.commit()
 
@@ -177,9 +176,7 @@ class TestMigrations:
             assert version == SCHEMA_VERSION
 
             # Core tables should exist
-            tables = db.fetchall(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            tables = db.fetchall("SELECT name FROM sqlite_master WHERE type='table'")
             table_names = [t["name"] for t in tables]
 
             assert "notes" in table_names
@@ -218,7 +215,7 @@ class TestInitDb:
             db.execute(
                 "INSERT INTO notes (path, title, notebook, content_hash) "
                 "VALUES (?, ?, ?, ?)",
-                ("test.md", "Test Note", "projects", "abc123")
+                ("test.md", "Test Note", "projects", "abc123"),
             )
             db.commit()
 
@@ -239,7 +236,7 @@ class TestInitDb:
             db.execute(
                 "INSERT INTO todos (id, content, completed, source_type, source_path, line_number, created_date) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                ("id1", "Test todo", 0, "note", "test.md", 1, "2025-11-26")
+                ("id1", "Test todo", 0, "note", "test.md", 1, "2025-11-26"),
             )
             db.commit()
 
@@ -264,7 +261,7 @@ class TestRebuildDb:
             db.execute(
                 "INSERT INTO notes (path, title, notebook, content_hash) "
                 "VALUES (?, ?, ?, ?)",
-                ("test.md", "Test Note", "projects", "abc123")
+                ("test.md", "Test Note", "projects", "abc123"),
             )
             db.commit()
 
@@ -276,9 +273,7 @@ class TestRebuildDb:
             assert result is None
 
             # Tables should still exist
-            tables = db.fetchall(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            tables = db.fetchall("SELECT name FROM sqlite_master WHERE type='table'")
             table_names = [t["name"] for t in tables]
             assert "notes" in table_names
         finally:

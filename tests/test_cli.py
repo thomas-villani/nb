@@ -8,7 +8,7 @@ import pytest
 from click.testing import CliRunner
 
 from nb import config as config_module
-from nb.cli import main
+from nb.cli import cli
 from nb.config import Config, EmbeddingsConfig, NotebookConfig
 from nb.index import scanner as scanner_module
 from nb.index.db import reset_db
@@ -69,16 +69,19 @@ class TestMainCommand:
     """Tests for main command group."""
 
     def test_version(self, cli_runner: CliRunner):
-        result = cli_runner.invoke(main, ["--version"])
+        result = cli_runner.invoke(cli, ["--version"])
 
         assert result.exit_code == 0
         assert "nb" in result.output
 
     def test_help(self, cli_runner: CliRunner):
-        result = cli_runner.invoke(main, ["--help"])
+        result = cli_runner.invoke(cli, ["--help"])
 
         assert result.exit_code == 0
-        assert "plaintext-first" in result.output.lower() or "note" in result.output.lower()
+        assert (
+            "plaintext-first" in result.output.lower()
+            or "note" in result.output.lower()
+        )
 
 
 class TestTodayCommand:
@@ -86,13 +89,13 @@ class TestTodayCommand:
 
     def test_today_creates_note(self, cli_runner: CliRunner, mock_cli_config: Config):
         # Use -s (show) on the main group to avoid actually opening editor
-        result = cli_runner.invoke(main, ["-s", "today"])
+        result = cli_runner.invoke(cli, ["-s", "today"])
 
         # Should create today's note
         assert result.exit_code == 0
 
     def test_today_with_notebook(self, cli_runner: CliRunner, mock_cli_config: Config):
-        result = cli_runner.invoke(main, ["-s", "today", "-n", "work"])
+        result = cli_runner.invoke(cli, ["-s", "today", "-n", "work"])
 
         assert result.exit_code == 0
 
@@ -101,7 +104,7 @@ class TestYesterdayCommand:
     """Tests for yesterday command."""
 
     def test_yesterday(self, cli_runner: CliRunner, mock_cli_config: Config):
-        result = cli_runner.invoke(main, ["-s", "yesterday"])
+        result = cli_runner.invoke(cli, ["-s", "yesterday"])
 
         assert result.exit_code == 0
 
@@ -116,17 +119,19 @@ class TestListCommand:
         (notes_root / "projects" / "note1.md").write_text("# Note 1\n")
         (notes_root / "projects" / "note2.md").write_text("# Note 2\n")
 
-        result = cli_runner.invoke(main, ["list"])
+        result = cli_runner.invoke(cli, ["list"])
 
         assert result.exit_code == 0
 
-    def test_list_with_notebook_filter(self, cli_runner: CliRunner, mock_cli_config: Config):
+    def test_list_with_notebook_filter(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
         notes_root = mock_cli_config.notes_root
 
         (notes_root / "projects" / "project.md").write_text("# Project\n")
         (notes_root / "work" / "work.md").write_text("# Work\n")
 
-        result = cli_runner.invoke(main, ["list", "-n", "projects"])
+        result = cli_runner.invoke(cli, ["list", "-n", "projects"])
 
         assert result.exit_code == 0
 
@@ -137,7 +142,7 @@ class TestNewCommand:
     def test_new_note(self, cli_runner: CliRunner, mock_cli_config: Config):
         notes_root = mock_cli_config.notes_root
 
-        result = cli_runner.invoke(main, ["new", "test-note", "-n", "projects"])
+        result = cli_runner.invoke(cli, ["new", "test-note", "-n", "projects"])
 
         # Should create the note
         expected_path = notes_root / "projects" / "test-note.md"
@@ -147,8 +152,7 @@ class TestNewCommand:
         notes_root = mock_cli_config.notes_root
 
         result = cli_runner.invoke(
-            main,
-            ["new", "my-doc", "-n", "projects", "-t", "My Document"]
+            cli, ["new", "my-doc", "-n", "projects", "-t", "My Document"]
         )
 
         assert result.exit_code == 0
@@ -163,7 +167,7 @@ class TestIndexCommand:
         # Create a note to index
         (notes_root / "projects" / "note.md").write_text("# Test Note\n")
 
-        result = cli_runner.invoke(main, ["index"])
+        result = cli_runner.invoke(cli, ["index"])
 
         assert result.exit_code == 0
 
@@ -172,7 +176,7 @@ class TestTodoCommands:
     """Tests for todo subcommands."""
 
     def test_todo_help(self, cli_runner: CliRunner):
-        result = cli_runner.invoke(main, ["todo", "--help"])
+        result = cli_runner.invoke(cli, ["todo", "--help"])
 
         assert result.exit_code == 0
         assert "todo" in result.output.lower()
@@ -191,27 +195,21 @@ class TestTodoCommands:
         (notes_root / "projects" / "tasks.md").write_text(content)
 
         # Index first
-        cli_runner.invoke(main, ["index"])
+        cli_runner.invoke(cli, ["index"])
 
         # 'todo' without subcommand should list todos (or show TUI)
-        result = cli_runner.invoke(main, ["todo"])
+        result = cli_runner.invoke(cli, ["todo"])
 
         # May exit 0 or prompt for TUI
         assert result.exit_code == 0 or "todo" in result.output.lower()
 
     def test_todo_add(self, cli_runner: CliRunner, mock_cli_config: Config):
-        result = cli_runner.invoke(
-            main,
-            ["todo", "add", "New todo task"]
-        )
+        result = cli_runner.invoke(cli, ["todo", "add", "New todo task"])
 
         assert result.exit_code == 0
 
     def test_todo_add_to_daily(self, cli_runner: CliRunner, mock_cli_config: Config):
-        result = cli_runner.invoke(
-            main,
-            ["todo", "add", "Daily task", "--today"]
-        )
+        result = cli_runner.invoke(cli, ["todo", "add", "Daily task", "--today"])
 
         assert result.exit_code == 0
 
@@ -220,13 +218,13 @@ class TestNotebookCommands:
     """Tests for notebook subcommands."""
 
     def test_notebooks_help(self, cli_runner: CliRunner, mock_cli_config: Config):
-        result = cli_runner.invoke(main, ["notebooks", "--help"])
+        result = cli_runner.invoke(cli, ["notebooks", "--help"])
 
         assert result.exit_code == 0
 
     def test_notebooks_alias(self, cli_runner: CliRunner, mock_cli_config: Config):
         # 'nbs' is alias for 'notebooks'
-        result = cli_runner.invoke(main, ["nbs", "--help"])
+        result = cli_runner.invoke(cli, ["nbs", "--help"])
 
         assert result.exit_code == 0
 
@@ -238,12 +236,14 @@ class TestSearchCommand:
         notes_root = mock_cli_config.notes_root
 
         # Create notes with searchable content
-        (notes_root / "projects" / "python.md").write_text("# Python Guide\n\nLearn Python basics.\n")
+        (notes_root / "projects" / "python.md").write_text(
+            "# Python Guide\n\nLearn Python basics.\n"
+        )
 
         # Index first
-        cli_runner.invoke(main, ["index"])
+        cli_runner.invoke(cli, ["index"])
 
-        result = cli_runner.invoke(main, ["search", "python"])
+        result = cli_runner.invoke(cli, ["search", "python"])
 
         # Search should complete (may or may not find results depending on index)
         assert result.exit_code == 0
@@ -253,10 +253,7 @@ class TestAddCommand:
     """Tests for add command (append to daily note)."""
 
     def test_add_to_today(self, cli_runner: CliRunner, mock_cli_config: Config):
-        result = cli_runner.invoke(
-            main,
-            ["add", "Some quick note content"]
-        )
+        result = cli_runner.invoke(cli, ["add", "Some quick note content"])
 
         assert result.exit_code == 0
 
@@ -266,24 +263,24 @@ class TestAliases:
 
     def test_t_alias(self, cli_runner: CliRunner, mock_cli_config: Config):
         # 't' is alias for 'today' - -s goes on main group
-        result = cli_runner.invoke(main, ["-s", "t"])
+        result = cli_runner.invoke(cli, ["-s", "t"])
 
         assert result.exit_code == 0
 
     def test_y_alias(self, cli_runner: CliRunner, mock_cli_config: Config):
         # 'y' is alias for 'yesterday' - -s goes on main group
-        result = cli_runner.invoke(main, ["-s", "y"])
+        result = cli_runner.invoke(cli, ["-s", "y"])
 
         assert result.exit_code == 0
 
     def test_td_alias(self, cli_runner: CliRunner, mock_cli_config: Config):
         # 'td' is alias for 'todo'
-        result = cli_runner.invoke(main, ["td", "--help"])
+        result = cli_runner.invoke(cli, ["td", "--help"])
 
         assert result.exit_code == 0
 
     def test_ta_alias(self, cli_runner: CliRunner, mock_cli_config: Config):
         # 'ta' is alias for 'todo add'
-        result = cli_runner.invoke(main, ["ta", "Test task"])
+        result = cli_runner.invoke(cli, ["ta", "Test task"])
 
         assert result.exit_code == 0

@@ -42,6 +42,10 @@ class LinkedNoteConfig:
     alias: str
     notebook: str | None = None  # Virtual notebook name (defaults to alias)
     recursive: bool = True  # For directories, scan recursively
+    todo_exclude: bool = (
+        False  # Exclude todos from nb todo (unless explicitly requested)
+    )
+    sync: bool = True  # Sync todo completions back to source file
 
 
 @dataclass
@@ -271,6 +275,8 @@ def _parse_linked_notes(data: list[dict[str, Any]]) -> list[LinkedNoteConfig]:
                 alias=item["alias"],
                 notebook=item.get("notebook"),
                 recursive=item.get("recursive", True),
+                todo_exclude=item.get("todo_exclude", False),
+                sync=item.get("sync", True),
             )
         )
     return result
@@ -375,6 +381,8 @@ def save_config(config: Config) -> None:
                 "alias": ln.alias,
                 "notebook": ln.notebook,
                 "recursive": ln.recursive,
+                "todo_exclude": ln.todo_exclude,
+                "sync": ln.sync,
             }
             for ln in config.linked_notes
         ],

@@ -188,10 +188,7 @@ tags:
 
         db = get_db()
         rel_path = str(note_path.relative_to(notes_root))
-        tags = db.fetchall(
-            "SELECT tag FROM note_tags WHERE note_path = ?",
-            (rel_path,)
-        )
+        tags = db.fetchall("SELECT tag FROM note_tags WHERE note_path = ?", (rel_path,))
         tag_list = [t["tag"] for t in tags]
 
         assert "tag1" in tag_list
@@ -213,8 +210,7 @@ See [[other-note]] and [[path/to/note|Display]].
         db = get_db()
         rel_path = str(note_path.relative_to(notes_root))
         links = db.fetchall(
-            "SELECT target_path FROM note_links WHERE source_path = ?",
-            (rel_path,)
+            "SELECT target_path FROM note_links WHERE source_path = ?", (rel_path,)
         )
         link_list = [lnk["target_path"] for lnk in links]
 

@@ -159,9 +159,7 @@ class TestMakeAttachmentId:
 
     def test_generates_id(self):
         result = make_attachment_id(
-            path="/path/to/file.pdf",
-            parent_type="note",
-            parent_id="abc12345"
+            path="/path/to/file.pdf", parent_type="note", parent_id="abc12345"
         )
 
         assert len(result) == 8
@@ -192,9 +190,7 @@ class TestMakeAttachmentId:
 
     def test_url_attachment(self):
         result = make_attachment_id(
-            path="https://example.com/doc.pdf",
-            parent_type="todo",
-            parent_id="todo123"
+            path="https://example.com/doc.pdf", parent_type="todo", parent_id="todo123"
         )
 
         assert len(result) == 8

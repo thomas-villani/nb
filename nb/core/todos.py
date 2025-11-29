@@ -218,15 +218,26 @@ def can_toggle_linked_file(path: Path) -> bool:
         True if the file can be modified, False if it's a linked file with sync disabled.
 
     """
-    from nb.core.links import get_linked_file_by_path
+    from nb.core.links import get_linked_note_by_path, list_linked_notes
 
-    linked = get_linked_file_by_path(path)
-    if linked is None:
-        # Not a linked file, so it's fine to toggle
-        return True
+    # Check if this exact path is a linked note
+    linked = get_linked_note_by_path(path)
+    if linked is not None:
+        return linked.sync
 
-    # It's a linked file, check sync setting
-    return linked.sync
+    # Check if this file is inside a linked directory
+    path = path.resolve()
+    for ln in list_linked_notes():
+        if ln.path.is_dir():
+            try:
+                path.relative_to(ln.path)
+                # File is inside this linked directory
+                return ln.sync
+            except ValueError:
+                continue
+
+    # Not a linked file, so it's fine to toggle
+    return True
 
 
 def toggle_todo_in_file(

@@ -44,9 +44,7 @@ class TestNotebookConfig:
 
     def test_external_notebook(self):
         nb = NotebookConfig(
-            name="obsidian",
-            date_based=False,
-            path=Path("/external/vault")
+            name="obsidian", date_based=False, path=Path("/external/vault")
         )
 
         assert nb.is_external is True
@@ -62,10 +60,7 @@ class TestLinkedTodoConfig:
     """Tests for LinkedTodoConfig dataclass."""
 
     def test_basic(self):
-        linked = LinkedTodoConfig(
-            path=Path("/project/TODO.md"),
-            alias="project"
-        )
+        linked = LinkedTodoConfig(path=Path("/project/TODO.md"), alias="project")
 
         assert linked.path == Path("/project/TODO.md")
         assert linked.alias == "project"
@@ -73,9 +68,7 @@ class TestLinkedTodoConfig:
 
     def test_no_sync(self):
         linked = LinkedTodoConfig(
-            path=Path("/project/TODO.md"),
-            alias="project",
-            sync=False
+            path=Path("/project/TODO.md"), alias="project", sync=False
         )
 
         assert linked.sync is False
@@ -85,10 +78,7 @@ class TestLinkedNoteConfig:
     """Tests for LinkedNoteConfig dataclass."""
 
     def test_basic(self):
-        linked = LinkedNoteConfig(
-            path=Path("/docs/wiki"),
-            alias="wiki"
-        )
+        linked = LinkedNoteConfig(path=Path("/docs/wiki"), alias="wiki")
 
         assert linked.path == Path("/docs/wiki")
         assert linked.alias == "wiki"
@@ -97,9 +87,7 @@ class TestLinkedNoteConfig:
 
     def test_with_notebook(self):
         linked = LinkedNoteConfig(
-            path=Path("/docs/wiki"),
-            alias="wiki",
-            notebook="external-wiki"
+            path=Path("/docs/wiki"), alias="wiki", notebook="external-wiki"
         )
 
         assert linked.notebook == "external-wiki"
@@ -118,9 +106,7 @@ class TestEmbeddingsConfig:
 
     def test_custom(self):
         cfg = EmbeddingsConfig(
-            provider="openai",
-            model="text-embedding-3-small",
-            api_key="sk-xxx"
+            provider="openai", model="text-embedding-3-small", api_key="sk-xxx"
         )
 
         assert cfg.provider == "openai"
@@ -134,7 +120,7 @@ class TestConfig:
         cfg = Config(
             notes_root=temp_notes_root,
             editor="vim",
-            notebooks=[NotebookConfig(name="daily", date_based=True)]
+            notebooks=[NotebookConfig(name="daily", date_based=True)],
         )
 
         assert cfg.notes_root == temp_notes_root
@@ -161,7 +147,7 @@ class TestConfig:
             notebooks=[
                 NotebookConfig(name="daily"),
                 NotebookConfig(name="personal", todo_exclude=True),
-            ]
+            ],
         )
 
         excluded = cfg.excluded_notebooks()
@@ -176,9 +162,7 @@ class TestConfig:
         cfg = Config(
             notes_root=temp_notes_root,
             editor="vim",
-            notebooks=[
-                NotebookConfig(name="external", path=Path("/ext/vault"))
-            ]
+            notebooks=[NotebookConfig(name="external", path=Path("/ext/vault"))],
         )
 
         path = cfg.get_notebook_path("external")
@@ -195,7 +179,7 @@ class TestConfig:
             notebooks=[
                 NotebookConfig(name="daily"),
                 NotebookConfig(name="external", path=Path("/ext")),
-            ]
+            ],
         )
 
         external = cfg.external_notebooks()
@@ -215,7 +199,10 @@ class TestConfig:
         assert temp_config.vectors_path == temp_config.notes_root / ".nb" / "vectors"
 
     def test_attachments_path(self, temp_config: Config):
-        assert temp_config.attachments_path == temp_config.notes_root / ".nb" / "attachments"
+        assert (
+            temp_config.attachments_path
+            == temp_config.notes_root / ".nb" / "attachments"
+        )
 
 
 class TestExpandPath:
@@ -256,9 +243,7 @@ class TestParseNotebooks:
         assert result[1].todo_exclude is True
 
     def test_external_path(self):
-        data = [
-            {"name": "external", "path": "~/external"}
-        ]
+        data = [{"name": "external", "path": "~/external"}]
         result = _parse_notebooks(data)
 
         assert result[0].is_external is True
@@ -268,9 +253,7 @@ class TestParseLinkedTodos:
     """Tests for _parse_linked_todos function."""
 
     def test_basic(self):
-        data = [
-            {"path": "~/project/TODO.md", "alias": "project"}
-        ]
+        data = [{"path": "~/project/TODO.md", "alias": "project"}]
         result = _parse_linked_todos(data)
 
         assert len(result) == 1
@@ -278,9 +261,7 @@ class TestParseLinkedTodos:
         assert result[0].sync is True
 
     def test_with_sync(self):
-        data = [
-            {"path": "~/project/TODO.md", "alias": "project", "sync": False}
-        ]
+        data = [{"path": "~/project/TODO.md", "alias": "project", "sync": False}]
         result = _parse_linked_todos(data)
 
         assert result[0].sync is False
@@ -290,9 +271,7 @@ class TestParseLinkedNotes:
     """Tests for _parse_linked_notes function."""
 
     def test_basic(self):
-        data = [
-            {"path": "~/docs", "alias": "docs"}
-        ]
+        data = [{"path": "~/docs", "alias": "docs"}]
         result = _parse_linked_notes(data)
 
         assert len(result) == 1
@@ -301,7 +280,12 @@ class TestParseLinkedNotes:
 
     def test_with_options(self):
         data = [
-            {"path": "~/docs", "alias": "docs", "notebook": "external", "recursive": False}
+            {
+                "path": "~/docs",
+                "alias": "docs",
+                "notebook": "external",
+                "recursive": False,
+            }
         ]
         result = _parse_linked_notes(data)
 
@@ -321,7 +305,7 @@ class TestParseEmbeddings:
         data = {
             "provider": "openai",
             "model": "text-embedding-3-small",
-            "api_key": "sk-xxx"
+            "api_key": "sk-xxx",
         }
         result = _parse_embeddings(data)
 
@@ -339,9 +323,7 @@ class TestLoadConfig:
         config_data = {
             "notes_root": str(temp_notes_root),
             "editor": "nano",
-            "notebooks": [
-                {"name": "daily", "date_based": True}
-            ]
+            "notebooks": [{"name": "daily", "date_based": True}],
         }
         with open(config_path, "w") as f:
             yaml.safe_dump(config_data, f)
@@ -377,7 +359,7 @@ class TestSaveConfig:
             ],
             linked_todos=[
                 LinkedTodoConfig(path=Path("/project/TODO.md"), alias="proj")
-            ]
+            ],
         )
 
         save_config(cfg)
@@ -401,7 +383,7 @@ class TestEnsureDirectories:
             notebooks=[
                 NotebookConfig(name="daily"),
                 NotebookConfig(name="projects"),
-            ]
+            ],
         )
 
         ensure_directories(cfg)
@@ -414,9 +396,7 @@ class TestEnsureDirectories:
         cfg = Config(
             notes_root=temp_notes_root,
             editor="vim",
-            notebooks=[
-                NotebookConfig(name="external", path=Path("/nonexistent"))
-            ]
+            notebooks=[NotebookConfig(name="external", path=Path("/nonexistent"))],
         )
 
         # Should not raise even though external path doesn't exist
@@ -450,7 +430,7 @@ class TestInitConfig:
         config_data = {
             "notes_root": str(notes_root),
             "editor": "vim",
-            "notebooks": [{"name": "daily", "date_based": True}]
+            "notebooks": [{"name": "daily", "date_based": True}],
         }
         with open(config_path, "w") as f:
             yaml.safe_dump(config_data, f)

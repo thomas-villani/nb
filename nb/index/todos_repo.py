@@ -50,8 +50,24 @@ def _load_todo_tags(todo_id: str) -> list[str]:
 
 
 def upsert_todo(todo: Todo) -> None:
-    """Insert or update a todo in the database."""
+    """Insert or update a todo in the database.
+
+    Preserves created_date for existing todos.
+    """
     db = get_db()
+
+    # Check if todo already exists to preserve created_date
+    existing = db.fetchone("SELECT created_date FROM todos WHERE id = ?", (todo.id,))
+    if existing and existing["created_date"]:
+        # Preserve the original created_date
+        created_date = existing["created_date"]
+    else:
+        # New todo - use the provided date or today
+        created_date = (
+            todo.created_date.isoformat()
+            if todo.created_date
+            else date.today().isoformat()
+        )
 
     db.execute(
         """
@@ -71,7 +87,7 @@ def upsert_todo(todo: Todo) -> None:
             1 if todo.source.external else 0,
             todo.source.alias,
             todo.line_number,
-            todo.created_date.isoformat() if todo.created_date else None,
+            created_date,
             todo.due_date.isoformat() if todo.due_date else None,
             todo.priority.value if todo.priority else None,
             todo.project,

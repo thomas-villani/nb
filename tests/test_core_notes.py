@@ -141,7 +141,9 @@ class TestCreateNote:
 class TestGetNote:
     """Tests for get_note function."""
 
-    def test_parses_note_with_frontmatter(self, mock_config, create_note, sample_note_content):
+    def test_parses_note_with_frontmatter(
+        self, mock_config, create_note, sample_note_content
+    ):
         notes_root = mock_config.notes_root
 
         # Create a note with frontmatter

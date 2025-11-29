@@ -249,7 +249,9 @@ def list_linked_notes() -> list[LinkedNoteConfig]:
 
     # Also check database for dynamically added links
     db = get_db()
-    rows = db.fetchall("SELECT alias, path, notebook, recursive FROM linked_notes")
+    rows = db.fetchall(
+        "SELECT alias, path, notebook, recursive, todo_exclude, sync FROM linked_notes"
+    )
 
     # Add DB entries that aren't in config
     config_aliases = {ln.alias for ln in linked}
@@ -261,6 +263,10 @@ def list_linked_notes() -> list[LinkedNoteConfig]:
                     alias=row["alias"],
                     notebook=row["notebook"],
                     recursive=bool(row["recursive"]),
+                    todo_exclude=(
+                        bool(row["todo_exclude"]) if row["todo_exclude"] else False
+                    ),
+                    sync=bool(row["sync"]) if row["sync"] is not None else True,
                 )
             )
 
@@ -287,7 +293,7 @@ def get_linked_note(alias: str) -> LinkedNoteConfig | None:
     # Check database
     db = get_db()
     row = db.fetchone(
-        "SELECT alias, path, notebook, recursive FROM linked_notes WHERE alias = ?",
+        "SELECT alias, path, notebook, recursive, todo_exclude, sync FROM linked_notes WHERE alias = ?",
         (alias,),
     )
 
@@ -297,6 +303,8 @@ def get_linked_note(alias: str) -> LinkedNoteConfig | None:
             alias=row["alias"],
             notebook=row["notebook"],
             recursive=bool(row["recursive"]),
+            todo_exclude=bool(row["todo_exclude"]) if row["todo_exclude"] else False,
+            sync=bool(row["sync"]) if row["sync"] is not None else True,
         )
 
     return None
@@ -307,6 +315,8 @@ def add_linked_note(
     alias: str | None = None,
     notebook: str | None = None,
     recursive: bool = True,
+    todo_exclude: bool = False,
+    sync: bool = True,
     save_to_config: bool = False,
 ) -> LinkedNoteConfig:
     """Add a new linked external note file or directory.
@@ -316,6 +326,8 @@ def add_linked_note(
         alias: Short name for the link (defaults to filename/dirname).
         notebook: Virtual notebook name (defaults to alias).
         recursive: For directories, whether to scan recursively.
+        todo_exclude: Exclude todos from nb todo by default.
+        sync: Sync todo completions back to source file.
         save_to_config: If True, save to config file. Otherwise, save to DB.
 
     Returns:
@@ -349,6 +361,8 @@ def add_linked_note(
         alias=alias,
         notebook=notebook,
         recursive=recursive,
+        todo_exclude=todo_exclude,
+        sync=sync,
     )
 
     if save_to_config:
@@ -361,10 +375,10 @@ def add_linked_note(
         db = get_db()
         db.execute(
             """
-            INSERT OR REPLACE INTO linked_notes (alias, path, notebook, recursive)
-            VALUES (?, ?, ?, ?)
+            INSERT OR REPLACE INTO linked_notes (alias, path, notebook, recursive, todo_exclude, sync)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (alias, str(path), notebook, int(recursive)),
+            (alias, str(path), notebook, int(recursive), int(todo_exclude), int(sync)),
         )
         db.commit()
 
@@ -401,6 +415,68 @@ def remove_linked_note(alias: str) -> bool:
     return cursor.rowcount > 0
 
 
+def update_linked_note_sync(alias: str, sync: bool) -> bool:
+    """Update the sync setting for a linked note.
+
+    Args:
+        alias: The alias of the link to update.
+        sync: New sync setting.
+
+    Returns:
+        True if updated, False if not found.
+
+    """
+    config = get_config()
+
+    # Check config first
+    for ln in config.linked_notes:
+        if ln.alias == alias:
+            ln.sync = sync
+            save_config(config)
+            return True
+
+    # Check database
+    db = get_db()
+    cursor = db.execute(
+        "UPDATE linked_notes SET sync = ? WHERE alias = ?",
+        (int(sync), alias),
+    )
+    db.commit()
+
+    return cursor.rowcount > 0
+
+
+def update_linked_note_todo_exclude(alias: str, todo_exclude: bool) -> bool:
+    """Update the todo_exclude setting for a linked note.
+
+    Args:
+        alias: The alias of the link to update.
+        todo_exclude: New todo_exclude setting.
+
+    Returns:
+        True if updated, False if not found.
+
+    """
+    config = get_config()
+
+    # Check config first
+    for ln in config.linked_notes:
+        if ln.alias == alias:
+            ln.todo_exclude = todo_exclude
+            save_config(config)
+            return True
+
+    # Check database
+    db = get_db()
+    cursor = db.execute(
+        "UPDATE linked_notes SET todo_exclude = ? WHERE alias = ?",
+        (int(todo_exclude), alias),
+    )
+    db.commit()
+
+    return cursor.rowcount > 0
+
+
 def get_linked_note_by_path(path: Path) -> LinkedNoteConfig | None:
     """Get a linked note by its path.
 
@@ -422,7 +498,7 @@ def get_linked_note_by_path(path: Path) -> LinkedNoteConfig | None:
     # Check database
     db = get_db()
     row = db.fetchone(
-        "SELECT alias, path, notebook, recursive FROM linked_notes WHERE path = ?",
+        "SELECT alias, path, notebook, recursive, todo_exclude, sync FROM linked_notes WHERE path = ?",
         (str(path),),
     )
 
@@ -432,6 +508,8 @@ def get_linked_note_by_path(path: Path) -> LinkedNoteConfig | None:
             alias=row["alias"],
             notebook=row["notebook"],
             recursive=bool(row["recursive"]),
+            todo_exclude=bool(row["todo_exclude"]) if row["todo_exclude"] else False,
+            sync=bool(row["sync"]) if row["sync"] is not None else True,
         )
 
     return None

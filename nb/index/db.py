@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 # Current schema version
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -158,6 +158,13 @@ CREATE INDEX IF NOT EXISTS idx_note_views_time ON note_views(viewed_at);
 ALTER TABLE notes ADD COLUMN todo_exclude INTEGER DEFAULT 0;
 """
 
+# Phase 7 additions: linked notes todo_exclude and sync columns
+SCHEMA_V8 = """
+-- Add todo_exclude and sync columns to linked_notes table
+ALTER TABLE linked_notes ADD COLUMN todo_exclude INTEGER DEFAULT 0;
+ALTER TABLE linked_notes ADD COLUMN sync INTEGER DEFAULT 1;
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -167,6 +174,7 @@ MIGRATIONS: dict[int, str] = {
     5: SCHEMA_V5,
     6: SCHEMA_V6,
     7: SCHEMA_V7,
+    8: SCHEMA_V8,
 }
 
 

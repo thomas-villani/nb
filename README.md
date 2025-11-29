@@ -165,9 +165,10 @@ nb todo edit abc123     # Open source file at todo line
 
 Todos are grouped by due date: OVERDUE, DUE TODAY, DUE THIS WEEK, DUE NEXT WEEK, DUE LATER, NO DUE DATE.
 
-Todos can be hidden from `nb todo` at two levels:
+Todos can be hidden from `nb todo` at three levels:
 - **Notebook-level**: Set `todo_exclude: true` in notebook config
 - **Note-level**: Set `todo_exclude: true` in note frontmatter
+- **Linked note-level**: Use `--todo-exclude` when linking or `nb link exclude-todos`
 
 Use `-a/--all` to include all todos, or `-n <notebook>` to view a specific notebook.
 
@@ -203,34 +204,54 @@ nb grep "TODO.*urgent" -C 5  # With context lines
 
 ### Linked Files
 
-#### Todo Files
-
-Link external todo files (e.g., project TODO.md) to track their todos:
-
-```bash
-nb link add ~/code/project/TODO.md
-nb link add ~/work/tasks.md --alias work --no-sync
-nb link list
-nb link sync
-nb link remove myproject
-```
-
-With `--sync` (default), completing a todo updates the source file.
-
-#### Note Files/Directories
-
-Link external note files or directories to make them searchable:
+Link external markdown files or directories to index them alongside your notes.
+Both note content and todos are indexed (like any other note):
 
 ```bash
-nb link add ~/docs/wiki --notes-only
-nb link add ~/vault --alias vault -n @vault
-nb link add ~/docs --no-recursive
-nb link list
-nb link sync
-nb link remove wiki
+nb link add ~/code/project/TODO.md        # Link a single file
+nb link add ~/docs/wiki                    # Link a directory (recursive)
+nb link add ~/vault --alias vault -n @vault  # Custom alias and notebook
+nb link add ~/docs --no-recursive          # Don't scan subdirectories
+
+nb link list                              # Show all linked files
+nb link sync                              # Re-scan and update index
+nb link sync wiki                         # Sync a specific link
+nb link remove wiki                       # Stop tracking
 ```
 
-Linked notes appear under a virtual notebook (prefixed with `@` by default).
+#### Options
+
+| Option | Description |
+|--------|-------------|
+| `--alias, -a` | Short name for the link (defaults to filename/dirname) |
+| `--notebook, -n` | Virtual notebook name (defaults to `@alias`) |
+| `--sync/--no-sync` | Sync todo completions back to source file (default: sync) |
+| `--todo-exclude` | Hide todos from `nb todo` by default |
+| `--no-recursive` | Don't scan subdirectories (for directory links) |
+
+#### Todo Exclusion
+
+By default, todos from linked notes appear in `nb todo`. Use `--todo-exclude` to hide them:
+
+```bash
+nb link add ~/work/archive --todo-exclude  # Todos hidden from nb todo
+nb todo -n @archive                        # View them explicitly
+nb link exclude-todos wiki                 # Toggle exclusion on existing link
+nb link include-todos wiki                 # Re-enable todos
+```
+
+#### Sync Control
+
+With `--sync` (default), completing a todo with `nb todo done` updates the source file.
+Disable this if you don't want nb to modify external files:
+
+```bash
+nb link add ~/shared/tasks.md --no-sync   # Won't modify source file
+nb link disable-sync wiki                 # Disable on existing link
+nb link enable-sync wiki                  # Re-enable sync
+```
+
+Linked notes appear in `nb list` with `(linked)` indicator and under a virtual notebook (prefixed with `@` by default).
 
 ### Attachments
 
@@ -293,18 +314,21 @@ notebooks:
     path: ~/Documents/Obsidian/vault   # External directory
     date_based: false
 
-# Linked todo files (for standalone TODO.md files)
-linked_todos:
-  - path: ~/code/project/TODO.md
-    alias: project
-    sync: true
-
-# Linked note directories (legacy - prefer external notebooks)
+# Linked external files and directories
 linked_notes:
   - path: ~/docs/wiki
     alias: wiki
     notebook: "@wiki"
     recursive: true
+    todo_exclude: false   # Include todos in nb todo
+    sync: true            # Sync completions back to source
+  - path: ~/code/project/TODO.md
+    alias: project
+    notebook: "@project"
+    sync: true
+  - path: ~/work/archive
+    alias: archive
+    todo_exclude: true    # Hide from nb todo by default
 
 # Semantic search embeddings
 embeddings:

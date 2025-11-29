@@ -323,13 +323,70 @@ def open_note(path: Path, line: int | None = None) -> None:
 
     open_in_editor(path, line=line, editor=config.editor)
 
-    # Update mtime in database if file was modified
+    # Re-index the note if file was modified
     try:
         mtime_after = path.stat().st_mtime
         if mtime_before is None or mtime_after != mtime_before:
             update_note_mtime(path, config.notes_root)
+            # Re-index the note to pick up any todo changes
+            _reindex_note_after_edit(path, config.notes_root)
     except OSError:
         pass
+
+
+def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
+    """Re-index a note after it has been edited.
+
+    This extracts and updates todos from the note.
+
+    Args:
+        path: Absolute path to the note
+        notes_root: Notes root directory
+
+    """
+    from nb.core.todos import extract_todos
+    from nb.index.todos_repo import delete_todos_for_source, upsert_todo
+
+    # Determine source type
+    try:
+        rel_path = path.relative_to(notes_root)
+        # Check if it's the inbox
+        if rel_path.name == "todo.md" and len(rel_path.parts) == 1:
+            source_type = "inbox"
+        else:
+            source_type = "note"
+        external = False
+        alias = None
+    except ValueError:
+        # External file - check if it's a linked note
+        from nb.core.links import list_linked_notes
+
+        source_type = "linked"
+        external = True
+        alias = None
+        for ln in list_linked_notes():
+            if ln.path.is_file() and ln.path.resolve() == path.resolve():
+                alias = ln.alias
+                break
+            elif ln.path.is_dir():
+                try:
+                    path.relative_to(ln.path)
+                    alias = ln.alias
+                    break
+                except ValueError:
+                    continue
+
+    # Delete existing todos and re-extract
+    delete_todos_for_source(path)
+    todos = extract_todos(
+        path,
+        source_type=source_type,
+        external=external,
+        alias=alias,
+        notes_root=notes_root,
+    )
+    for todo in todos:
+        upsert_todo(todo)
 
 
 def get_note(path: Path, notes_root: Path | None = None) -> Note | None:

@@ -475,10 +475,7 @@ class TestAddTodoToInbox:
     def test_parses_metadata(self, mock_config, fixed_today):
         notes_root = mock_config.notes_root
 
-        todo = add_todo_to_inbox(
-            "Task @priority(1) @due(tomorrow) #urgent",
-            notes_root
-        )
+        todo = add_todo_to_inbox("Task @priority(1) @due(tomorrow) #urgent", notes_root)
 
         assert todo.content == "Task"
         assert todo.priority == Priority.HIGH

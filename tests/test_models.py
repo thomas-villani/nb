@@ -42,7 +42,7 @@ class TestAttachment:
             path="/path/to/file.pdf",
             title="Design Doc",
             added_date=date(2025, 11, 26),
-            copied=True
+            copied=True,
         )
 
         assert attachment.id == "abc123"
@@ -53,11 +53,7 @@ class TestAttachment:
         assert attachment.copied is True
 
     def test_url_attachment(self):
-        attachment = Attachment(
-            id="def456",
-            type="url",
-            path="https://example.com/doc"
-        )
+        attachment = Attachment(id="def456", type="url", path="https://example.com/doc")
 
         assert attachment.type == "url"
         assert attachment.title is None
@@ -66,9 +62,7 @@ class TestAttachment:
 
     def test_conversation_attachment(self):
         attachment = Attachment(
-            id="ghi789",
-            type="conversation",
-            path="snippet content here"
+            id="ghi789", type="conversation", path="snippet content here"
         )
 
         assert attachment.type == "conversation"
@@ -85,7 +79,7 @@ class TestNote:
             tags=["meeting", "review"],
             links=["projects/roadmap"],
             notebook="daily",
-            content_hash="abcd1234"
+            content_hash="abcd1234",
         )
 
         assert note.path == Path("daily/2025-11-26.md")
@@ -97,11 +91,7 @@ class TestNote:
         assert note.content_hash == "abcd1234"
 
     def test_default_values(self):
-        note = Note(
-            path=Path("note.md"),
-            title="Simple Note",
-            date=None
-        )
+        note = Note(path=Path("note.md"), title="Simple Note", date=None)
 
         assert note.tags == []
         assert note.links == []
@@ -115,7 +105,7 @@ class TestNote:
             path=Path("note.md"),
             title="Note with Attachments",
             date=date(2025, 11, 26),
-            attachments=[attachment]
+            attachments=[attachment],
         )
 
         assert len(note.attachments) == 1
@@ -126,10 +116,7 @@ class TestTodoSource:
     """Tests for TodoSource dataclass."""
 
     def test_note_source(self):
-        source = TodoSource(
-            type="note",
-            path=Path("daily/2025-11-26.md")
-        )
+        source = TodoSource(type="note", path=Path("daily/2025-11-26.md"))
 
         assert source.type == "note"
         assert source.path == Path("daily/2025-11-26.md")
@@ -137,10 +124,7 @@ class TestTodoSource:
         assert source.alias is None
 
     def test_inbox_source(self):
-        source = TodoSource(
-            type="inbox",
-            path=Path("todo.md")
-        )
+        source = TodoSource(type="inbox", path=Path("todo.md"))
 
         assert source.type == "inbox"
 
@@ -149,7 +133,7 @@ class TestTodoSource:
             type="linked",
             path=Path("/external/project/TODO.md"),
             external=True,
-            alias="project"
+            alias="project",
         )
 
         assert source.type == "linked"
@@ -169,7 +153,7 @@ class TestTodo:
             completed=False,
             source=source,
             line_number=10,
-            created_date=date(2025, 11, 26)
+            created_date=date(2025, 11, 26),
         )
 
         assert todo.id == "abc123"
@@ -187,7 +171,7 @@ class TestTodo:
             completed=True,
             source=source,
             line_number=5,
-            created_date=date(2025, 11, 26)
+            created_date=date(2025, 11, 26),
         )
 
         assert todo.completed is True
@@ -202,7 +186,7 @@ class TestTodo:
             source=source,
             line_number=1,
             created_date=date(2025, 11, 20),
-            due_date=fixed_today - timedelta(days=1)  # Yesterday
+            due_date=fixed_today - timedelta(days=1),  # Yesterday
         )
 
         assert todo.is_overdue is True
@@ -217,7 +201,7 @@ class TestTodo:
             source=source,
             line_number=1,
             created_date=date(2025, 11, 20),
-            due_date=fixed_today + timedelta(days=1)  # Tomorrow
+            due_date=fixed_today + timedelta(days=1),  # Tomorrow
         )
 
         assert todo.is_overdue is False
@@ -232,7 +216,7 @@ class TestTodo:
             source=source,
             line_number=1,
             created_date=date(2025, 11, 20),
-            due_date=None
+            due_date=None,
         )
 
         assert todo.is_overdue is False
@@ -247,7 +231,7 @@ class TestTodo:
             source=source,
             line_number=1,
             created_date=date(2025, 11, 20),
-            due_date=fixed_today
+            due_date=fixed_today,
         )
 
         assert todo.is_due_today is True
@@ -262,7 +246,7 @@ class TestTodo:
             source=source,
             line_number=1,
             created_date=date(2025, 11, 20),
-            due_date=None
+            due_date=None,
         )
 
         assert todo.is_due_today is False
@@ -277,7 +261,7 @@ class TestTodo:
             source=source,
             line_number=1,
             created_date=date(2025, 11, 20),
-            priority=Priority.HIGH
+            priority=Priority.HIGH,
         )
 
         assert todo.priority_sort_key == 1
@@ -292,7 +276,7 @@ class TestTodo:
             source=source,
             line_number=1,
             created_date=date(2025, 11, 20),
-            priority=Priority.MEDIUM
+            priority=Priority.MEDIUM,
         )
 
         assert todo.priority_sort_key == 2
@@ -307,7 +291,7 @@ class TestTodo:
             source=source,
             line_number=1,
             created_date=date(2025, 11, 20),
-            priority=None
+            priority=None,
         )
 
         assert todo.priority_sort_key == 999
@@ -321,7 +305,7 @@ class TestTodo:
             completed=False,
             source=source,
             line_number=1,
-            created_date=date(2025, 11, 20)
+            created_date=date(2025, 11, 20),
         )
         child1 = Todo(
             id="child1",
@@ -331,7 +315,7 @@ class TestTodo:
             source=source,
             line_number=2,
             created_date=date(2025, 11, 20),
-            parent_id="parent"
+            parent_id="parent",
         )
         child2 = Todo(
             id="child2",
@@ -341,7 +325,7 @@ class TestTodo:
             source=source,
             line_number=3,
             created_date=date(2025, 11, 20),
-            parent_id="parent"
+            parent_id="parent",
         )
 
         parent.children = [child1, child2]
@@ -360,7 +344,7 @@ class TestTodo:
             source=source,
             line_number=1,
             created_date=date(2025, 11, 20),
-            tags=["urgent", "review"]
+            tags=["urgent", "review"],
         )
 
         assert "urgent" in todo.tags
@@ -376,7 +360,7 @@ class TestTodo:
             source=source,
             line_number=1,
             created_date=date(2025, 11, 20),
-            project="nb-cli"
+            project="nb-cli",
         )
 
         assert todo.project == "nb-cli"

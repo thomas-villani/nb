@@ -86,6 +86,43 @@ def get_notebook_notes(notebook: str, notes_root: Path | None = None) -> list[Pa
     return sorted(notes)
 
 
+def get_notebook_notes_with_linked(
+    notebook: str, notes_root: Path | None = None
+) -> list[tuple[Path, bool]]:
+    """List all notes in a specific notebook, including linked notes.
+
+    Args:
+        notebook: Name of the notebook (can include @ prefix for linked notebooks)
+        notes_root: Override notes root directory
+
+    Returns:
+        List of (path, is_linked) tuples for notes in the notebook.
+
+    """
+    from nb.index.db import get_db
+
+    config = get_config()
+    if notes_root is None:
+        notes_root = config.notes_root
+
+    # Get regular notebook notes first
+    regular_notes = get_notebook_notes(notebook, notes_root)
+    results: list[tuple[Path, bool]] = [(p, False) for p in regular_notes]
+
+    # Also check for linked notes with this notebook name
+    db = get_db()
+    rows = db.fetchall(
+        "SELECT path FROM notes WHERE notebook = ? AND external = 1",
+        (notebook,),
+    )
+
+    for row in rows:
+        results.append((Path(row["path"]), True))
+
+    # Sort by path
+    return sorted(results, key=lambda x: str(x[0]))
+
+
 def create_notebook(name: str, notes_root: Path | None = None) -> Path:
     """Create a new notebook directory.
 

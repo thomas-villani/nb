@@ -85,7 +85,8 @@ class TestParseNoteFile:
 
     def test_with_frontmatter(self, tmp_path: Path):
         note = tmp_path / "test.md"
-        note.write_text("""\
+        note.write_text(
+            """\
 ---
 title: Test Note
 date: 2025-11-26
@@ -97,7 +98,9 @@ tags:
 # Content
 
 Body text here.
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         meta, body = parse_note_file(note)
 
@@ -317,9 +320,7 @@ class TestCreateNoteTemplate:
 
     def test_with_tags(self):
         result = create_note_template(
-            title="Tagged Note",
-            dt=date(2025, 11, 26),
-            tags=["important", "meeting"]
+            title="Tagged Note", dt=date(2025, 11, 26), tags=["important", "meeting"]
         )
 
         assert "tags:" in result
