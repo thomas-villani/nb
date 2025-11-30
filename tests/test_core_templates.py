@@ -263,8 +263,6 @@ class TestNotebookDefaultTemplate:
             notebooks=[
                 NotebookConfig(name="daily", date_based=True, template="daily-custom"),
             ],
-            linked_todos=[],
-            linked_notes=[],
             embeddings=EmbeddingsConfig(),
         )
         monkeypatch.setattr(config_module, "_config", cfg)
@@ -296,8 +294,6 @@ class TestNotebookDefaultTemplate:
             notebooks=[
                 NotebookConfig(name="daily", date_based=True, template="default-tmpl"),
             ],
-            linked_todos=[],
-            linked_notes=[],
             embeddings=EmbeddingsConfig(),
         )
         monkeypatch.setattr(config_module, "_config", cfg)

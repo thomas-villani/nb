@@ -100,8 +100,6 @@ class Config:
             NotebookConfig(name="personal", date_based=False),
         ]
     )
-    linked_todos: list[LinkedTodoConfig] = field(default_factory=list)
-    linked_notes: list[LinkedNoteConfig] = field(default_factory=list)
     todo_views: list[TodoViewConfig] = field(default_factory=list)
     embeddings: EmbeddingsConfig = field(default_factory=EmbeddingsConfig)
     date_format: str = "%Y-%m-%d"

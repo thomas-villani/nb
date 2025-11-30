@@ -80,6 +80,7 @@ todo_exclude: true
 - [ ] Enhance `nb stream` to allow streaming recently viewed or recently modified notes
 - [x] `nb history` shows linked notes under "@external" rather than in the notebook they're linked to
     Shows same file multiple times (should condense to one line with "+4" or something) 
+- [ ] Make `nb history` not group by notebook by default, instead have the notebook source colored in the same line as the history line. Allow grouping with a `--group` flag
 
 ### Phase 5: Advanced TUI
 - [ ] Full Wijjit-based todo list view with richer interactions

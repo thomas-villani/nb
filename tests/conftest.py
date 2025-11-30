@@ -33,8 +33,6 @@ def temp_config(temp_notes_root: Path) -> Generator[Config, None, None]:
             NotebookConfig(name="projects", date_based=False),
             NotebookConfig(name="work", date_based=False),
         ],
-        linked_todos=[],
-        linked_notes=[],
         embeddings=EmbeddingsConfig(),
         date_format="%Y-%m-%d",
         time_format="%H:%M",

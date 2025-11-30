@@ -36,8 +36,6 @@ def cli_config(tmp_path: Path):
             NotebookConfig(name="projects", date_based=False),
             NotebookConfig(name="work", date_based=False),
         ],
-        linked_todos=[],
-        linked_notes=[],
         embeddings=EmbeddingsConfig(),
         date_format="%Y-%m-%d",
         time_format="%H:%M",
