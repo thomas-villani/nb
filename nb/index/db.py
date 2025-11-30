@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 # Current schema version
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -195,6 +195,18 @@ CREATE TABLE IF NOT EXISTS note_aliases (
 CREATE INDEX IF NOT EXISTS idx_note_aliases_path ON note_aliases(path);
 """
 
+# Phase 11 additions: completed_date tracking for stats
+SCHEMA_V12 = """
+-- Add completed_date column to todos for activity tracking
+ALTER TABLE todos ADD COLUMN completed_date TEXT;
+
+-- Backfill: set completed_date = created_date for existing completed todos
+UPDATE todos SET completed_date = created_date WHERE status = 'completed' AND completed_date IS NULL;
+
+-- Index for activity queries
+CREATE INDEX IF NOT EXISTS idx_todos_completed_date ON todos(completed_date);
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -208,6 +220,7 @@ MIGRATIONS: dict[int, str] = {
     9: SCHEMA_V9,
     10: SCHEMA_V10,
     11: SCHEMA_V11,
+    12: SCHEMA_V12,
 }
 
 

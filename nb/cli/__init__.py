@@ -14,6 +14,8 @@ from nb.cli.links import register_link_commands
 from nb.cli.notebooks import register_notebook_commands
 from nb.cli.notes import register_note_commands, today
 from nb.cli.search import register_search_commands
+from nb.cli.stats import register_stats_commands
+from nb.cli.tags import register_tags_commands
 from nb.cli.templates import register_template_commands
 from nb.cli.todos import register_todo_commands
 from nb.cli.utils import ensure_setup
@@ -101,6 +103,8 @@ register_link_commands(cli)
 register_attachment_commands(cli)
 register_template_commands(cli)
 register_completion_commands(cli)
+register_stats_commands(cli)
+register_tags_commands(cli)
 
 
 def main() -> None:

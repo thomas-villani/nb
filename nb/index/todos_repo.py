@@ -61,11 +61,15 @@ def upsert_todo(todo: Todo) -> None:
     """Insert or update a todo in the database.
 
     Preserves created_date for existing todos.
+    Sets completed_date when status changes to completed.
     """
     db = get_db()
 
-    # Check if todo already exists to preserve created_date
-    existing = db.fetchone("SELECT created_date FROM todos WHERE id = ?", (todo.id,))
+    # Check if todo already exists to preserve created_date and completed_date
+    existing = db.fetchone(
+        "SELECT created_date, completed_date, status FROM todos WHERE id = ?",
+        (todo.id,),
+    )
     if existing and existing["created_date"]:
         # Preserve the original created_date
         created_date = existing["created_date"]
@@ -77,13 +81,23 @@ def upsert_todo(todo: Todo) -> None:
             else date.today().isoformat()
         )
 
+    # Handle completed_date
+    completed_date = None
+    if todo.completed:
+        if existing and existing["completed_date"]:
+            # Preserve existing completed_date
+            completed_date = existing["completed_date"]
+        else:
+            # Newly completed - set to today
+            completed_date = date.today().isoformat()
+
     db.execute(
         """
         INSERT OR REPLACE INTO todos (
             id, content, raw_content, completed, status, source_type, source_path,
-            source_external, source_alias, line_number, created_date,
+            source_external, source_alias, line_number, created_date, completed_date,
             due_date, priority, project, parent_id, content_hash, details, section
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             todo.id,
@@ -97,6 +111,7 @@ def upsert_todo(todo: Todo) -> None:
             todo.source.alias,
             todo.line_number,
             created_date,
+            completed_date,
             todo.due_date.isoformat() if todo.due_date else None,
             todo.priority.value if todo.priority else None,
             todo.notebook,
@@ -163,28 +178,46 @@ def delete_todos_for_source(source_path: Path) -> None:
 def update_todo_completion(todo_id: str, completed: bool) -> None:
     """Update a todo's completion status.
 
-    This also updates the status column for consistency.
+    This also updates the status column and completed_date for consistency.
     """
     db = get_db()
     status = TodoStatus.COMPLETED if completed else TodoStatus.PENDING
-    db.execute(
-        "UPDATE todos SET completed = ?, status = ? WHERE id = ?",
-        (1 if completed else 0, status.value, todo_id),
-    )
+
+    if completed:
+        # Set completed_date when marking as complete
+        db.execute(
+            "UPDATE todos SET completed = ?, status = ?, completed_date = ? WHERE id = ?",
+            (1, status.value, date.today().isoformat(), todo_id),
+        )
+    else:
+        # Clear completed_date when marking as incomplete
+        db.execute(
+            "UPDATE todos SET completed = ?, status = ?, completed_date = NULL WHERE id = ?",
+            (0, status.value, todo_id),
+        )
     db.commit()
 
 
 def update_todo_status(todo_id: str, status: TodoStatus) -> None:
     """Update a todo's status.
 
-    This also updates the completed column for backwards compatibility.
+    This also updates the completed column and completed_date for backwards compatibility.
     """
     db = get_db()
     completed = 1 if status == TodoStatus.COMPLETED else 0
-    db.execute(
-        "UPDATE todos SET status = ?, completed = ? WHERE id = ?",
-        (status.value, completed, todo_id),
-    )
+
+    if status == TodoStatus.COMPLETED:
+        # Set completed_date when marking as complete
+        db.execute(
+            "UPDATE todos SET status = ?, completed = ?, completed_date = ? WHERE id = ?",
+            (status.value, completed, date.today().isoformat(), todo_id),
+        )
+    else:
+        # Clear completed_date when unmarking as complete
+        db.execute(
+            "UPDATE todos SET status = ?, completed = ?, completed_date = NULL WHERE id = ?",
+            (status.value, completed, todo_id),
+        )
     db.commit()
 
 
@@ -507,3 +540,280 @@ def get_todo_stats() -> dict[str, int]:
         "overdue": overdue["count"] if overdue else 0,
         "due_today": due_today["count"] if due_today else 0,
     }
+
+
+def get_extended_todo_stats(
+    notebooks: list[str] | None = None,
+    exclude_notebooks: list[str] | None = None,
+) -> dict:
+    """Get extended todo statistics for dashboard.
+
+    Returns:
+        {
+            "total": int,
+            "completed": int,
+            "in_progress": int,
+            "pending": int,
+            "overdue": int,
+            "due_today": int,
+            "due_this_week": int,
+            "completion_rate": float (0-100),
+            "by_priority": {1: {"total": N, "completed": N}, ...},
+            "by_notebook": {"daily": {"total": N, "completed": N, "overdue": N}, ...},
+        }
+    """
+    from datetime import timedelta
+
+    db = get_db()
+    today = date.today()
+    week_end = today + timedelta(days=7)
+
+    # Build base WHERE clause for notebook filtering
+    base_conditions = ["parent_id IS NULL"]
+    params: list = []
+
+    if notebooks:
+        placeholders = ", ".join("?" for _ in notebooks)
+        base_conditions.append(f"project IN ({placeholders})")
+        params.extend(notebooks)
+
+    if exclude_notebooks:
+        placeholders = ", ".join("?" for _ in exclude_notebooks)
+        base_conditions.append(f"(project IS NULL OR project NOT IN ({placeholders}))")
+        params.extend(exclude_notebooks)
+
+    base_where = " AND ".join(base_conditions)
+
+    # Get total count
+    total_row = db.fetchone(
+        f"SELECT COUNT(*) as count FROM todos WHERE {base_where}", tuple(params)
+    )
+    total = total_row["count"] if total_row else 0
+
+    # Get status counts
+    status_rows = db.fetchall(
+        f"SELECT status, COUNT(*) as count FROM todos WHERE {base_where} GROUP BY status",
+        tuple(params),
+    )
+    status_counts = {row["status"]: row["count"] for row in status_rows}
+
+    completed = status_counts.get(TodoStatus.COMPLETED.value, 0)
+    in_progress = status_counts.get(TodoStatus.IN_PROGRESS.value, 0)
+    pending = status_counts.get(TodoStatus.PENDING.value, 0)
+
+    # Get overdue count
+    overdue_row = db.fetchone(
+        f"SELECT COUNT(*) as count FROM todos WHERE {base_where} AND status != ? AND due_date < ?",
+        tuple(params) + (TodoStatus.COMPLETED.value, today.isoformat()),
+    )
+    overdue = overdue_row["count"] if overdue_row else 0
+
+    # Get due today count
+    due_today_row = db.fetchone(
+        f"SELECT COUNT(*) as count FROM todos WHERE {base_where} AND status != ? AND due_date = ?",
+        tuple(params) + (TodoStatus.COMPLETED.value, today.isoformat()),
+    )
+    due_today = due_today_row["count"] if due_today_row else 0
+
+    # Get due this week count (excluding today)
+    due_week_row = db.fetchone(
+        f"SELECT COUNT(*) as count FROM todos WHERE {base_where} AND status != ? AND due_date > ? AND due_date <= ?",
+        tuple(params)
+        + (TodoStatus.COMPLETED.value, today.isoformat(), week_end.isoformat()),
+    )
+    due_this_week = due_week_row["count"] if due_week_row else 0
+
+    # Get stats by priority
+    priority_rows = db.fetchall(
+        f"SELECT priority, status, COUNT(*) as count FROM todos WHERE {base_where} GROUP BY priority, status",
+        tuple(params),
+    )
+    by_priority: dict[int | None, dict[str, int]] = {}
+    for row in priority_rows:
+        p = row["priority"]
+        if p not in by_priority:
+            by_priority[p] = {"total": 0, "completed": 0}
+        by_priority[p]["total"] += row["count"]
+        if row["status"] == TodoStatus.COMPLETED.value:
+            by_priority[p]["completed"] += row["count"]
+
+    # Get stats by notebook
+    notebook_rows = db.fetchall(
+        f"""SELECT project, status,
+            SUM(CASE WHEN due_date < ? AND status != ? THEN 1 ELSE 0 END) as overdue_count,
+            COUNT(*) as count
+            FROM todos WHERE {base_where} GROUP BY project, status""",
+        tuple(params) + (today.isoformat(), TodoStatus.COMPLETED.value),
+    )
+    by_notebook: dict[str, dict[str, int]] = {}
+    for row in notebook_rows:
+        nb = row["project"] or "(none)"
+        if nb not in by_notebook:
+            by_notebook[nb] = {"total": 0, "completed": 0, "overdue": 0}
+        by_notebook[nb]["total"] += row["count"]
+        if row["status"] == TodoStatus.COMPLETED.value:
+            by_notebook[nb]["completed"] += row["count"]
+        by_notebook[nb]["overdue"] += row["overdue_count"] or 0
+
+    return {
+        "total": total,
+        "completed": completed,
+        "in_progress": in_progress,
+        "pending": pending,
+        "overdue": overdue,
+        "due_today": due_today,
+        "due_this_week": due_this_week,
+        "completion_rate": (completed / total * 100) if total > 0 else 0.0,
+        "by_priority": by_priority,
+        "by_notebook": by_notebook,
+    }
+
+
+def get_todo_activity(
+    days: int = 30,
+    notebooks: list[str] | None = None,
+    exclude_notebooks: list[str] | None = None,
+) -> dict:
+    """Get todo creation/completion activity over time.
+
+    Returns:
+        {
+            "created_by_day": [(date_str, count), ...],
+            "completed_by_day": [(date_str, count), ...],
+            "days": int,
+        }
+    """
+    from datetime import timedelta
+
+    db = get_db()
+    today = date.today()
+    start_date = today - timedelta(days=days)
+
+    # Build base WHERE clause
+    base_conditions = ["parent_id IS NULL"]
+    params: list = []
+
+    if notebooks:
+        placeholders = ", ".join("?" for _ in notebooks)
+        base_conditions.append(f"project IN ({placeholders})")
+        params.extend(notebooks)
+
+    if exclude_notebooks:
+        placeholders = ", ".join("?" for _ in exclude_notebooks)
+        base_conditions.append(f"(project IS NULL OR project NOT IN ({placeholders}))")
+        params.extend(exclude_notebooks)
+
+    base_where = " AND ".join(base_conditions)
+
+    # Get created by day
+    created_rows = db.fetchall(
+        f"""SELECT DATE(created_date) as day, COUNT(*) as count
+            FROM todos WHERE {base_where} AND created_date >= ?
+            GROUP BY DATE(created_date) ORDER BY day""",
+        tuple(params) + (start_date.isoformat(),),
+    )
+    created_by_day = [(row["day"], row["count"]) for row in created_rows]
+
+    # Get completed by day (uses completed_date column)
+    completed_rows = db.fetchall(
+        f"""SELECT DATE(completed_date) as day, COUNT(*) as count
+            FROM todos WHERE {base_where} AND completed_date >= ?
+            GROUP BY DATE(completed_date) ORDER BY day""",
+        tuple(params) + (start_date.isoformat(),),
+    )
+    completed_by_day = [(row["day"], row["count"]) for row in completed_rows]
+
+    return {
+        "created_by_day": created_by_day,
+        "completed_by_day": completed_by_day,
+        "days": days,
+    }
+
+
+def get_tag_stats(
+    include_sources: bool = False,
+    notebooks: list[str] | None = None,
+    exclude_notebooks: list[str] | None = None,
+    completed: bool | None = None,
+) -> list[dict]:
+    """Get tag usage statistics.
+
+    Returns:
+        [
+            {
+                "tag": "work",
+                "count": 15,
+                "sources": [  # Only if include_sources=True
+                    {"notebook": "daily", "path": "...", "count": 3},
+                    ...
+                ]
+            },
+            ...
+        ]
+    """
+    db = get_db()
+
+    # Build base conditions
+    base_conditions = ["t.parent_id IS NULL"]
+    params: list = []
+
+    if notebooks:
+        placeholders = ", ".join("?" for _ in notebooks)
+        base_conditions.append(f"t.project IN ({placeholders})")
+        params.extend(notebooks)
+
+    if exclude_notebooks:
+        placeholders = ", ".join("?" for _ in exclude_notebooks)
+        base_conditions.append(
+            f"(t.project IS NULL OR t.project NOT IN ({placeholders}))"
+        )
+        params.extend(exclude_notebooks)
+
+    if completed is not None:
+        if completed:
+            base_conditions.append("t.status = ?")
+            params.append(TodoStatus.COMPLETED.value)
+        else:
+            base_conditions.append("t.status != ?")
+            params.append(TodoStatus.COMPLETED.value)
+
+    base_where = " AND ".join(base_conditions)
+
+    # Get tag counts
+    tag_rows = db.fetchall(
+        f"""SELECT tt.tag, COUNT(DISTINCT tt.todo_id) as count
+            FROM todo_tags tt
+            JOIN todos t ON tt.todo_id = t.id
+            WHERE {base_where}
+            GROUP BY tt.tag
+            ORDER BY count DESC""",
+        tuple(params),
+    )
+
+    result = []
+    for row in tag_rows:
+        tag_data: dict = {"tag": row["tag"], "count": row["count"]}
+
+        if include_sources:
+            # Get source breakdown for this tag
+            source_rows = db.fetchall(
+                f"""SELECT t.project as notebook, t.source_path, COUNT(*) as count
+                    FROM todo_tags tt
+                    JOIN todos t ON tt.todo_id = t.id
+                    WHERE {base_where} AND tt.tag = ?
+                    GROUP BY t.project, t.source_path
+                    ORDER BY count DESC""",
+                tuple(params) + (row["tag"],),
+            )
+            tag_data["sources"] = [
+                {
+                    "notebook": r["notebook"] or "(none)",
+                    "path": r["source_path"],
+                    "count": r["count"],
+                }
+                for r in source_rows
+            ]
+
+        result.append(tag_data)
+
+    return result

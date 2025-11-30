@@ -8,6 +8,8 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Note templates** - Create reusable templates with variables for new notes
 - **Todo management** - Extract and track todos from any markdown file with in-progress support
 - **Todo views** - Save and reuse filter configurations for quick access
+- **Statistics dashboard** - View completion rates, activity trends, and breakdowns by notebook/priority/tag
+- **Tag management** - List and explore tags with usage counts and source breakdown
 - **Multiple notebooks** - Organize notes by project, including external directories
 - **Fuzzy finding** - Auto-suggest notebooks and notes when exact match not found
 - **Unified search** - Keyword, semantic, and hybrid search powered by localvectordb
@@ -350,6 +352,39 @@ nb search "query" --recent               # Boost recent results
 
 nb grep "pattern"       # Regex search
 nb grep "TODO.*urgent" -C 5  # With context lines
+```
+
+### Statistics
+
+View todo statistics with completion rates, activity trends, and breakdowns:
+
+```bash
+nb stats                    # Full dashboard with overview and notebook breakdown
+nb stats --compact          # Single panel summary
+nb stats --by-notebook      # Show breakdown by notebook
+nb stats --by-priority      # Show breakdown by priority
+nb stats --by-tag           # Show top tags by usage
+nb stats -n work -n daily   # Stats for specific notebooks
+nb stats --days 7           # Week activity trends (default: 30 days)
+nb stats -x personal        # Exclude notebooks from stats
+```
+
+The dashboard shows:
+- **Overview**: Total todos, completed count and rate, in-progress, pending, overdue, due today/week
+- **Activity sparklines**: Todos created and completed over time
+- **Breakdowns**: Stats per notebook, priority level, or top tags
+
+### Tags
+
+List and explore tags used across todos:
+
+```bash
+nb tags                   # List all tags sorted by count
+nb tags --sort alpha      # Alphabetical order
+nb tags --sources         # Show which notebooks/notes use each tag
+nb tags -n work           # Tags from work notebook only
+nb tags --limit 10        # Top 10 tags
+nb tags --open            # Only count open (non-completed) todos
 ```
 
 ### Linked Files

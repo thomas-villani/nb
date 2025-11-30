@@ -65,11 +65,6 @@ line-length = 120
 # Enable fixing issues automatically when possible
 fix = true
 
-
-ignore = [
-
-]
-
 # Relax rules for test files
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
