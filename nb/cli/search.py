@@ -321,12 +321,22 @@ def index_cmd(
 @click.option("--since", help="Start from this date")
 @click.option("--until", help="End at this date")
 @click.option("--reverse", "-r", is_flag=True, help="Show oldest first")
+@click.option("--recent", is_flag=True, help="Stream recently viewed notes")
+@click.option(
+    "--recently-modified", is_flag=True, help="Stream recently modified notes"
+)
+@click.option(
+    "--limit", "-l", default=50, help="Limit for --recent/--recently-modified"
+)
 def stream_notes(
     notebook: str | None,
     when: str | None,
     since: str | None,
     until: str | None,
     reverse: bool,
+    recent: bool,
+    recently_modified: bool,
+    limit: int,
 ) -> None:
     """Browse notes interactively in a streaming view.
 
@@ -348,6 +358,9 @@ def stream_notes(
       nb stream -w "last week"       # Last week's notes
       nb stream -w "this week"       # This week's notes
       nb stream -n daily -w "last 2 weeks"  # Daily notes from last 2 weeks
+      nb stream --recent             # Recently viewed notes
+      nb stream --recently-modified  # Recently modified notes
+      nb stream --recent -l 20       # Last 20 viewed notes
 
     """
     from datetime import date as date_type
@@ -358,6 +371,116 @@ def stream_notes(
     from nb.utils.dates import parse_date_range, parse_fuzzy_date
 
     config = get_config()
+
+    # Check for mutually exclusive options
+    if recent and recently_modified:
+        console.print("[red]Cannot use both --recent and --recently-modified[/red]")
+        raise SystemExit(1)
+
+    # Handle --recent (recently viewed) and --recently-modified modes
+    if recent or recently_modified:
+        from nb.core.notes import get_recently_modified_notes, get_recently_viewed_notes
+
+        if recent:
+            # Get recently viewed notes
+            view_data = get_recently_viewed_notes(limit=limit * 2, notebook=notebook)
+            if not view_data:
+                console.print("[yellow]No view history found.[/yellow]")
+                return
+
+            # Deduplicate by path, keeping first (most recent) occurrence
+            seen_paths: set[Path] = set()
+            unique_views = []
+            for path, viewed_at in view_data:
+                resolved = path.resolve()
+                if resolved not in seen_paths:
+                    seen_paths.add(resolved)
+                    unique_views.append((path, viewed_at))
+                    if len(unique_views) >= limit:
+                        break
+
+            # Convert to Note objects
+            notes = []
+            db = get_db()
+            for path, viewed_at in unique_views:
+                # Look up note info from database
+                rel_path = str(path.relative_to(config.notes_root))
+                row = db.fetchone(
+                    "SELECT title, date, notebook FROM notes WHERE path = ?",
+                    (rel_path,),
+                )
+                if row:
+                    note_date = None
+                    if row["date"]:
+                        try:
+                            note_date = date_type.fromisoformat(row["date"])
+                        except ValueError:
+                            pass
+                    notes.append(
+                        Note(
+                            path=Path(rel_path),
+                            title=row["title"] or "",
+                            date=note_date,
+                            tags=[],
+                            links=[],
+                            attachments=[],
+                            notebook=row["notebook"] or "",
+                            content_hash="",
+                        )
+                    )
+
+            if reverse:
+                notes = list(reversed(notes))
+
+        else:
+            # Get recently modified notes
+            mod_data = get_recently_modified_notes(limit=limit, notebook=notebook)
+            if not mod_data:
+                console.print("[yellow]No notes found.[/yellow]")
+                return
+
+            # Convert to Note objects
+            notes = []
+            db = get_db()
+            for path, mtime in mod_data:
+                # Look up note info from database
+                rel_path = str(path.relative_to(config.notes_root))
+                row = db.fetchone(
+                    "SELECT title, date, notebook FROM notes WHERE path = ?",
+                    (rel_path,),
+                )
+                if row:
+                    note_date = None
+                    if row["date"]:
+                        try:
+                            note_date = date_type.fromisoformat(row["date"])
+                        except ValueError:
+                            pass
+                    notes.append(
+                        Note(
+                            path=Path(rel_path),
+                            title=row["title"] or "",
+                            date=note_date,
+                            tags=[],
+                            links=[],
+                            attachments=[],
+                            notebook=row["notebook"] or "",
+                            content_hash="",
+                        )
+                    )
+
+            if reverse:
+                notes = list(reversed(notes))
+
+        if not notes:
+            console.print("[yellow]No notes found.[/yellow]")
+            return
+
+        console.print(f"[dim]Loading {len(notes)} notes...[/dim]")
+        run_note_stream(notes, config.notes_root)
+        return
+
+    # Standard date-based query
     db = get_db()
 
     # Build query

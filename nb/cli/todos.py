@@ -214,13 +214,18 @@ def todo(
 
         # Resolve notebooks with fuzzy matching if they don't exist
         from nb.cli.utils import resolve_notebook
+        from nb.utils.fuzzy import UserCancelled
 
         effective_notebooks: list[str] = []
         for nb_name in notebook:
             if config.get_notebook(nb_name):
                 effective_notebooks.append(nb_name)
             else:
-                resolved = resolve_notebook(nb_name)
+                try:
+                    resolved = resolve_notebook(nb_name)
+                except UserCancelled:
+                    console.print("[dim]Cancelled.[/dim]")
+                    raise SystemExit(1)
                 if resolved:
                     effective_notebooks.append(resolved)
                 else:
@@ -253,9 +258,13 @@ def todo(
                     else:
                         note_part = parts[1]
 
-            resolved_path, section = resolve_note_for_todo_filter(
-                note_part, notebook=nb_hint
-            )
+            try:
+                resolved_path, section = resolve_note_for_todo_filter(
+                    note_part, notebook=nb_hint
+                )
+            except UserCancelled:
+                console.print("[dim]Cancelled.[/dim]")
+                raise SystemExit(1)
             if resolved_path:
                 effective_notes.append(resolved_path)
             elif section:
@@ -1199,36 +1208,64 @@ def todo_add(text: str, add_today: bool, target_note: str | None) -> None:
             note_ref = target_note
             section = None
 
-        # Extract notebook if specified (notebook/note format)
-        notebook = None
-        if "/" in note_ref:
-            parts = note_ref.split("/", 1)
-            notebook = parts[0]
-            note_name = parts[1]
-        else:
-            note_name = note_ref
+        # Use resolve_note_ref which handles:
+        # - Note aliases (from 'nb alias')
+        # - Linked note aliases in notebook context (from 'nb link')
+        # - notebook/note format parsing
+        # - Date-based notebooks
+        # - Fuzzy matching
+        from nb.cli.utils import resolve_note_ref
+        from nb.utils.fuzzy import UserCancelled
 
-        # Check for note alias first
-        from nb.core.aliases import get_note_by_alias
-
-        resolved_path = get_note_by_alias(note_name)
-        if resolved_path and resolved_path.exists():
-            pass  # Found via alias
-        else:
-            # Resolve note with fuzzy matching
-            from nb.cli.utils import resolve_note
-
-            resolved_path = resolve_note(note_name, notebook=notebook)
+        try:
+            resolved_path = resolve_note_ref(note_ref, ensure_exists=True)
+        except UserCancelled:
+            console.print("[dim]Cancelled.[/dim]")
+            raise SystemExit(1)
 
         if not resolved_path:
             console.print(f"[red]Note not found: {note_ref}[/red]")
             raise SystemExit(1)
 
+        # If section specified, check for ambiguous matches
+        if section:
+            from nb.core.todos import find_matching_sections
+            from rich.prompt import Prompt
+
+            matches = find_matching_sections(resolved_path, section)
+
+            if len(matches) > 1:
+                # Multiple matches - prompt user to choose
+                console.print(f"[yellow]Multiple sections match '{section}':[/yellow]")
+                for i, (_, name) in enumerate(matches, 1):
+                    console.print(f"  [cyan]{i}[/cyan]. {name}")
+                console.print(
+                    f"  [cyan]{len(matches) + 1}[/cyan]. Create new section '{section}'"
+                )
+                console.print("  [dim]0[/dim]. Cancel")
+
+                choice = Prompt.ask(
+                    "Select",
+                    choices=[str(i) for i in range(len(matches) + 2)],
+                    default="1",
+                )
+
+                if choice == "0":
+                    console.print("[dim]Cancelled.[/dim]")
+                    raise SystemExit(1)
+                elif int(choice) == len(matches) + 1:
+                    # User wants to create a new section
+                    pass  # Keep original section name
+                else:
+                    # Use the selected section name
+                    section = matches[int(choice) - 1][1]
+
         try:
             t = add_todo_to_note(text, resolved_path, section=section)
-            if section:
+            if t.section:
+                # Use t.section which has the actual matched section name
                 console.print(
-                    f"[green]Added to {resolved_path.name}::{section}:[/green] {t.content}"
+                    f"[green]Added to {resolved_path.name}::{t.section}:[/green] {t.content}"
                 )
             else:
                 console.print(

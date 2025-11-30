@@ -68,5 +68,6 @@ fix = true
 # Relax rules for test files
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
-    "F841"
+    "F841",
+    "E741"
 ]

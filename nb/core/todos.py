@@ -478,6 +478,64 @@ def get_inbox_path(notes_root: Path | None = None) -> Path:
     return notes_root / "todo.md"
 
 
+def find_matching_sections(
+    note_path: Path,
+    section_query: str,
+) -> list[tuple[int, str]]:
+    """Find sections in a note that match the given query.
+
+    Args:
+        note_path: Path to the note file.
+        section_query: The section name to search for (supports partial matching).
+
+    Returns:
+        List of (line_index, section_name) tuples for matching sections.
+        Returns exact matches first, then partial prefix matches.
+
+    """
+    if not note_path.exists():
+        return []
+
+    content = note_path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+
+    section_lower = section_query.lower()
+    all_sections: list[tuple[int, str]] = []
+
+    for i, line in enumerate(lines):
+        # Check if this is a markdown heading
+        heading_match = HEADING_PATTERN.match(line)
+        if heading_match:
+            heading_text = heading_match.group("text").strip()
+            if heading_text:
+                all_sections.append((i, heading_text))
+            continue
+
+        # Also check for colon labels
+        stripped = line.strip()
+        if stripped and not stripped.startswith("-"):
+            colon_match = COLON_LABEL_PATTERN.match(stripped)
+            if colon_match:
+                label = colon_match.group("text").strip()
+                if label:
+                    all_sections.append((i, label))
+
+    # First check for exact matches (case-insensitive)
+    exact_matches = [
+        (idx, name) for idx, name in all_sections if name.lower() == section_lower
+    ]
+    if exact_matches:
+        return exact_matches
+
+    # Check for partial prefix matches (case-insensitive)
+    partial_matches = [
+        (idx, name)
+        for idx, name in all_sections
+        if name.lower().startswith(section_lower)
+    ]
+    return partial_matches
+
+
 def add_todo_to_note(
     text: str,
     note_path: Path,
@@ -514,22 +572,23 @@ def add_todo_to_note(
 
     # Determine where to insert the todo
     if section:
-        # Find the section heading (case-insensitive)
+        # Find the section heading (case-insensitive, supports partial matching)
         section_lower = section.lower()
         section_line_idx = None
         next_heading_idx = None
+        matched_section_name = section  # Track actual matched section name
+
+        # Collect all section headings with their line indices
+        all_sections: list[tuple[int, str]] = []  # (line_idx, section_name)
 
         for i, line in enumerate(lines):
             # Check if this is a markdown heading
             heading_match = HEADING_PATTERN.match(line)
             if heading_match:
                 heading_text = heading_match.group("text").strip()
-                if heading_text.lower() == section_lower:
-                    section_line_idx = i
-                elif section_line_idx is not None and next_heading_idx is None:
-                    # Found the next heading after our section
-                    next_heading_idx = i
-                    break
+                if heading_text:
+                    all_sections.append((i, heading_text))
+                continue
 
             # Also check for colon labels
             stripped = line.strip()
@@ -537,11 +596,38 @@ def add_todo_to_note(
                 colon_match = COLON_LABEL_PATTERN.match(stripped)
                 if colon_match:
                     label = colon_match.group("text").strip()
-                    if label.lower() == section_lower:
-                        section_line_idx = i
-                    elif section_line_idx is not None and next_heading_idx is None:
-                        next_heading_idx = i
-                        break
+                    if label:
+                        all_sections.append((i, label))
+
+        # First try exact match (case-insensitive)
+        for idx, name in all_sections:
+            if name.lower() == section_lower:
+                section_line_idx = idx
+                matched_section_name = name
+                break
+
+        # If no exact match, try partial prefix match (case-insensitive)
+        if section_line_idx is None:
+            partial_matches = [
+                (idx, name)
+                for idx, name in all_sections
+                if name.lower().startswith(section_lower)
+            ]
+            if len(partial_matches) == 1:
+                # Single partial match - use it
+                section_line_idx, matched_section_name = partial_matches[0]
+            elif len(partial_matches) > 1:
+                # Multiple partial matches - use the first one but could warn
+                section_line_idx, matched_section_name = partial_matches[0]
+
+        # Find the next heading after our matched section
+        if section_line_idx is not None:
+            for idx, name in all_sections:
+                if idx > section_line_idx:
+                    next_heading_idx = idx
+                    break
+            # Update section to the actual matched name for the return value
+            section = matched_section_name
 
         if section_line_idx is not None:
             # Insert after the section heading, before the next heading

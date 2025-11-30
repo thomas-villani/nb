@@ -372,6 +372,54 @@ def get_recently_viewed_notes(
     return result
 
 
+def get_recently_modified_notes(
+    limit: int = 20,
+    notebook: str | None = None,
+    notes_root: Path | None = None,
+) -> list[tuple[Path, datetime]]:
+    """Get recently modified notes with timestamps.
+
+    Args:
+        limit: Maximum number of entries to return
+        notebook: Filter by notebook name
+        notes_root: Override notes root directory
+
+    Returns:
+        List of (path, mtime) tuples, most recent first.
+
+    """
+    from nb.index.db import get_db
+
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    db = get_db()
+
+    if notebook:
+        rows = db.fetchall(
+            """
+            SELECT path, mtime FROM notes
+            WHERE notebook = ? AND mtime IS NOT NULL
+            ORDER BY mtime DESC LIMIT ?
+            """,
+            (notebook, limit),
+        )
+    else:
+        rows = db.fetchall(
+            "SELECT path, mtime FROM notes WHERE mtime IS NOT NULL ORDER BY mtime DESC LIMIT ?",
+            (limit,),
+        )
+
+    result = []
+    for row in rows:
+        path = notes_root / row["path"]
+        # mtime is stored as Unix timestamp (REAL)
+        mtime = datetime.fromtimestamp(row["mtime"])
+        result.append((path, mtime))
+
+    return result
+
+
 def record_note_view(path: Path, notes_root: Path | None = None) -> None:
     """Record that a note was viewed.
 

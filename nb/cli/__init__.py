@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import sys
 
+# Ensure stdout handles Unicode when piped (e.g., `nb show today | more`)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 import click
 
 from nb import __version__

@@ -5,6 +5,12 @@ from __future__ import annotations
 import difflib
 
 
+class UserCancelled(Exception):
+    """Raised when user cancels an interactive selection."""
+
+    pass
+
+
 def get_fuzzy_matches(
     query: str,
     candidates: list[str],
@@ -84,7 +90,62 @@ def prompt_fuzzy_selection(
     )
 
     if choice == "0":
+        raise UserCancelled()
+
+    return matches[int(choice) - 1]
+
+
+def prompt_fuzzy_selection_with_context(
+    query: str,
+    candidates: list[str],
+    context_map: dict[str, str],
+    item_type: str = "item",
+) -> str | None:
+    """Interactively prompt user to select from fuzzy matches with context display.
+
+    Unlike prompt_fuzzy_selection, this version displays a context string for each
+    candidate, allowing for richer display (e.g., showing notebook/note paths
+    with formatting).
+
+    Args:
+        query: The original query that didn't match.
+        candidates: List of all valid candidate keys.
+        context_map: Mapping from candidate keys to display strings (can include
+            Rich markup for formatting).
+        item_type: Type of item for display (e.g., "notebook", "note").
+
+    Returns:
+        Selected candidate key, or None if user cancels.
+
+    """
+    from rich.console import Console
+    from rich.prompt import Prompt
+
+    console = Console()
+
+    matches = get_fuzzy_matches(query, candidates)
+
+    if not matches:
+        console.print(f"[red]No {item_type} found matching '{query}'[/red]")
         return None
+
+    console.print(f"[yellow]No exact match for '{query}'. Did you mean:[/yellow]")
+
+    for i, match in enumerate(matches, 1):
+        # Use context display if available, otherwise use the match key
+        display = context_map.get(match, match)
+        console.print(f"  [cyan]{i}[/cyan]. {display}")
+
+    console.print("  [dim]0[/dim]. Cancel")
+
+    choice = Prompt.ask(
+        "Select",
+        choices=[str(i) for i in range(len(matches) + 1)],
+        default="1",
+    )
+
+    if choice == "0":
+        raise UserCancelled()
 
     return matches[int(choice) - 1]
 

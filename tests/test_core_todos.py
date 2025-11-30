@@ -13,6 +13,7 @@ from nb.core.todos import (
     TAG_PATTERN,
     TODO_PATTERN,
     add_todo_to_inbox,
+    add_todo_to_note,
     clean_todo_content,
     extract_todos,
     get_inbox_path,
@@ -791,3 +792,147 @@ Evening:
         assert todos[0].section == "Setup"
         assert todos[1].section == "Setup"
         assert todos[2].section == "Setup"
+
+
+class TestAddTodoToNote:
+    """Tests for add_todo_to_note function."""
+
+    def test_add_todo_to_note_no_section(self, mock_config, create_note):
+        """Test adding a todo to a note without specifying a section."""
+        content = """\
+# Project Notes
+
+Some content here.
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        todo = add_todo_to_note("New task", note_path)
+
+        assert todo.content == "New task"
+        new_content = note_path.read_text()
+        assert "- [ ] New task" in new_content
+
+    def test_add_todo_exact_section_match(self, mock_config, create_note):
+        """Test adding a todo to an exact section match."""
+        content = """\
+# Project Notes
+
+## Tasks
+
+- [ ] Existing task
+
+## Notes
+
+Some notes here.
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        todo = add_todo_to_note("New task", note_path, section="Tasks")
+
+        assert todo.section == "Tasks"
+        new_content = note_path.read_text()
+        # The new task should be under Tasks section
+        lines = new_content.splitlines()
+        tasks_idx = next(i for i, l in enumerate(lines) if "## Tasks" in l)
+        notes_idx = next(i for i, l in enumerate(lines) if "## Notes" in l)
+        new_task_idx = next(i for i, l in enumerate(lines) if "New task" in l)
+        assert tasks_idx < new_task_idx < notes_idx
+
+    def test_add_todo_partial_section_match(self, mock_config, create_note):
+        """Test adding a todo with partial section name matching."""
+        content = """\
+# Daily Note
+
+## Morning Tasks
+
+- [ ] Wake up early
+
+## Evening Tasks
+
+- [ ] Review day
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        # Use partial name "Morning" instead of full "Morning Tasks"
+        todo = add_todo_to_note("Exercise", note_path, section="Morning")
+
+        # Should match "Morning Tasks" and return the full section name
+        assert todo.section == "Morning Tasks"
+        new_content = note_path.read_text()
+        # The new task should be under Morning Tasks section
+        lines = new_content.splitlines()
+        morning_idx = next(i for i, l in enumerate(lines) if "## Morning Tasks" in l)
+        evening_idx = next(i for i, l in enumerate(lines) if "## Evening Tasks" in l)
+        new_task_idx = next(i for i, l in enumerate(lines) if "Exercise" in l)
+        assert morning_idx < new_task_idx < evening_idx
+
+    def test_add_todo_partial_section_match_case_insensitive(
+        self, mock_config, create_note
+    ):
+        """Test partial section matching is case-insensitive."""
+        content = """\
+# Notes
+
+## Development Tasks
+
+- [ ] Write code
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        # Use lowercase partial name
+        todo = add_todo_to_note("Review PR", note_path, section="dev")
+
+        assert todo.section == "Development Tasks"
+
+    def test_add_todo_creates_new_section_if_no_match(self, mock_config, create_note):
+        """Test that a new section is created if no match found."""
+        content = """\
+# Notes
+
+## Existing Section
+
+- [ ] Existing task
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        todo = add_todo_to_note("New task", note_path, section="New Section")
+
+        assert todo.section == "New Section"
+        new_content = note_path.read_text()
+        assert "## New Section" in new_content
+        assert "- [ ] New task" in new_content
+
+    def test_add_todo_colon_label_section(self, mock_config, create_note):
+        """Test adding a todo to a colon-style section label."""
+        content = """\
+# Daily Note
+
+Morning:
+- [ ] Check emails
+
+Afternoon:
+- [ ] Meetings
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        todo = add_todo_to_note("Exercise", note_path, section="Morning")
+
+        assert todo.section == "Morning"
+
+    def test_add_todo_partial_colon_label_match(self, mock_config, create_note):
+        """Test partial matching for colon-style labels."""
+        content = """\
+# Daily Note
+
+Morning Tasks:
+- [ ] Check emails
+
+Afternoon Tasks:
+- [ ] Meetings
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        # Use partial name
+        todo = add_todo_to_note("Exercise", note_path, section="Morn")
+
+        assert todo.section == "Morning Tasks"

@@ -15,6 +15,7 @@ from nb.cli.utils import (
     resolve_note_ref,
 )
 from nb.config import get_config
+from nb.utils.fuzzy import UserCancelled
 from nb.core.notes import (
     create_note,
     ensure_daily_note,
@@ -123,30 +124,37 @@ def last_note(show: bool, notebook: str | None, viewed: bool) -> None:
 
 @click.command("history")
 @click.option("--limit", "-l", default=10, help="Number of entries to show")
+@click.option("--offset", "-o", default=0, help="Skip first N entries")
 @click.option("--notebook", "-n", help="Filter by notebook")
 @click.option(
     "--full-path", "-f", is_flag=True, help="Show full paths instead of filenames"
 )
-def history_cmd(limit: int, notebook: str | None, full_path: bool) -> None:
+@click.option("--group", "-g", is_flag=True, help="Group entries by notebook")
+def history_cmd(
+    limit: int, offset: int, notebook: str | None, full_path: bool, group: bool
+) -> None:
     """Show recently viewed notes.
 
-    Displays a list of notes you've recently opened, grouped by notebook
-    with color coding and timestamps.
+    Displays a list of notes you've recently opened with timestamps.
+    Use --group to organize entries by notebook.
 
     \b
     Examples:
-      nb history             # Show last 10 viewed notes
+      nb history             # Show last 10 viewed notes (interleaved)
       nb history -l 50       # Show last 50 viewed notes
+      nb history -o 10       # Skip first 10, show next 10
       nb history -n work     # Show recently viewed notes in 'work' notebook
       nb history -f          # Show full paths instead of filenames
+      nb history -g          # Group entries by notebook
     """
     from collections import defaultdict
 
     from nb.core.links import list_linked_notes
     from nb.core.notes import get_recently_viewed_notes
 
-    # Request more views than limit to account for deduplication
-    views = get_recently_viewed_notes(limit=limit * 3, notebook=notebook)
+    # Request more views than limit+offset to account for deduplication
+    # Use higher multiplier since notes can be viewed many times
+    views = get_recently_viewed_notes(limit=(limit + offset) * 10, notebook=notebook)
 
     if not views:
         console.print("[dim]No view history found.[/dim]")
@@ -177,17 +185,19 @@ def history_cmd(limit: int, notebook: str | None, full_path: bool) -> None:
             seen_paths[resolved] = ([viewed_at], 1)
             unique_views.append((path, [viewed_at], 1))
 
-    # Update counts in unique_views
+    # Update counts in unique_views and apply offset/limit
     final_views = []
-    for path, timestamps, _ in unique_views:
+    for i, (path, timestamps, _) in enumerate(unique_views):
+        if i < offset:
+            continue
         resolved = path.resolve()
         _, count = seen_paths[resolved]
         final_views.append((path, timestamps, count))
         if len(final_views) >= limit:
             break
 
-    # Group views by notebook
-    views_by_notebook: dict[str, list] = defaultdict(list)
+    # Resolve notebook info for each view
+    resolved_views = []
     for path, timestamps, view_count in final_views:
         # Determine notebook - check linked notes first for external paths
         try:
@@ -221,33 +231,82 @@ def history_cmd(limit: int, notebook: str | None, full_path: bool) -> None:
                     except ValueError:
                         continue
 
-        views_by_notebook[nb_name].append(
-            (path, rel_path, timestamps, view_count, linked_alias)
+        resolved_views.append(
+            (path, rel_path, timestamps, view_count, linked_alias, nb_name)
         )
 
-    # Sort notebooks alphabetically (empty string last, @external last)
-    sorted_notebooks = sorted(
-        views_by_notebook.keys(),
-        key=lambda x: (x == "@external", x == "", x.lower()),
-    )
+    if group:
+        # Group by notebook (old behavior)
+        views_by_notebook: dict[str, list] = defaultdict(list)
+        for (
+            path,
+            rel_path,
+            timestamps,
+            view_count,
+            linked_alias,
+            nb_name,
+        ) in resolved_views:
+            views_by_notebook[nb_name].append(
+                (path, rel_path, timestamps, view_count, linked_alias)
+            )
 
-    for nb_name in sorted_notebooks:
-        nb_views = views_by_notebook[nb_name]
+        # Sort notebooks alphabetically (empty string last, @external last)
+        sorted_notebooks = sorted(
+            views_by_notebook.keys(),
+            key=lambda x: (x == "@external", x == "", x.lower()),
+        )
 
-        # Get notebook display info (color and icon)
-        if nb_name and nb_name != "@external":
-            color, icon = get_notebook_display_info(nb_name)
-            icon_prefix = f"{icon} " if icon else ""
-            console.print(f"[bold {color}]{icon_prefix}{nb_name}[/bold {color}]")
-        elif nb_name == "@external":
-            console.print("[bold dim]@external[/bold dim]")
-        else:
-            console.print("[bold dim](root)[/bold dim]")
+        for nb_name in sorted_notebooks:
+            nb_views = views_by_notebook[nb_name]
 
-        # Sort views by most recent timestamp within each notebook
-        nb_views.sort(key=lambda x: x[2][0], reverse=True)
+            # Get notebook display info (color and icon)
+            if nb_name and nb_name != "@external":
+                color, icon = get_notebook_display_info(nb_name)
+                icon_prefix = f"{icon} " if icon else ""
+                console.print(f"[bold {color}]{icon_prefix}{nb_name}[/bold {color}]")
+            elif nb_name == "@external":
+                console.print("[bold dim]@external[/bold dim]")
+            else:
+                console.print("[bold dim](root)[/bold dim]")
 
-        for abs_path, rel_path, timestamps, view_count, linked_alias in nb_views:
+            # Sort views by most recent timestamp within each notebook
+            nb_views.sort(key=lambda x: x[2][0], reverse=True)
+
+            for abs_path, rel_path, timestamps, view_count, linked_alias in nb_views:
+                # Format the timestamp (use most recent)
+                time_str = timestamps[0].strftime("%Y-%m-%d %H:%M")
+
+                # Determine display path
+                if full_path:
+                    display_path = str(rel_path)
+                else:
+                    display_path = rel_path.name
+
+                # Show count if viewed multiple times
+                count_str = ""
+                if view_count > 1:
+                    count_str = f" [dim](+{view_count - 1})[/dim]"
+
+                # Show linked alias if applicable
+                alias_str = ""
+                if linked_alias:
+                    alias_str = f" [dim](@{linked_alias})[/dim]"
+
+                console.print(
+                    f"  [dim]{time_str}[/dim]  {display_path}{alias_str}{count_str}"
+                )
+
+            console.print()  # Blank line between notebooks
+    else:
+        # Interleaved display (new default) - sorted by most recent first
+        for (
+            path,
+            rel_path,
+            timestamps,
+            view_count,
+            linked_alias,
+            nb_name,
+        ) in resolved_views:
             # Format the timestamp (use most recent)
             time_str = timestamps[0].strftime("%Y-%m-%d %H:%M")
 
@@ -267,11 +326,19 @@ def history_cmd(limit: int, notebook: str | None, full_path: bool) -> None:
             if linked_alias:
                 alias_str = f" [dim](@{linked_alias})[/dim]"
 
-            console.print(
-                f"  [dim]{time_str}[/dim]  {display_path}{alias_str}{count_str}"
-            )
+            # Get notebook display info (color and icon)
+            if nb_name and nb_name != "@external":
+                color, icon = get_notebook_display_info(nb_name)
+                icon_prefix = f"{icon} " if icon else ""
+                nb_display = f"[{color}]{icon_prefix}{nb_name}[/{color}]"
+            elif nb_name == "@external":
+                nb_display = "[dim]@external[/dim]"
+            else:
+                nb_display = "[dim](root)[/dim]"
 
-        console.print()  # Blank line between notebooks
+            console.print(
+                f"[dim]{time_str}[/dim]  {nb_display}  {display_path}{alias_str}{count_str}"
+            )
 
 
 @click.command("open")
@@ -303,7 +370,12 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
     """
     show = ctx.obj and ctx.obj.get("show")
 
-    path = resolve_note_ref(note_ref, notebook=notebook, create_if_date_based=True)
+    try:
+        path = resolve_note_ref(note_ref, notebook=notebook, create_if_date_based=True)
+    except UserCancelled:
+        console.print("[dim]Cancelled.[/dim]")
+        raise SystemExit(1)
+
     if not path:
         console.print(f"[red]Could not resolve note: {note_ref}[/red]")
         raise SystemExit(1)
@@ -340,7 +412,12 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
     if note_ref is None:
         note_ref = "today"
 
-    path = resolve_note_ref(note_ref, notebook=notebook, create_if_date_based=True)
+    try:
+        path = resolve_note_ref(note_ref, notebook=notebook, create_if_date_based=True)
+    except UserCancelled:
+        console.print("[dim]Cancelled.[/dim]")
+        raise SystemExit(1)
+
     if not path:
         console.print(f"[red]Could not resolve note: {note_ref}[/red]")
         raise SystemExit(1)

@@ -77,10 +77,13 @@ todo_exclude: true
 - [x] Add a flag (--full) for `nb list` to show full paths
 - [x] Review code, check for DRY refactor opportunities and bugs
 - [x] Address code review comments
-- [ ] Enhance `nb stream` to allow streaming recently viewed or recently modified notes
+- [x] Enhance `nb stream` to allow streaming recently viewed or recently modified notes
 - [x] `nb history` shows linked notes under "@external" rather than in the notebook they're linked to
     Shows same file multiple times (should condense to one line with "+4" or something) 
-- [ ] Make `nb history` not group by notebook by default, instead have the notebook source colored in the same line as the history line. Allow grouping with a `--group` flag
+- [x] Make `nb history` not group by notebook by default, instead have the notebook source colored in the same line as the history line. Allow grouping with a `--group` flag
+- [ ] If parent todo completed, auto complete child todos
+- [ ] What else should be configurable?
+- [ ] Must reindex file after 'nb todo add --note'
 
 ### Phase 5: Advanced TUI
 - [ ] Full Wijjit-based todo list view with richer interactions
@@ -98,11 +101,11 @@ todo_exclude: true
 - [ ] Performance optimization for large note collections
 - [ ] Better error messages and user feedback
 - [ ] Documentation site with examples
-- [ ] Refactor: Remove legacy config-based linked_todos/linked_notes storage
+- [x] Refactor: Remove legacy config-based linked_todos/linked_notes storage
   - [x] Remove from DEFAULT_CONFIG_YAML template and parse/save functions
-  - [ ] Remove `linked_todos` and `linked_notes` fields from Config dataclass
-  - [ ] Remove `save_to_config` branches in links.py (add/remove functions)
-  - [ ] Simplify `list_linked_files()` and `list_linked_notes()` to DB-only
+  - [x] Remove `linked_todos` and `linked_notes` fields from Config dataclass
+  - [x] Remove `save_to_config` branches in links.py (add/remove functions)
+  - [x] Simplify `list_linked_files()` and `list_linked_notes()` to DB-only
 
 
 ### Phase 6: Future Enhancements
@@ -116,6 +119,7 @@ todo_exclude: true
 - [ ] Would it be possible to integrate more directly into the email/calendar/outlook contacts? Is there any benefit?
 - [ ] Web viewer - this would be easy with the all2md library.
 - [ ] How do we make it available via the cloud?
+- [ ] Add '@startby'
 
 ---
 

@@ -219,7 +219,7 @@ def resolve_note(
     """
     from nb.core.notebooks import get_notebook_notes_with_linked
     from nb.core.notes import list_notes
-    from nb.utils.fuzzy import resolve_with_fuzzy
+    from nb.utils.fuzzy import prompt_fuzzy_selection_with_context, resolve_with_fuzzy
 
     config = get_config()
 
@@ -239,21 +239,43 @@ def resolve_note(
     # Build a mapping from display names to paths
     # Use stem (filename without extension) as the display name
     name_to_path: dict[str, Path] = {}
+    # Also build a context mapping for better display in fuzzy selection
+    name_to_context: dict[str, str] = {}
+
     for note_path in note_paths:
         # Use the stem as the primary lookup key
         stem = note_path.stem
-        if stem not in name_to_path:
-            name_to_path[stem] = note_path
 
-        # Also add notebook/stem for disambiguation
+        # Determine notebook context for this note
+        note_notebook = None
         try:
             rel = note_path.relative_to(config.notes_root)
             if len(rel.parts) > 1:
-                full_ref = f"{rel.parts[0]}/{stem}"
-                if full_ref not in name_to_path:
-                    name_to_path[full_ref] = note_path
+                note_notebook = rel.parts[0]
         except ValueError:
             pass
+
+        if stem not in name_to_path:
+            name_to_path[stem] = note_path
+            # Store context showing the full notebook/note path
+            if note_notebook:
+                name_to_context[stem] = f"[dim]{note_notebook}/[/dim]{stem}"
+            else:
+                name_to_context[stem] = stem
+        else:
+            # Stem already exists, add with full path to disambiguate
+            if note_notebook:
+                full_ref = f"{note_notebook}/{stem}"
+                if full_ref not in name_to_path:
+                    name_to_path[full_ref] = note_path
+                    name_to_context[full_ref] = f"[dim]{note_notebook}/[/dim]{stem}"
+
+        # Also add notebook/stem for direct lookup
+        if note_notebook:
+            full_ref = f"{note_notebook}/{stem}"
+            if full_ref not in name_to_path:
+                name_to_path[full_ref] = note_path
+                name_to_context[full_ref] = f"[dim]{note_notebook}/[/dim]{stem}"
 
     # Try exact match first (case-insensitive)
     note_ref_lower = note_ref.lower()
@@ -261,13 +283,21 @@ def resolve_note(
         if name.lower() == note_ref_lower:
             return path
 
-    # Try fuzzy matching
-    resolved_name = resolve_with_fuzzy(
-        note_ref,
-        list(name_to_path.keys()),
-        item_type="note",
-        interactive=interactive,
-    )
+    # Try fuzzy matching with context display
+    if interactive:
+        resolved_name = prompt_fuzzy_selection_with_context(
+            note_ref,
+            list(name_to_path.keys()),
+            name_to_context,
+            item_type="note",
+        )
+    else:
+        resolved_name = resolve_with_fuzzy(
+            note_ref,
+            list(name_to_path.keys()),
+            item_type="note",
+            interactive=False,
+        )
 
     if resolved_name:
         return name_to_path.get(resolved_name)
