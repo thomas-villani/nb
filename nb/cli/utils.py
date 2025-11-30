@@ -118,23 +118,28 @@ def resolve_notebook(name: str, interactive: bool = True) -> str | None:
 def resolve_note_for_todo_filter(
     note_ref: str,
     notebook: str | None = None,
-) -> str | None:
+) -> tuple[str | None, str | None]:
     """Resolve a note reference for todo filtering.
 
     This handles:
     - Linked note aliases (e.g., "nbtodo" resolves to the linked file path)
     - Linked todo aliases (e.g., "mytodos" for linked todo files)
     - Regular notes (e.g., "notebook/note-name" or just "note-name")
+    - Section syntax (e.g., "note::Section" or "notebook/note::Section")
 
     Args:
         note_ref: The note reference (name, path, or linked alias).
+            Can include ::section for section filtering.
         notebook: Optional notebook to narrow search.
 
     Returns:
-        A path string suitable for use in query_todos notes filter,
-        or None if not found.
+        Tuple of (path_pattern, section_pattern) where:
+        - path_pattern is suitable for use in query_todos notes filter
+        - section_pattern is the section to filter by (partial match)
+        Either or both may be None if not found/specified.
 
     """
+    from nb.core.aliases import get_note_by_alias
     from nb.core.links import (
         get_linked_file,
         get_linked_note,
@@ -144,24 +149,38 @@ def resolve_note_for_todo_filter(
 
     config = get_config()
 
+    # Parse section from note_ref (e.g., "notebook/note::Section")
+    section_pattern = None
+    if "::" in note_ref:
+        note_ref, section_pattern = note_ref.rsplit("::", 1)
+
     # Strip @ prefix if present
     check_ref = note_ref[1:] if note_ref.startswith("@") else note_ref
+
+    # Check if it matches a note alias (from nb alias command)
+    alias_path = get_note_by_alias(check_ref)
+    if alias_path and alias_path.exists():
+        try:
+            rel_path = alias_path.relative_to(config.notes_root)
+            return (normalize_path(rel_path), section_pattern)
+        except ValueError:
+            return (normalize_path(alias_path), section_pattern)
 
     # If notebook specified, check for linked note in that notebook first
     if notebook:
         linked = get_linked_note_in_notebook(notebook, check_ref)
         if linked:
-            return normalize_path(linked.path)
+            return (normalize_path(linked.path), section_pattern)
 
     # Check if it matches a linked note alias (from config or DB)
     linked_note = get_linked_note(check_ref)
     if linked_note:
-        return normalize_path(linked_note.path)
+        return (normalize_path(linked_note.path), section_pattern)
 
     # Also check linked todo files (from config or DB)
     linked_file = get_linked_file(check_ref)
     if linked_file:
-        return normalize_path(linked_file.path)
+        return (normalize_path(linked_file.path), section_pattern)
 
     # Try to resolve as a regular note (only if no @ prefix)
     if not note_ref.startswith("@"):
@@ -170,12 +189,12 @@ def resolve_note_for_todo_filter(
             # Return the path relative to notes_root for LIKE matching
             try:
                 rel_path = resolved_path.relative_to(config.notes_root)
-                return normalize_path(rel_path)
+                return (normalize_path(rel_path), section_pattern)
             except ValueError:
                 # External path, return full normalized path
-                return normalize_path(resolved_path)
+                return (normalize_path(resolved_path), section_pattern)
 
-    return None
+    return (None, section_pattern)
 
 
 def resolve_note(

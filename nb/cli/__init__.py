@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import click
 
 from nb import __version__
@@ -17,7 +19,57 @@ from nb.cli.todos import register_todo_commands
 from nb.cli.utils import ensure_setup
 
 
-@click.group(invoke_without_command=True)
+class AliasedGroup(click.Group):
+    """Click group that supports command aliases with proper flag passthrough."""
+
+    ALIASES = {
+        "t": "today",
+        "y": "yesterday",
+        "l": "last",
+        "o": "open",
+        "s": "search",
+        "nbs": "notebooks",
+        "td": "todo",
+    }
+
+    # Special aliases that need argument injection
+    SPECIAL_ALIASES = {
+        "ss": ("search", ["--semantic"]),  # ss -> search --semantic
+        "ta": ("todo", ["add"]),  # ta -> todo add
+    }
+
+    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
+        # Try original command first
+        rv = super().get_command(ctx, cmd_name)
+        if rv is not None:
+            return rv
+
+        # Check simple aliases
+        if cmd_name in self.ALIASES:
+            return super().get_command(ctx, self.ALIASES[cmd_name])
+
+        # Check special aliases (they'll be handled in resolve_command)
+        if cmd_name in self.SPECIAL_ALIASES:
+            target_cmd = self.SPECIAL_ALIASES[cmd_name][0]
+            return super().get_command(ctx, target_cmd)
+
+        return None
+
+    def resolve_command(
+        self, ctx: click.Context, args: list[str]
+    ) -> tuple[str | None, click.Command | None, list[str]]:
+        # Handle special aliases that inject arguments
+        if args:
+            cmd_name = args[0]
+            if cmd_name in self.SPECIAL_ALIASES:
+                target_cmd, inject_args = self.SPECIAL_ALIASES[cmd_name]
+                # Replace alias with target command and inject args
+                args = [target_cmd] + inject_args + args[1:]
+
+        return super().resolve_command(ctx, args)
+
+
+@click.group(cls=AliasedGroup, invoke_without_command=True)
 @click.version_option(version=__version__, prog_name="nb")
 @click.option(
     "-s", "--show", is_flag=True, help="Print note to console instead of opening editor"
@@ -57,4 +109,13 @@ def main() -> None:
         cli()
 
 
-__all__ = ["cli", "main"]
+def main_todo() -> None:
+    """Entry point for nbt (nb todo alias).
+
+    Injects 'todo' as the first argument so all nb todo flags work.
+    """
+    sys.argv = [sys.argv[0], "todo"] + sys.argv[1:]
+    main()
+
+
+__all__ = ["cli", "main", "main_todo"]

@@ -23,6 +23,7 @@ dependencies = [
 ]
 [project.scripts]
 nb = "nb.cli:main"
+nbt = "nb.cli:main_todo"
 
 [project.optional-dependencies]
 dev = [

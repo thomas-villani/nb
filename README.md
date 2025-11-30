@@ -70,11 +70,13 @@ nb yesterday              # Open yesterday's note
 
 nb open "nov 25"          # Open note for a specific date
 nb open "last friday"     # Fuzzy date parsing
+nb open myalias           # Open note by alias (created with nb alias)
 nb open friday -n work    # Open Friday's note in work notebook
 nb open myproject -n ideas  # Open ideas/myproject.md
 
 nb show                   # Show today's note in console
 nb show friday            # Show Friday's daily note
+nb show myalias           # Show note by alias
 nb show -n work           # Show today in work notebook
 nb show friday -n work    # Show Friday in work notebook
 nb show myproject -n ideas  # Show ideas/myproject.md
@@ -180,6 +182,28 @@ notebooks:
     template: meeting   # Auto-use .nb/templates/meeting.md
 ```
 
+### Note Aliases
+
+Create short aliases for frequently accessed notes:
+
+```bash
+nb alias readme projects/README     # Create alias for a note
+nb alias standup daily/2025-11-29   # Alias for a specific daily note
+nb alias meeting work/meeting-notes # Alias within a notebook
+
+nb aliases                          # List all aliases
+nb unalias readme                   # Remove an alias
+```
+
+Aliases work with `open`, `show`, and todo filtering:
+
+```bash
+nb open readme             # Open aliased note
+nb open daily/readme       # Also works with notebook/alias format
+nb show readme             # Show aliased note in console
+nb todo --note readme      # Filter todos by aliased note
+```
+
 ### Notebook Management
 
 ```bash
@@ -232,6 +256,8 @@ nb todo -n daily        # Show todos from a specific notebook
 nb todo -n daily -n work  # Filter by multiple notebooks
 nb todo --note projects/myproject  # Filter by specific note
 nb todo --note nbtodo              # Filter by linked note alias
+nb todo --note readme              # Filter by note alias
+nb todo --note work/project::Tasks # Filter by section within note
 nb todo --note a --note b          # Filter by multiple notes
 nb todo --overdue       # Show overdue todos only
 nb todo -t work         # Filter by tag
@@ -292,7 +318,7 @@ Todos can be hidden from `nb todo` at three levels:
 - **Note-level**: Set `todo_exclude: true` in note frontmatter
 - **Linked note-level**: Use `--todo-exclude` when linking or `nb link exclude-todos`
 
-Use `-a/--all` to include all todos, or `-n <notebook>` to view a specific notebook.
+Use `-a/--all` to include all todos, `-n <notebook>` to view a specific notebook, or `--note` to view a specific note (bypasses exclusion filters).
 
 #### Interactive Mode
 
@@ -678,7 +704,7 @@ Reviewed the roadmap and assigned initial tasks.
 @attach: https://wiki.company.com/project-alpha
 ```
 
-## Aliases
+## Command Aliases
 
 | Alias | Command |
 |-------|---------|
@@ -691,6 +717,15 @@ Reviewed the roadmap and assigned initial tasks.
 | `td` | `todo` |
 | `ta` | `todo add` (supports `--today`, `--note`/`-N`) |
 | `nbs` | `notebooks` |
+| `nbt` | Standalone command equivalent to `nb todo` |
+
+The `nbt` command is a separate executable that works exactly like `nb todo`:
+
+```bash
+nbt                  # Same as: nb todo
+nbt -n work          # Same as: nb todo -n work
+nbt add "Task"       # Same as: nb todo add "Task"
+```
 
 ## Global Options
 

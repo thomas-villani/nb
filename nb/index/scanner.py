@@ -252,6 +252,7 @@ def index_all_notes(
     force: bool = False,
     index_vectors: bool = True,
     max_workers: int = 4,
+    notebook: str | None = None,
 ) -> int:
     """Index all notes in the notes root.
 
@@ -260,15 +261,33 @@ def index_all_notes(
         force: If True, reindex all files even if unchanged
         index_vectors: Whether to also index to localvectordb for search
         max_workers: Maximum number of parallel workers (default 4)
+        notebook: If specified, only index files in this notebook
 
     Returns:
         Number of files indexed.
 
     """
+    config = get_config()
     if notes_root is None:
-        notes_root = get_config().notes_root
+        notes_root = config.notes_root
 
     note_files = scan_notes(notes_root)
+
+    # Filter to specific notebook if requested
+    if notebook:
+        notebook_config = config.get_notebook(notebook)
+        if notebook_config:
+            if notebook_config.path:
+                # External notebook - filter by its path
+                notebook_path = notebook_config.path
+            else:
+                # Internal notebook - filter by notebook directory
+                notebook_path = notes_root / notebook
+            note_files = [
+                f
+                for f in note_files
+                if notebook_path in f.parents or f.parent == notebook_path
+            ]
 
     # Filter to files that need reindexing
     files_to_index = [

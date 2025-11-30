@@ -30,8 +30,6 @@ from nb.utils.editor import open_in_editor
 def register_todo_commands(cli: click.Group) -> None:
     """Register all todo-related commands with the CLI."""
     cli.add_command(todo)
-    cli.add_command(todo_add_alias)
-    cli.add_command(todo_alias)
 
 
 @click.group(invoke_without_command=True)
@@ -223,22 +221,45 @@ def todo(
                     raise SystemExit(1)
 
         # Resolve notes with fuzzy matching and linked note alias support
+        # Also collects section filters from ::section syntax
         from nb.cli.utils import resolve_note_for_todo_filter
 
         effective_notes: list[str] = []
+        effective_sections: list[str] = []
         for note_ref in note:
-            # Extract notebook if specified (notebook/note format)
+            # Parse notebook/note format FIRST, then resolve
+            # This ensures "nbcli/nbtodo" resolves alias "nbtodo" in notebook context
             nb_hint = None
-            if "/" in note_ref:
-                parts = note_ref.split("/", 1)
-                nb_hint = parts[0]
+            note_part = note_ref
 
-            resolved = resolve_note_for_todo_filter(note_ref, notebook=nb_hint)
-            if resolved:
-                effective_notes.append(resolved)
+            # Check for notebook/note format (but not if :: comes before /)
+            if "/" in note_ref:
+                # Handle ::section which might appear after notebook/note
+                ref_without_section = (
+                    note_ref.split("::")[0] if "::" in note_ref else note_ref
+                )
+                if "/" in ref_without_section:
+                    parts = ref_without_section.split("/", 1)
+                    nb_hint = parts[0]
+                    # Reconstruct note_part with section if present
+                    if "::" in note_ref:
+                        note_part = parts[1] + "::" + note_ref.split("::", 1)[1]
+                    else:
+                        note_part = parts[1]
+
+            resolved_path, section = resolve_note_for_todo_filter(
+                note_part, notebook=nb_hint
+            )
+            if resolved_path:
+                effective_notes.append(resolved_path)
+            elif section:
+                # Section-only filter (e.g., "::Morning")
+                pass
             else:
                 console.print(f"[yellow]Note not found: {note_ref}[/yellow]")
                 raise SystemExit(1)
+            if section:
+                effective_sections.append(section)
 
         effective_tag = tag
         effective_priority = priority
@@ -291,9 +312,9 @@ def todo(
         # Ensure todos are indexed (skip vector indexing for speed)
         index_all_notes(index_vectors=False)
 
-        # Get excluded notebooks from config (unless --all or specific notebooks requested)
+        # Get excluded notebooks from config (unless --all, specific notebooks, or specific notes requested)
         all_excluded_notebooks: list[str] | None = None
-        if not show_all and not effective_notebooks:
+        if not show_all and not effective_notebooks and not effective_notes:
             config_excluded = config.excluded_notebooks() or []
             # Merge config exclusions with CLI exclusions
             all_excluded_notebooks = list(set(config_excluded) | set(exclude_notebook))
@@ -303,6 +324,7 @@ def todo(
         # Convert to list or None for query functions
         notebooks_filter = effective_notebooks if effective_notebooks else None
         notes_filter = effective_notes if effective_notes else None
+        sections_filter = effective_sections if effective_sections else None
         exclude_tags_filter = effective_exclude_tags if effective_exclude_tags else None
 
         if interactive:
@@ -317,8 +339,10 @@ def todo(
             )
         else:
             # Determine if we should exclude notes with todo_exclude
-            # Don't exclude when --all or specific notebooks requested
-            exclude_note_excluded = not show_all and not effective_notebooks
+            # Don't exclude when --all, specific notebooks, or specific notes requested
+            exclude_note_excluded = (
+                not show_all and not effective_notebooks and not notes_filter
+            )
 
             # Default: list todos
             _list_todos(
@@ -332,6 +356,7 @@ def todo(
                 exclude_tags=exclude_tags_filter,
                 notebooks=notebooks_filter,
                 notes=notes_filter,
+                sections=sections_filter,
                 exclude_notebooks=all_excluded_notebooks,
                 hide_later=effective_hide_later,
                 hide_no_date=effective_hide_no_date,
@@ -458,6 +483,7 @@ def _list_todos(
     exclude_tags: list[str] | None = None,
     notebooks: list[str] | None = None,
     notes: list[str] | None = None,
+    sections: list[str] | None = None,
     exclude_notebooks: list[str] | None = None,
     hide_later: bool = False,
     hide_no_date: bool = False,
@@ -502,6 +528,7 @@ def _list_todos(
             exclude_tags=exclude_tags,
             notebooks=notebooks,
             notes=notes,
+            sections=sections,
             exclude_notebooks=exclude_notebooks,
             created_start=created_start,
             created_end=created_end,
@@ -515,6 +542,7 @@ def _list_todos(
             exclude_tags=exclude_tags,
             notebooks=notebooks,
             notes=notes,
+            sections=sections,
             exclude_notebooks=exclude_notebooks,
             due_start=due_start,
             due_end=due_end,
@@ -608,37 +636,143 @@ def _list_todos(
         if not group_todos:
             continue
 
-        console.print(f"\n[bold]{group_name}[/bold]")
+        console.print(f"\n[bold yellow]{group_name}[/bold yellow]")
 
         for t in group_todos:
             _print_todo(t, indent=0, widths=widths)
 
 
-def _calculate_column_widths(todos: list) -> dict[str, int]:
-    """Calculate column widths for aligned todo output."""
-    widths = {
-        "content": 0,
-        "source": 0,
-        "created": 5,  # Fixed: "+MM/DD"
-        "due": 6,  # Fixed: "Mon DD"
-        "priority": 2,  # Fixed: "!N"
+def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
+    """Calculate column widths for aligned todo output.
+
+    Uses dynamic terminal width with progressive truncation:
+    1. First, try full layout with all columns
+    2. If too wide, eliminate "created" column
+    3. If still too wide, shrink source to notebook only
+    4. If still too wide, hide due date column
+
+    Returns dict with column widths and visibility flags:
+    - content, source, created, due, priority: int widths
+    - show_created, show_due, compact_source: bool flags
+    """
+    terminal_width = console.width or 120
+    # Cap terminal width to prevent excessively long lines
+    # (some terminals/environments report width larger than visible area)
+    terminal_width = min(terminal_width, 120)
+    min_content_width = 25
+    max_content_width = 60  # Don't pad content beyond this for readability
+
+    # Calculate full source width based on actual content (min 15, max 30)
+    # Account for icons which add ~2 visual chars (emoji + space)
+    max_source_full = 15
+    max_source_compact = 8  # notebook only
+    for t in todos:
+        source_str = _format_todo_source(t)
+        # Check if notebook has an icon
+        parts = _get_todo_source_parts(t)
+        _, icon = (
+            get_notebook_display_info(parts["notebook"])
+            if parts["notebook"]
+            else (None, None)
+        )
+        icon_width = 2 if icon else 0
+
+        # Full source includes icon width
+        max_source_full = max(max_source_full, len(source_str) + icon_width)
+        # Compact is notebook + icon
+        notebook_len = len(parts["notebook"]) if parts["notebook"] else 0
+        max_source_compact = max(max_source_compact, notebook_len + icon_width)
+
+    source_width_full = min(max_source_full, 30)
+    source_width_compact = min(max_source_compact, 15)
+
+    # Fixed widths
+    created_width = 6  # "+MM/DD"
+    due_width = 6  # "Mon DD"
+    priority_width = 2  # "!N"
+    id_width = 6
+
+    # Base spacing: checkbox(1) + space + gaps between columns
+    # With all columns: {checkbox} {content}  {source}  {created}  {due}  {priority}  {id}
+    # Gaps: 2 after each column except last = 5 gaps * 2 = 10, plus checkbox overhead = 2
+    base_spacing = 2 + id_width  # checkbox + id
+
+    def calc_total(source_w: int, show_created: bool, show_due: bool) -> int:
+        """Calculate total width needed for given configuration."""
+        total = base_spacing + source_w + priority_width
+        total += 2  # gap after content
+        total += 2  # gap after source
+        if show_created:
+            total += created_width + 2  # column + gap
+        if show_due:
+            total += due_width + 2  # column + gap
+        total += 2  # gap after priority
+        return total
+
+    # Try configurations in order of preference
+    # 1. Full layout with all columns
+    fixed_total = calc_total(source_width_full, show_created=True, show_due=True)
+    content_width = min(terminal_width - fixed_total, max_content_width)
+    if content_width >= min_content_width:
+        return {
+            "content": content_width,
+            "source": source_width_full,
+            "created": created_width,
+            "due": due_width,
+            "priority": priority_width,
+            "show_created": True,
+            "show_due": True,
+            "compact_source": False,
+        }
+
+    # 2. Remove created column
+    fixed_total = calc_total(source_width_full, show_created=False, show_due=True)
+    content_width = min(terminal_width - fixed_total, max_content_width)
+    if content_width >= min_content_width:
+        return {
+            "content": content_width,
+            "source": source_width_full,
+            "created": 0,
+            "due": due_width,
+            "priority": priority_width,
+            "show_created": False,
+            "show_due": True,
+            "compact_source": False,
+        }
+
+    # 3. Remove created and use compact source (notebook only)
+    fixed_total = calc_total(source_width_compact, show_created=False, show_due=True)
+    content_width = min(terminal_width - fixed_total, max_content_width)
+    if content_width >= min_content_width:
+        return {
+            "content": content_width,
+            "source": source_width_compact,
+            "created": 0,
+            "due": due_width,
+            "priority": priority_width,
+            "show_created": False,
+            "show_due": True,
+            "compact_source": True,
+        }
+
+    # 4. Remove created, compact source, and hide due date
+    fixed_total = calc_total(source_width_compact, show_created=False, show_due=False)
+    content_width = min(
+        max(terminal_width - fixed_total, min_content_width), max_content_width
+    )
+    return {
+        "content": content_width,
+        "source": source_width_compact,
+        "created": 0,
+        "due": 0,
+        "priority": priority_width,
+        "show_created": False,
+        "show_due": False,
+        "compact_source": True,
     }
 
-    for t in todos:
-        widths["content"] = max(widths["content"], len(t.content))
-        source_str = _format_todo_source(t)
-        widths["source"] = max(widths["source"], len(source_str))
 
-    # Cap content width to avoid very long lines
-    widths["content"] = min(widths["content"], 60)
-
-    # Cap source width (notebook/note::section should fit reasonably)
-    widths["source"] = min(widths["source"], 35)
-
-    return widths
-
-
-def _format_todo_source(t, max_section_len: int = 15) -> str:
+def _format_todo_source(t, max_width: int = 0, max_section_len: int = 15) -> str:
     """Format the source of a todo for display (plain text, used for sorting).
 
     Format: notebook/note_title::Section (if section exists)
@@ -646,6 +780,7 @@ def _format_todo_source(t, max_section_len: int = 15) -> str:
 
     Args:
         t: Todo object
+        max_width: Maximum total width (0 = no limit). If exceeded, truncates with ellipsis.
         max_section_len: Maximum length for section name (default 15)
     """
     parts = _get_todo_source_parts(t)
@@ -664,8 +799,15 @@ def _format_todo_source(t, max_section_len: int = 15) -> str:
         section = parts["section"]
         if len(section) > max_section_len:
             section = section[: max_section_len - 1] + "…"
-        return f"{base_source}::{section}"
-    return base_source
+        result = f"{base_source}::{section}"
+    else:
+        result = base_source
+
+    # Truncate if exceeds max_width
+    if max_width > 0 and len(result) > max_width:
+        result = result[: max_width - 1] + "…"
+
+    return result
 
 
 def _get_todo_source_parts(t) -> dict[str, str]:
@@ -723,7 +865,7 @@ def _format_colored_todo_source(t, width: int = 0, max_section_len: int = 15) ->
 
     Args:
         t: Todo object
-        width: Minimum width for padding (0 = no padding)
+        width: Width for the column (pads if shorter, truncates if longer)
         max_section_len: Maximum length for section name (default 15)
 
     Returns:
@@ -731,38 +873,167 @@ def _format_colored_todo_source(t, width: int = 0, max_section_len: int = 15) ->
     """
     parts = _get_todo_source_parts(t)
 
-    # Build colored source string
-    colored_parts = []
+    # Check if notebook has an icon - icons take ~2 visual chars (emoji + space)
+    color, icon = (
+        get_notebook_display_info(parts["notebook"])
+        if parts["notebook"]
+        else ("white", None)
+    )
+    icon_width = 2 if icon else 0  # emoji + space
 
-    if parts["notebook"]:
-        color, icon = get_notebook_display_info(parts["notebook"])
+    # Adjust available width for text (reserve space for icon)
+    text_width = max(width - icon_width, 10) if width > 0 else 0
+
+    # Build the plain source with adjusted width
+    plain_source = _format_todo_source(
+        t, max_width=text_width, max_section_len=max_section_len
+    )
+
+    # Check if we need truncation
+    full_plain = _format_todo_source(t, max_width=0, max_section_len=max_section_len)
+    needs_truncation = text_width > 0 and len(full_plain) > text_width
+
+    if needs_truncation:
+        # Truncate: color each part that fits in the truncated string
+        truncated = plain_source
         icon_prefix = f"{icon} " if icon else ""
-        colored_parts.append(f"[{color}]{icon_prefix}{parts['notebook']}[/{color}]")
 
-    if parts["note"]:
-        if colored_parts:
+        # Build colored version by identifying parts in the truncated string
+        colored_parts = []
+        remaining = truncated
+
+        # Color notebook part
+        if parts["notebook"] and remaining.startswith(parts["notebook"]):
+            colored_parts.append(f"[{color}]{icon_prefix}{parts['notebook']}[/{color}]")
+            remaining = remaining[len(parts["notebook"]) :]
+            icon_prefix = ""  # Only show icon once
+        elif parts["notebook"]:
+            # Notebook itself was truncated
+            colored_parts.append(f"[{color}]{icon_prefix}{remaining}[/{color}]")
+            remaining = ""
+
+        # Color "/" separator and note part
+        if remaining.startswith("/") and parts["note"]:
             colored_parts.append("/")
-        colored_parts.append(f"[blue]{parts['note']}[/blue]")
+            remaining = remaining[1:]
+            # Find how much of the note fits
+            if "::" in remaining:
+                note_part = remaining.split("::")[0]
+            else:
+                note_part = remaining.rstrip("…")
+                if remaining.endswith("…"):
+                    note_part = remaining[:-1]  # Remove ellipsis for now
+            if remaining.startswith(parts["note"]):
+                colored_parts.append(f"[blue]{parts['note']}[/blue]")
+                remaining = remaining[len(parts["note"]) :]
+            elif note_part:
+                colored_parts.append(f"[blue]{note_part}[/blue]")
+                remaining = remaining[len(note_part) :]
 
-    if parts["section"]:
-        section = parts["section"]
-        if len(section) > max_section_len:
-            section = section[: max_section_len - 1] + "…"
-        colored_parts.append("::")
-        colored_parts.append(f"[cyan]{section}[/cyan]")
+        # Color "::" separator and section part
+        if remaining.startswith("::"):
+            colored_parts.append("::")
+            remaining = remaining[2:]
+            if remaining:
+                colored_parts.append(f"[cyan]{remaining}[/cyan]")
+                remaining = ""
 
-    colored = "".join(colored_parts)
+        # Any remaining uncolored text
+        if remaining:
+            colored_parts.append(remaining)
 
-    # Calculate plain length for padding
+        colored = "".join(colored_parts)
+    else:
+        # Build full colored source string
+        colored_parts = []
+
+        if parts["notebook"]:
+            icon_prefix = f"{icon} " if icon else ""
+            colored_parts.append(f"[{color}]{icon_prefix}{parts['notebook']}[/{color}]")
+
+        if parts["note"]:
+            if colored_parts:
+                colored_parts.append("/")
+            colored_parts.append(f"[blue]{parts['note']}[/blue]")
+
+        if parts["section"]:
+            section = parts["section"]
+            if len(section) > max_section_len:
+                section = section[: max_section_len - 1] + "…"
+            colored_parts.append("::")
+            colored_parts.append(f"[cyan]{section}[/cyan]")
+
+        colored = "".join(colored_parts)
+
+    # Calculate plain length for padding (text + icon)
     if width > 0:
-        plain_len = len(_format_todo_source(t, max_section_len=max_section_len))
-        if plain_len < width:
-            colored += " " * (width - plain_len)
+        visual_len = len(plain_source) + icon_width
+        if visual_len < width:
+            colored += " " * (width - visual_len)
 
     return colored
 
 
-def _print_todo(t, indent: int = 0, widths: dict[str, int] | None = None) -> None:
+def _format_compact_source(t, max_width: int = 0) -> str:
+    """Format the source of a todo in compact mode (notebook only).
+
+    Used when terminal is too narrow for full source display.
+
+    Args:
+        t: Todo object
+        max_width: Maximum width (0 = no limit)
+    """
+    parts = _get_todo_source_parts(t)
+    notebook = parts["notebook"] if parts["notebook"] else ""
+
+    if max_width > 0 and len(notebook) > max_width:
+        notebook = notebook[: max_width - 1] + "…"
+
+    return notebook
+
+
+def _format_colored_compact_source(t, width: int = 0) -> str:
+    """Format compact source (notebook only) with colors.
+
+    Args:
+        t: Todo object
+        width: Width for the column (pads if shorter, truncates if longer)
+
+    Returns:
+        Rich-formatted string with colors.
+    """
+    parts = _get_todo_source_parts(t)
+
+    if not parts["notebook"]:
+        return " " * width if width > 0 else ""
+
+    notebook = parts["notebook"]
+    color, icon = get_notebook_display_info(notebook)
+
+    # Icons take ~2 visual chars (emoji + space)
+    icon_width = 2 if icon else 0
+
+    # Truncate notebook if needed (reserve space for icon)
+    if width > 0:
+        text_available = max(width - icon_width, 5)
+        if len(notebook) > text_available:
+            notebook = notebook[: text_available - 1] + "…"
+
+    icon_prefix = f"{icon} " if icon else ""
+    colored = f"[{color}]{icon_prefix}{notebook}[/{color}]"
+
+    # Calculate visual length for padding (text + icon)
+    if width > 0:
+        visual_len = len(notebook) + icon_width
+        if visual_len < width:
+            colored += " " * (width - visual_len)
+
+    return colored
+
+
+def _print_todo(
+    t, indent: int = 0, widths: dict[str, int | bool] | None = None
+) -> None:
     """Print a single todo with formatting."""
     prefix = "  " * indent
     # Checkbox indicator: x=completed, ^=in-progress, o=pending
@@ -773,6 +1044,11 @@ def _print_todo(t, indent: int = 0, widths: dict[str, int] | None = None) -> Non
     else:
         checkbox = "[dim]o[/dim]"
 
+    # Get visibility flags from widths
+    show_created = widths.get("show_created", True) if widths else True
+    show_due = widths.get("show_due", True) if widths else True
+    compact_source = widths.get("compact_source", False) if widths else False
+
     # Build content - truncate if needed for alignment
     content = t.content
     content_width = widths["content"] if widths else len(content)
@@ -781,26 +1057,37 @@ def _print_todo(t, indent: int = 0, widths: dict[str, int] | None = None) -> Non
     else:
         content_display = content.ljust(content_width)
 
-    # Build source column (colored)
-    source_str = _format_todo_source(t)
-    source_width = widths["source"] if widths else len(source_str)
+    # Build source column (colored) - compact mode shows only notebook
+    source_width = widths["source"] if widths else 15
+    if compact_source:
+        source_str = _format_compact_source(t)
+        source_part = _format_colored_compact_source(t, source_width)
+    else:
+        source_str = _format_todo_source(t)
+        source_part = (
+            _format_colored_todo_source(t, source_width)
+            if source_str
+            else " " * source_width
+        )
 
     # Build metadata columns with fixed widths
     created_str = ""
-    if t.created_date:
+    if show_created and t.created_date:
         created_str = f"+{t.created_date.strftime('%m/%d')}"
 
     due_str = ""
     due_color = "red"
-    if t.due_date:
+    if show_due and t.due_date:
         due_str = t.due_date.strftime("%b %d")
 
     priority_str = ""
     if t.priority:
         priority_str = f"!{t.priority.value}"
 
+    # Only show tags when we have full layout (show_created = True)
+    # Tags add variable width that would cause wrapping in compact modes
     tags_str = ""
-    if t.tags:
+    if t.tags and show_created:
         tags_str = " ".join(f"#{tag}" for tag in t.tags[:3])
 
     # Build the formatted line with alignment
@@ -812,19 +1099,23 @@ def _print_todo(t, indent: int = 0, widths: dict[str, int] | None = None) -> Non
     else:
         content_part = content_display
 
-    source_part = (
-        _format_colored_todo_source(t, source_width)
-        if source_str
-        else " " * source_width
-    )
-    created_part = f"[dim]{created_str:>6}[/dim]" if created_str else " " * 6
-    due_part = f"[{due_color}]{due_str:>6}[/{due_color}]" if due_str else " " * 6
     priority_part = f"[magenta]{priority_str:>2}[/magenta]" if priority_str else "  "
     tags_part = f"  [cyan]{tags_str}[/cyan]" if tags_str else ""
 
-    console.print(
-        f"{prefix}{checkbox} {content_part}  {source_part}  {created_part}  {due_part}  {priority_part}  [dim]{short_id}[/dim]{tags_part}"
-    )
+    # Build line based on visible columns
+    line_parts = [f"{prefix}{checkbox} {content_part}  {source_part}"]
+
+    if show_created:
+        created_part = f"[dim]{created_str:>6}[/dim]" if created_str else " " * 6
+        line_parts.append(f"  {created_part}")
+
+    if show_due:
+        due_part = f"[{due_color}]{due_str:>6}[/{due_color}]" if due_str else " " * 6
+        line_parts.append(f"  {due_part}")
+
+    line_parts.append(f"  {priority_part}  [dim]{short_id}[/dim]{tags_part}")
+
+    console.print("".join(line_parts))
 
     # Print children
     children = get_todo_children(t.id)
@@ -884,66 +1175,18 @@ def todo_add(text: str, add_today: bool, target_note: str | None) -> None:
         else:
             note_name = note_ref
 
-        # Resolve note with fuzzy matching
-        from nb.cli.utils import resolve_note
+        # Check for note alias first
+        from nb.core.aliases import get_note_by_alias
 
-        resolved_path = resolve_note(note_name, notebook=notebook)
-        if not resolved_path:
-            console.print(f"[red]Note not found: {note_ref}[/red]")
-            raise SystemExit(1)
-
-        try:
-            t = add_todo_to_note(text, resolved_path, section=section)
-            if section:
-                console.print(
-                    f"[green]Added to {resolved_path.name}::{section}:[/green] {t.content}"
-                )
-            else:
-                console.print(
-                    f"[green]Added to {resolved_path.name}:[/green] {t.content}"
-                )
-        except FileNotFoundError as e:
-            console.print(f"[red]{e}[/red]")
-            raise SystemExit(1)
-    elif add_today:
-        t = add_todo_to_daily_note(text)
-        console.print(f"[green]Added to today's note:[/green] {t.content}")
-    else:
-        t = add_todo_to_inbox(text)
-        console.print(f"[green]Added to inbox:[/green] {t.content}")
-    console.print(f"[dim]ID: {t.id[:6]}[/dim]")
-
-
-@click.command("ta")
-@click.argument("text")
-@click.option("--today", "add_today", is_flag=True, help="Add to today's daily note")
-@click.option(
-    "--note", "-N", "target_note", help="Add to specific note (path or path::section)"
-)
-def todo_add_alias(text: str, add_today: bool, target_note: str | None) -> None:
-    """Alias for 'todo add'."""
-    from nb.core.todos import add_todo_to_note
-
-    if target_note:
-        # Parse note::section syntax
-        if "::" in target_note:
-            note_ref, section = target_note.split("::", 1)
+        resolved_path = get_note_by_alias(note_name)
+        if resolved_path and resolved_path.exists():
+            pass  # Found via alias
         else:
-            note_ref = target_note
-            section = None
+            # Resolve note with fuzzy matching
+            from nb.cli.utils import resolve_note
 
-        # Extract notebook if specified
-        notebook = None
-        if "/" in note_ref:
-            parts = note_ref.split("/", 1)
-            notebook = parts[0]
-            note_name = parts[1]
-        else:
-            note_name = note_ref
+            resolved_path = resolve_note(note_name, notebook=notebook)
 
-        from nb.cli.utils import resolve_note
-
-        resolved_path = resolve_note(note_name, notebook=notebook)
         if not resolved_path:
             console.print(f"[red]Note not found: {note_ref}[/red]")
             raise SystemExit(1)
@@ -1206,15 +1449,3 @@ def todo_edit(todo_id: str) -> None:
     config = get_config()
     console.print(f"[dim]Opening {t.source.path.name}:{t.line_number}...[/dim]")
     open_in_editor(t.source.path, line=t.line_number, editor=config.editor)
-
-
-@click.command("td")
-@click.pass_context
-def todo_alias(ctx: click.Context) -> None:
-    """Alias for 'todo' (list todos)."""
-    index_all_notes(index_vectors=False)
-    todos = get_sorted_todos(completed=False)
-    if not todos:
-        console.print("[dim]No todos found.[/dim]")
-        return
-    _list_todos()

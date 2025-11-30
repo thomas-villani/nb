@@ -22,18 +22,17 @@ def register_note_commands(cli: click.Group) -> None:
     """Register all note-related commands with the CLI."""
     cli.add_command(today)
     cli.add_command(yesterday)
-    cli.add_command(today_alias)
-    cli.add_command(yesterday_alias)
     cli.add_command(last_note)
-    cli.add_command(last_alias)
     cli.add_command(history_cmd)
     cli.add_command(open_date)
-    cli.add_command(open_alias)
     cli.add_command(show_note)
     cli.add_command(new_note)
     cli.add_command(edit_note)
     cli.add_command(add_to_today)
     cli.add_command(list_notes_cmd)
+    cli.add_command(alias_note)
+    cli.add_command(unalias_note)
+    cli.add_command(list_aliases_cmd)
 
 
 @click.command()
@@ -91,21 +90,6 @@ def yesterday(ctx: click.Context) -> None:
         open_note(path)
 
 
-@click.command("t")
-@click.option("--notebook", "-n", help="Notebook to create today's note in")
-@click.pass_context
-def today_alias(ctx: click.Context, notebook: str | None) -> None:
-    """Alias for 'today'."""
-    ctx.invoke(today, notebook=notebook)
-
-
-@click.command("y")
-@click.pass_context
-def yesterday_alias(ctx: click.Context) -> None:
-    """Alias for 'yesterday'."""
-    ctx.invoke(yesterday)
-
-
 @click.command("last")
 @click.option(
     "-s", "--show", is_flag=True, help="Print note to console instead of opening editor"
@@ -142,40 +126,6 @@ def last_note(show: bool, notebook: str | None, viewed: bool) -> None:
             console.print("[dim]No notes found.[/dim]")
             if notebook:
                 console.print("[dim]Try 'nb index' to ensure notes are indexed.[/dim]")
-            raise SystemExit(1)
-
-    config = get_config()
-    try:
-        rel_path = path.relative_to(config.notes_root)
-    except ValueError:
-        rel_path = path
-
-    if show:
-        print_note(path)
-    else:
-        console.print(f"[dim]Opening {rel_path}...[/dim]")
-        open_note(path)
-
-
-@click.command("l")
-@click.option(
-    "-s", "--show", is_flag=True, help="Print note to console instead of opening editor"
-)
-@click.option("--notebook", "-n", help="Filter by notebook")
-@click.option("--viewed", is_flag=True, help="Use last viewed instead of last modified")
-def last_alias(show: bool, notebook: str | None, viewed: bool) -> None:
-    """Alias for 'last'."""
-    from nb.core.notes import get_last_modified_note, get_last_viewed_note
-
-    if viewed:
-        path = get_last_viewed_note(notebook=notebook)
-        if not path:
-            console.print("[dim]No viewed notes found.[/dim]")
-            raise SystemExit(1)
-    else:
-        path = get_last_modified_note(notebook=notebook)
-        if not path:
-            console.print("[dim]No notes found.[/dim]")
             raise SystemExit(1)
 
     config = get_config()
@@ -302,6 +252,7 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
     - A date like "2025-11-26" or "nov 26"
     - A relative date like "friday" or "last monday"
     - A note name (when used with -n for non-date-based notebooks)
+    - A note alias (created with 'nb alias')
     - A linked note alias (when used with -n for the linked note's notebook)
     - A path to a note file
 
@@ -309,6 +260,7 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
     Examples:
       nb open friday              # Open Friday's daily note
       nb open "last monday"       # Open last Monday's note
+      nb open myalias             # Open note by alias
       nb open myproject -n ideas  # Open ideas/myproject.md
       nb open friday -n work      # Open Friday in work notebook
       nb open mytodo -n nbcli     # Open linked note 'mytodo' in notebook 'nbcli'
@@ -317,6 +269,7 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
     is found, similar options will be suggested interactively.
     """
     from nb.cli.utils import resolve_notebook, resolve_note
+    from nb.core.aliases import get_note_by_alias
     from nb.core.links import get_linked_note_in_notebook
     from nb.core.notebooks import (
         ensure_notebook_note,
@@ -326,6 +279,22 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
 
     config = get_config()
     show = ctx.obj and ctx.obj.get("show")
+
+    # Parse notebook/note format if present
+    if "/" in note_ref and not notebook:
+        parts = note_ref.split("/", 1)
+        notebook = parts[0]
+        note_ref = parts[1]
+
+    # Check if note_ref is a note alias
+    alias_path = get_note_by_alias(note_ref)
+    if alias_path and alias_path.exists():
+        if show:
+            print_note(alias_path)
+        else:
+            console.print(f"[dim]Opening {alias_path.name}...[/dim]")
+            open_note(alias_path)
+        return
 
     # Resolve notebook with fuzzy matching if specified
     if notebook:
@@ -428,15 +397,6 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
     raise SystemExit(1)
 
 
-@click.command("o")
-@click.argument("note_ref")
-@click.option("--notebook", "-n", help="Notebook to open the note from")
-@click.pass_context
-def open_alias(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
-    """Alias for 'open'."""
-    ctx.invoke(open_date, note_ref=note_ref, notebook=notebook)
-
-
 @click.command("show")
 @click.argument("note_ref", required=False)
 @click.option("--notebook", "-n", help="Notebook to show the note from")
@@ -447,6 +407,7 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
     - A date like "2025-11-26" or "nov 26"
     - A relative date like "friday" or "last monday"
     - A note name (when used with -n for non-date-based notebooks)
+    - A note alias (created with 'nb alias')
     - A linked note alias (when used with -n for the linked note's notebook)
     - A path to a note file
     - Omitted to show today's note
@@ -455,11 +416,13 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
     Examples:
       nb show                     # Show today's daily note
       nb show friday              # Show Friday's daily note
+      nb show myalias             # Show note by alias
       nb show -n work             # Show today's note in work notebook
       nb show friday -n work      # Show Friday in work notebook
       nb show myproject -n ideas  # Show ideas/myproject.md
       nb show mytodo -n nbcli     # Show linked note 'mytodo' in notebook 'nbcli'
     """
+    from nb.core.aliases import get_note_by_alias
     from nb.core.links import get_linked_note_in_notebook
     from nb.core.notebooks import (
         ensure_notebook_note,
@@ -486,6 +449,13 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
             note_path = ensure_daily_note(dt)
         print_note(note_path)
         return
+
+    # Check if note_ref is a note alias (unless notebook specified)
+    if not notebook:
+        alias_path = get_note_by_alias(note_ref)
+        if alias_path and alias_path.exists():
+            print_note(alias_path)
+            return
 
     # If notebook is specified, handle it
     if notebook:
@@ -710,8 +680,9 @@ def add_to_today(text: str) -> None:
 )
 @click.option("--week", is_flag=True, help="Show this week's notes")
 @click.option("--month", is_flag=True, help="Show this month's notes")
+@click.option("--full", "-f", is_flag=True, help="Show full path to notes")
 def list_notes_cmd(
-    notebook: str | None, all_notes: bool, week: bool, month: bool
+    notebook: str | None, all_notes: bool, week: bool, month: bool, full: bool
 ) -> None:
     """List notes.
 
@@ -751,7 +722,7 @@ def list_notes_cmd(
                 return
 
         for note_path in notes:
-            console.print(str(note_path))
+            console.print(str(note_path) if full else note_path.stem)
     elif notebook:
         notes = get_notebook_notes_with_linked(notebook)
 
@@ -762,11 +733,15 @@ def list_notes_cmd(
         for note_path, is_linked, alias in notes:
             if is_linked:
                 if alias:
-                    console.print(f"[cyan]{alias}[/cyan] [dim]({note_path})[/dim]")
+                    console.print(
+                        f"[cyan]{alias}[/cyan] [dim]({note_path if full else note_path.stem})[/dim]"
+                    )
                 else:
-                    console.print(f"[cyan]{note_path}[/cyan] [dim](linked)[/dim]")
+                    console.print(
+                        f"[cyan]{note_path if full else note_path.stem}[/cyan] [dim](linked)[/dim]"
+                    )
             else:
-                console.print(str(note_path))
+                console.print(str(note_path) if full else note_path.stem)
     elif all_notes:
         # List all notes in all notebooks (one line each)
         notes = get_all_notes()
@@ -778,8 +753,6 @@ def list_notes_cmd(
         current_notebook = None
         for note_path, title, nb_name, tags in notes:
             if nb_name != current_notebook:
-                if current_notebook is not None:
-                    console.print()  # Blank line between notebooks
                 color, icon = get_notebook_display_info(nb_name)
                 icon_prefix = f"{icon} " if icon else ""
                 console.print(f"[bold {color}]{icon_prefix}{nb_name}[/bold {color}]")
@@ -787,9 +760,13 @@ def list_notes_cmd(
             display = title if title else note_path.stem
             tags_str = " ".join(f"[yellow]#{t}[/yellow]" for t in tags) if tags else ""
             if tags_str:
-                console.print(f"  {display} {tags_str} [dim]({note_path})[/dim]")
+                console.print(
+                    f"  {display} {tags_str} [dim]({note_path if full else note_path.stem})[/dim]"
+                )
             else:
-                console.print(f"  {display} [dim]({note_path})[/dim]")
+                console.print(
+                    f"  {display} [dim]({note_path if full else note_path.stem})[/dim]"
+                )
     else:
         # Default: List latest 3 notes from each notebook
         notes_by_notebook = get_latest_notes_per_notebook(limit=3)
@@ -809,7 +786,88 @@ def list_notes_cmd(
                     " ".join(f"[yellow]#{t}[/yellow]" for t in tags) if tags else ""
                 )
                 if tags_str:
-                    console.print(f"  {display} {tags_str} [dim]({note_path})[/dim]")
+                    console.print(
+                        f"  {display} {tags_str} [dim]({note_path if full else note_path.stem})[/dim]"
+                    )
                 else:
-                    console.print(f"  {display} [dim]({note_path})[/dim]")
-            console.print()  # Blank line between notebooks
+                    console.print(
+                        f"  {display} [dim]({note_path if full else note_path.stem})[/dim]"
+                    )
+
+
+@click.command("alias")
+@click.argument("alias_name")
+@click.argument("note_ref")
+@click.option("--notebook", "-n", help="Notebook containing the note")
+def alias_note(alias_name: str, note_ref: str, notebook: str | None) -> None:
+    """Create an alias for a note.
+
+    ALIAS_NAME is the shorthand name to use (e.g., "readme", "standup").
+    NOTE_REF is the note to alias (path, name, or notebook/name).
+
+    \b
+    Examples:
+      nb alias readme projects/README
+      nb alias standup daily/2025-11-29
+      nb alias meeting notes/meeting-template -n projects
+    """
+    from nb.cli.utils import resolve_note
+    from nb.core.aliases import add_note_alias
+
+    # Extract notebook from note_ref if specified
+    if "/" in note_ref and not notebook:
+        parts = note_ref.split("/", 1)
+        notebook = parts[0]
+        note_name = parts[1]
+    else:
+        note_name = note_ref
+
+    # Resolve the note
+    resolved = resolve_note(note_name, notebook=notebook, interactive=True)
+    if not resolved:
+        console.print(f"[red]Note not found: {note_ref}[/red]")
+        raise SystemExit(1)
+
+    try:
+        add_note_alias(alias_name, resolved, notebook=notebook)
+        console.print(f"[green]Alias created:[/green] {alias_name} -> {resolved.name}")
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+
+
+@click.command("unalias")
+@click.argument("alias_name")
+def unalias_note(alias_name: str) -> None:
+    """Remove a note alias.
+
+    \b
+    Examples:
+      nb unalias readme
+    """
+    from nb.core.aliases import remove_note_alias
+
+    if remove_note_alias(alias_name):
+        console.print(f"[green]Alias removed:[/green] {alias_name}")
+    else:
+        console.print(f"[yellow]Alias not found: {alias_name}[/yellow]")
+
+
+@click.command("aliases")
+def list_aliases_cmd() -> None:
+    """List all note aliases.
+
+    Shows all aliases that have been created for quick note access.
+    """
+    from nb.core.aliases import list_note_aliases
+
+    aliases = list_note_aliases()
+    if not aliases:
+        console.print("[dim]No aliases defined.[/dim]")
+        console.print("[dim]Create one with: nb alias <name> <note>[/dim]")
+        return
+
+    console.print("[bold]Note Aliases[/bold]\n")
+    for alias, path, notebook in aliases:
+        nb_str = f" [dim]({notebook})[/dim]" if notebook else ""
+        console.print(f"  [cyan]{alias}[/cyan] -> {path.name}{nb_str}")

@@ -13,7 +13,6 @@ from nb.core.notebooks import get_notebook_notes
 def register_notebook_commands(cli: click.Group) -> None:
     """Register all notebook-related commands with the CLI."""
     cli.add_command(notebooks_cmd)
-    cli.add_command(notebooks_alias)
 
 
 @click.group("notebooks", invoke_without_command=True)
@@ -180,10 +179,3 @@ def notebooks_remove(name: str, yes: bool) -> None:
         console.print(f"[green]Removed notebook:[/green] {name}")
     else:
         console.print(f"[red]Failed to remove notebook:[/red] {name}")
-
-
-@click.command("nbs")
-@click.pass_context
-def notebooks_alias(ctx: click.Context) -> None:
-    """Alias for 'notebooks'."""
-    ctx.invoke(notebooks_cmd)

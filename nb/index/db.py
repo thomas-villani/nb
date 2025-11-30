@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 # Current schema version
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -183,6 +183,18 @@ UPDATE todos SET status = CASE WHEN completed = 1 THEN 'completed' ELSE 'pending
 CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status);
 """
 
+# Phase 10 additions: note aliases for quick access
+SCHEMA_V11 = """
+-- Note aliases for quick access via nb open <alias>
+CREATE TABLE IF NOT EXISTS note_aliases (
+    alias TEXT PRIMARY KEY,
+    path TEXT NOT NULL,
+    notebook TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_note_aliases_path ON note_aliases(path);
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -195,6 +207,7 @@ MIGRATIONS: dict[int, str] = {
     8: SCHEMA_V8,
     9: SCHEMA_V9,
     10: SCHEMA_V10,
+    11: SCHEMA_V11,
 }
 
 

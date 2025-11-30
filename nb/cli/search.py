@@ -13,8 +13,6 @@ from nb.config import get_config
 def register_search_commands(cli: click.Group) -> None:
     """Register all search-related commands with the CLI."""
     cli.add_command(search_cmd)
-    cli.add_command(search_alias)
-    cli.add_command(semantic_search_alias)
     cli.add_command(grep_cmd)
     cli.add_command(index_cmd)
     cli.add_command(stream_notes)
@@ -185,22 +183,6 @@ def search_cmd(
         console.print()
 
 
-@click.command("s")
-@click.argument("query")
-@click.pass_context
-def search_alias(ctx: click.Context, query: str) -> None:
-    """Alias for 'search' (hybrid search)."""
-    ctx.invoke(search_cmd, query=query)
-
-
-@click.command("ss")
-@click.argument("query")
-@click.pass_context
-def semantic_search_alias(ctx: click.Context, query: str) -> None:
-    """Alias for 'search --semantic'."""
-    ctx.invoke(search_cmd, query=query, semantic=True)
-
-
 @click.command("grep")
 @click.argument("pattern")
 @click.option("-C", "--context", "context_lines", default=2, help="Context lines")
@@ -271,7 +253,10 @@ def grep_cmd(pattern: str, context_lines: int, ignore_case: bool) -> None:
 @click.option("--force", "-f", is_flag=True, help="Force reindex all files")
 @click.option("--rebuild", is_flag=True, help="Drop and recreate the database")
 @click.option("--embeddings", "-e", is_flag=True, help="Rebuild search embeddings")
-def index_cmd(force: bool, rebuild: bool, embeddings: bool) -> None:
+@click.option("--notebook", "-n", help="Only reindex this notebook")
+def index_cmd(
+    force: bool, rebuild: bool, embeddings: bool, notebook: str | None
+) -> None:
     """Rebuild the notes and todos index.
 
     Incrementally indexes new and modified files. Use --force to reindex
@@ -281,6 +266,7 @@ def index_cmd(force: bool, rebuild: bool, embeddings: bool) -> None:
     Examples:
       nb index               # Index new/changed files
       nb index --force       # Reindex all files
+      nb index -n daily      # Only reindex the 'daily' notebook
       nb index --rebuild     # Drop database and reindex (fixes schema issues)
       nb index --embeddings  # Rebuild semantic search vectors
     """
@@ -288,6 +274,9 @@ def index_cmd(force: bool, rebuild: bool, embeddings: bool) -> None:
     from nb.index.todos_repo import get_todo_stats
 
     if rebuild:
+        if notebook:
+            console.print("[red]Cannot use --rebuild with --notebook[/red]")
+            raise SystemExit(1)
         console.print("[yellow]Rebuilding database from scratch...[/yellow]")
         from nb.index.db import get_db, rebuild_db
 
@@ -296,16 +285,20 @@ def index_cmd(force: bool, rebuild: bool, embeddings: bool) -> None:
         console.print("[green]Database rebuilt.[/green]")
         force = True  # Force reindex after rebuild
 
-    console.print("[dim]Indexing notes...[/dim]")
-    count = index_all_notes(force=force)
+    if notebook:
+        console.print(f"[dim]Indexing notebook '{notebook}'...[/dim]")
+    else:
+        console.print("[dim]Indexing notes...[/dim]")
+    count = index_all_notes(force=force, notebook=notebook)
     console.print(f"[green]Indexed {count} files.[/green]")
 
-    # Also reindex linked notes
-    from nb.index.scanner import scan_linked_notes
+    # Also reindex linked notes (skip if specific notebook requested)
+    if not notebook:
+        from nb.index.scanner import scan_linked_notes
 
-    linked_count = scan_linked_notes()
-    if linked_count:
-        console.print(f"[green]Indexed {linked_count} linked notes.[/green]")
+        linked_count = scan_linked_notes()
+        if linked_count:
+            console.print(f"[green]Indexed {linked_count} linked notes.[/green]")
 
     if embeddings:
         console.print("[dim]Rebuilding search index...[/dim]")

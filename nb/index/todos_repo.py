@@ -200,6 +200,7 @@ def query_todos(
     priority: int | None = None,
     notebooks: list[str] | None = None,
     notes: list[str] | None = None,
+    sections: list[str] | None = None,
     exclude_notebooks: list[str] | None = None,
     tag: str | None = None,
     exclude_tags: list[str] | None = None,
@@ -221,6 +222,7 @@ def query_todos(
         priority: Filter by priority level (1, 2, or 3)
         notebooks: Filter by notebook names (stored as project in DB)
         notes: Filter by specific note paths (relative to notes root)
+        sections: Filter by section names (partial match)
         exclude_notebooks: List of notebooks to exclude
         tag: Filter by tag
         exclude_tags: List of tags to exclude
@@ -336,6 +338,14 @@ def query_todos(
                     params.append(f"%{note_path}.md")
         conditions.append(f"({' OR '.join(note_conditions)})")
 
+    # Filter by sections (partial match)
+    if sections:
+        section_conditions = []
+        for section in sections:
+            section_conditions.append("t.section LIKE ?")
+            params.append(f"%{section}%")
+        conditions.append(f"({' OR '.join(section_conditions)})")
+
     if exclude_notebooks:
         placeholders = ", ".join("?" for _ in exclude_notebooks)
         conditions.append(f"(t.project IS NULL OR t.project NOT IN ({placeholders}))")
@@ -395,6 +405,7 @@ def get_sorted_todos(
     exclude_tags: list[str] | None = None,
     notebooks: list[str] | None = None,
     notes: list[str] | None = None,
+    sections: list[str] | None = None,
     exclude_notebooks: list[str] | None = None,
     priority: int | None = None,
     due_start: date | None = None,
@@ -421,6 +432,7 @@ def get_sorted_todos(
         exclude_tags=exclude_tags,
         notebooks=notebooks,
         notes=notes,
+        sections=sections,
         exclude_notebooks=exclude_notebooks,
         priority=priority,
         due_start=due_start,
