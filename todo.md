@@ -61,8 +61,8 @@ todo_exclude: true
 - [x] Templates for notes - allow to define templates and create from a template with `nb new ... --template <template_name>`
 - [ ] Toml for config instead of yaml
 - [x] Note titles -- how to integrate and use them as a way to open notes too? Or at least display in list? This already seems to be the case.
-- [^] `nb stats` command for overview statistics, especially usage stats and completion stats, some graphs?!
-- [^] `nb tags` command to list all tags with counts, and allow batch replace/rename of tags
+- [x] `nb stats` command for overview statistics, especially usage stats and completion stats, some graphs?!
+- [x] `nb tags` command to list all tags with counts, and allow batch replace/rename of tags
 - [x] Improve formatting for `nb history` command - color code notebooks and sort by notebook, include aliases.
 - [x] Should have stable relative ordering of todos from same list when same (or no) todo dates (and no other sorting specified)
 - [x] Enhance `todo add` command to allow putting into specific notes, or adding to a specific section
@@ -73,7 +73,11 @@ todo_exclude: true
 - [x] Check that `nb todo --note <NOTE>` filter can accept `notebook/note::section` syntax, allow partial section match
 - [x] Allow adding an alias for any note (not just linked notes)
 - [x] enhance index command to allow specifying specific notebook
-- [ ] update `nb add` to allow to add to any note (but default to today's)
+- [x] update `nb add` to allow to add to any note (but default to today's)
+- [ ] Add a flag (--full) for `nb list` to show full paths
+
+- [^] Review code, check for DRY refactor opportunities and bugs
+- [ ] Address code review comments
 
 ### Phase 5: Advanced TUI
 - [ ] Full Wijjit-based todo list view with richer interactions

@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date
-
 import click
 
-from nb.cli.utils import console, find_todo
-from nb.config import get_config
-from nb.core.notes import ensure_daily_note
+from nb.cli.utils import console, ensure_note_path, resolve_attachment_target
 
 
 def register_attachment_commands(cli: click.Group) -> None:
@@ -46,40 +42,25 @@ def attach_file(
     """
     from nb.core.attachments import attach_to_note, attach_to_todo
 
-    config = get_config()
+    note_path, todo = resolve_attachment_target(target)
 
-    # Determine target
-    if target is None:
-        # Default to today's note
-        note_path = ensure_daily_note(date.today())
-    elif len(target) >= 8 and "/" not in target and "\\" not in target:
-        # Looks like a todo ID - try to find it
-        t = find_todo(target)
-        if t:
-            try:
-                attachment = attach_to_todo(
-                    t.source.path,
-                    t.line_number,
-                    file_path,
-                    title=title,
-                    copy=copy,
-                )
-                console.print(f"[green]Attached:[/green] {attachment.path}")
-                console.print(f"[dim]To todo: {t.content[:50]}...[/dim]")
-                return
-            except FileNotFoundError as e:
-                console.print(f"[red]{e}[/red]")
-                raise SystemExit(1)
-        # Fall through to try as note path
-        note_path = config.notes_root / target
-    else:
-        note_path = config.notes_root / target
+    if todo:
+        try:
+            attachment = attach_to_todo(
+                todo.source.path,
+                todo.line_number,
+                file_path,
+                title=title,
+                copy=copy,
+            )
+            console.print(f"[green]Attached:[/green] {attachment.path}")
+            console.print(f"[dim]To todo: {todo.content[:50]}...[/dim]")
+            return
+        except FileNotFoundError as e:
+            console.print(f"[red]{e}[/red]")
+            raise SystemExit(1)
 
-    if not note_path.suffix:
-        note_path = note_path.with_suffix(".md")
-
-    if not note_path.exists():
-        console.print(f"[red]Note not found: {target}[/red]")
+    if not note_path:
         raise SystemExit(1)
 
     try:
@@ -107,37 +88,25 @@ def attach_url(url: str, target: str | None, title: str | None) -> None:
     """
     from nb.core.attachments import attach_to_note, attach_to_todo
 
-    config = get_config()
+    note_path, todo = resolve_attachment_target(target)
 
-    # Determine target (same logic as attach_file)
-    if target is None:
-        note_path = ensure_daily_note(date.today())
-    elif len(target) >= 8 and "/" not in target and "\\" not in target:
-        t = find_todo(target)
-        if t:
-            try:
-                attachment = attach_to_todo(
-                    t.source.path,
-                    t.line_number,
-                    url,
-                    title=title,
-                    copy=False,
-                )
-                console.print(f"[green]Attached:[/green] {attachment.path}")
-                console.print(f"[dim]To todo: {t.content[:50]}...[/dim]")
-                return
-            except Exception as e:
-                console.print(f"[red]{e}[/red]")
-                raise SystemExit(1)
-        note_path = config.notes_root / target
-    else:
-        note_path = config.notes_root / target
+    if todo:
+        try:
+            attachment = attach_to_todo(
+                todo.source.path,
+                todo.line_number,
+                url,
+                title=title,
+                copy=False,
+            )
+            console.print(f"[green]Attached:[/green] {attachment.path}")
+            console.print(f"[dim]To todo: {todo.content[:50]}...[/dim]")
+            return
+        except Exception as e:
+            console.print(f"[red]{e}[/red]")
+            raise SystemExit(1)
 
-    if not note_path.suffix:
-        note_path = note_path.with_suffix(".md")
-
-    if not note_path.exists():
-        console.print(f"[red]Note not found: {target}[/red]")
+    if not note_path:
         raise SystemExit(1)
 
     try:
@@ -161,17 +130,16 @@ def attach_list(target: str | None) -> None:
         nb attach list daily/2025-11-27.md
 
     """
-    from nb.core.attachments import list_attachments_in_file, resolve_attachment_path
-    from nb.models import Attachment
+    from datetime import date
 
-    config = get_config()
+    from nb.core.attachments import list_attachments_in_file, resolve_attachment_path
+    from nb.core.notes import ensure_daily_note
+    from nb.models import Attachment
 
     if target is None:
         note_path = ensure_daily_note(date.today())
     else:
-        note_path = config.notes_root / target
-        if not note_path.suffix:
-            note_path = note_path.with_suffix(".md")
+        note_path = ensure_note_path(target)
 
     if not note_path.exists():
         console.print(f"[red]Note not found: {target}[/red]")
@@ -218,10 +186,7 @@ def attach_open(target: str, line: int | None) -> None:
     from nb.core.attachments import list_attachments_in_file, open_attachment
     from nb.models import Attachment
 
-    config = get_config()
-    note_path = config.notes_root / target
-    if not note_path.suffix:
-        note_path = note_path.with_suffix(".md")
+    note_path = ensure_note_path(target)
 
     if not note_path.exists():
         console.print(f"[red]Note not found: {target}[/red]")

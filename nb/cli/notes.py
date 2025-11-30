@@ -7,7 +7,13 @@ from pathlib import Path
 
 import click
 
-from nb.cli.utils import console, get_notebook_display_info, print_note
+from nb.cli.utils import (
+    console,
+    get_notebook_display_info,
+    open_or_show_note,
+    print_note,
+    resolve_note_ref,
+)
 from nb.config import get_config
 from nb.core.notes import (
     create_note,
@@ -15,7 +21,6 @@ from nb.core.notes import (
     list_daily_notes,
     open_note,
 )
-from nb.utils.dates import parse_fuzzy_date
 
 
 def register_note_commands(cli: click.Group) -> None:
@@ -28,7 +33,7 @@ def register_note_commands(cli: click.Group) -> None:
     cli.add_command(show_note)
     cli.add_command(new_note)
     cli.add_command(edit_note)
-    cli.add_command(add_to_today)
+    cli.add_command(add_to_note)
     cli.add_command(list_notes_cmd)
     cli.add_command(alias_note)
     cli.add_command(unalias_note)
@@ -55,25 +60,14 @@ def today(ctx: click.Context, notebook: str | None) -> None:
     if notebook:
         # Create today's note in specified notebook
         if is_notebook_date_based(notebook):
-            # Use date-based structure
             path = ensure_notebook_note(notebook, dt=dt)
         else:
-            # Use today's date as filename
             path = ensure_notebook_note(notebook, name=dt.isoformat())
     else:
-        # Default: daily notebook
         path = ensure_daily_note(dt)
 
-    if ctx.obj and ctx.obj.get("show"):
-        print_note(path)
-    else:
-        config = get_config()
-        try:
-            rel_path = path.relative_to(config.notes_root)
-        except ValueError:
-            rel_path = path
-        console.print(f"[dim]Opening {rel_path}...[/dim]")
-        open_note(path)
+    show = ctx.obj and ctx.obj.get("show")
+    open_or_show_note(path, show=show)
 
 
 @click.command()
@@ -83,11 +77,8 @@ def yesterday(ctx: click.Context) -> None:
     dt = date.today() - timedelta(days=1)
     path = ensure_daily_note(dt)
 
-    if ctx.obj and ctx.obj.get("show"):
-        print_note(path)
-    else:
-        console.print(f"[dim]Opening {path.name}...[/dim]")
-        open_note(path)
+    show = ctx.obj and ctx.obj.get("show")
+    open_or_show_note(path, show=show)
 
 
 @click.command("last")
@@ -112,7 +103,6 @@ def last_note(show: bool, notebook: str | None, viewed: bool) -> None:
     """
     from nb.core.notes import get_last_modified_note, get_last_viewed_note
 
-    # Get the appropriate note
     if viewed:
         path = get_last_viewed_note(notebook=notebook)
         if not path:
@@ -128,17 +118,7 @@ def last_note(show: bool, notebook: str | None, viewed: bool) -> None:
                 console.print("[dim]Try 'nb index' to ensure notes are indexed.[/dim]")
             raise SystemExit(1)
 
-    config = get_config()
-    try:
-        rel_path = path.relative_to(config.notes_root)
-    except ValueError:
-        rel_path = path
-
-    if show:
-        print_note(path)
-    else:
-        console.print(f"[dim]Opening {rel_path}...[/dim]")
-        open_note(path)
+    open_or_show_note(path, show=show)
 
 
 @click.command("history")
@@ -225,16 +205,12 @@ def history_cmd(limit: int, notebook: str | None, full_path: bool) -> None:
             alias_str = ""
             # Check if this is a linked note by looking for alias in source
             for ln in config.linked_notes:
-                try:
-                    if ln.path.is_file() and ln.path.resolve() == abs_path.resolve():
-                        alias_str = f" [dim](@{ln.alias})[/dim]"
-                        break
-                    elif ln.path.is_dir():
-                        abs_path.relative_to(ln.path)
-                        alias_str = f" [dim](@{ln.alias})[/dim]"
-                        break
-                except ValueError:
-                    continue
+                if ln.path.is_file() and ln.path.resolve() == abs_path.resolve():
+                    alias_str = f" [dim](@{ln.alias})[/dim]"
+                    break
+                elif ln.path.is_dir() and abs_path.is_relative_to(ln.path):
+                    alias_str = f" [dim](@{ln.alias})[/dim]"
+                    break
 
             console.print(f"  [dim]{time_str}[/dim]  {display_path}{alias_str}")
 
@@ -268,133 +244,14 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
     Both notebook and note names support fuzzy matching - if no exact match
     is found, similar options will be suggested interactively.
     """
-    from nb.cli.utils import resolve_notebook, resolve_note
-    from nb.core.aliases import get_note_by_alias
-    from nb.core.links import get_linked_note_in_notebook
-    from nb.core.notebooks import (
-        ensure_notebook_note,
-        get_notebook_note_path,
-        is_notebook_date_based,
-    )
-
-    config = get_config()
     show = ctx.obj and ctx.obj.get("show")
 
-    # Parse notebook/note format if present
-    if "/" in note_ref and not notebook:
-        parts = note_ref.split("/", 1)
-        notebook = parts[0]
-        note_ref = parts[1]
+    path = resolve_note_ref(note_ref, notebook=notebook, create_if_date_based=True)
+    if not path:
+        console.print(f"[red]Could not resolve note: {note_ref}[/red]")
+        raise SystemExit(1)
 
-    # Check if note_ref is a note alias
-    alias_path = get_note_by_alias(note_ref)
-    if alias_path and alias_path.exists():
-        if show:
-            print_note(alias_path)
-        else:
-            console.print(f"[dim]Opening {alias_path.name}...[/dim]")
-            open_note(alias_path)
-        return
-
-    # Resolve notebook with fuzzy matching if specified
-    if notebook:
-        nb_config = config.get_notebook(notebook)
-        if not nb_config:
-            resolved = resolve_notebook(notebook)
-            if resolved:
-                notebook = resolved
-            else:
-                raise SystemExit(1)
-
-    # If notebook is specified, handle it
-    if notebook:
-        # Check if note_ref matches a linked note alias in this notebook
-        linked = get_linked_note_in_notebook(notebook, note_ref)
-        if linked:
-            # Found linked note by alias - open the linked file
-            if show:
-                print_note(linked.path)
-            else:
-                ln_notebook = linked.notebook or f"@{linked.alias}"
-                console.print(f"[dim]Opening {ln_notebook}/{linked.alias}...[/dim]")
-                open_note(linked.path)
-            return
-
-        # Check if it's a date-based notebook
-        if is_notebook_date_based(notebook):
-            # Try to parse as a date
-            parsed = parse_fuzzy_date(note_ref)
-            if parsed:
-                note_path = ensure_notebook_note(notebook, dt=parsed)
-                if show:
-                    print_note(note_path)
-                else:
-                    try:
-                        rel_path = note_path.relative_to(config.notes_root)
-                    except ValueError:
-                        rel_path = note_path
-                    console.print(f"[dim]Opening {rel_path}...[/dim]")
-                    open_note(note_path)
-                return
-            else:
-                console.print(f"[red]Could not parse date: {note_ref}[/red]")
-                raise SystemExit(1)
-        else:
-            # Non-date-based notebook: treat note_ref as a name
-            try:
-                note_path = get_notebook_note_path(notebook, name=note_ref)
-            except ValueError as e:
-                console.print(f"[red]{e}[/red]")
-                raise SystemExit(1)
-
-            if not note_path.exists():
-                # Try fuzzy matching
-                resolved_path = resolve_note(note_ref, notebook=notebook)
-                if resolved_path:
-                    note_path = resolved_path
-                else:
-                    raise SystemExit(1)
-
-            if show:
-                print_note(note_path)
-            else:
-                try:
-                    rel_path = note_path.relative_to(config.notes_root)
-                except ValueError:
-                    rel_path = note_path
-                console.print(f"[dim]Opening {rel_path}...[/dim]")
-                open_note(note_path)
-            return
-
-    # No notebook specified - use original behavior
-
-    # First check if it's a path to an existing note
-    path = Path(note_ref)
-    if not path.suffix:
-        path = path.with_suffix(".md")
-
-    full_path = config.notes_root / path
-    if full_path.exists():
-        if show:
-            print_note(full_path)
-        else:
-            console.print(f"[dim]Opening {path}...[/dim]")
-            open_note(full_path)
-        return
-
-    # Try to parse as a date
-    parsed = parse_fuzzy_date(note_ref)
-    if parsed:
-        note_path = ensure_daily_note(parsed)
-        if show:
-            print_note(note_path)
-        else:
-            console.print(f"[dim]Opening {note_path.name}...[/dim]")
-            open_note(note_path)
-        return
-
-    console.print(f"[red]Could not parse date: {note_ref}[/red]")
-    raise SystemExit(1)
+    open_or_show_note(path, show=show)
 
 
 @click.command("show")
@@ -422,96 +279,16 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
       nb show myproject -n ideas  # Show ideas/myproject.md
       nb show mytodo -n nbcli     # Show linked note 'mytodo' in notebook 'nbcli'
     """
-    from nb.core.aliases import get_note_by_alias
-    from nb.core.links import get_linked_note_in_notebook
-    from nb.core.notebooks import (
-        ensure_notebook_note,
-        get_notebook_note_path,
-        is_notebook_date_based,
-    )
-
-    config = get_config()
-
-    # If no note_ref provided, default to today
+    # Default to today if no note_ref provided
     if note_ref is None:
         note_ref = "today"
 
-    # Handle "today" specially
-    if note_ref.lower() == "today":
-        dt = date.today()
-        if notebook:
-            if is_notebook_date_based(notebook):
-                note_path = ensure_notebook_note(notebook, dt=dt)
-            else:
-                # For non-date-based, use today's date as name
-                note_path = ensure_notebook_note(notebook, name=dt.isoformat())
-        else:
-            note_path = ensure_daily_note(dt)
-        print_note(note_path)
-        return
+    path = resolve_note_ref(note_ref, notebook=notebook, create_if_date_based=True)
+    if not path:
+        console.print(f"[red]Could not resolve note: {note_ref}[/red]")
+        raise SystemExit(1)
 
-    # Check if note_ref is a note alias (unless notebook specified)
-    if not notebook:
-        alias_path = get_note_by_alias(note_ref)
-        if alias_path and alias_path.exists():
-            print_note(alias_path)
-            return
-
-    # If notebook is specified, handle it
-    if notebook:
-        # Check if note_ref matches a linked note alias in this notebook
-        linked = get_linked_note_in_notebook(notebook, note_ref)
-        if linked:
-            # Found linked note by alias - show the linked file
-            print_note(linked.path)
-            return
-
-        if is_notebook_date_based(notebook):
-            # Try to parse as a date
-            parsed = parse_fuzzy_date(note_ref)
-            if parsed:
-                note_path = ensure_notebook_note(notebook, dt=parsed)
-                print_note(note_path)
-                return
-            else:
-                console.print(f"[red]Could not parse date: {note_ref}[/red]")
-                raise SystemExit(1)
-        else:
-            # Non-date-based notebook: treat note_ref as a name
-            try:
-                note_path = get_notebook_note_path(notebook, name=note_ref)
-            except ValueError as e:
-                console.print(f"[red]{e}[/red]")
-                raise SystemExit(1)
-
-            if not note_path.exists():
-                console.print(f"[red]Note not found: {notebook}/{note_ref}[/red]")
-                raise SystemExit(1)
-
-            print_note(note_path)
-            return
-
-    # No notebook specified - check if it's a path or parse as date
-
-    # First check if it's a path to an existing note
-    path = Path(note_ref)
-    if not path.suffix:
-        path = path.with_suffix(".md")
-
-    full_path = config.notes_root / path
-    if full_path.exists():
-        print_note(full_path)
-        return
-
-    # Try to parse as a date
-    parsed = parse_fuzzy_date(note_ref)
-    if parsed:
-        note_path = ensure_daily_note(parsed)
-        print_note(note_path)
-        return
-
-    console.print(f"[red]Could not parse date: {note_ref}[/red]")
-    raise SystemExit(1)
+    print_note(path)
 
 
 @click.command("new")
@@ -644,16 +421,12 @@ def edit_note(path: str) -> None:
 
     PATH is relative to the notes root.
     """
-    config = get_config()
-    note_path = Path(path)
+    from nb.cli.utils import ensure_note_path
 
-    if not note_path.suffix:
-        note_path = note_path.with_suffix(".md")
-
-    full_path = config.notes_root / note_path
+    full_path = ensure_note_path(path)
 
     if not full_path.exists():
-        console.print(f"[red]Note not found:[/red] {note_path}")
+        console.print(f"[red]Note not found:[/red] {path}")
         raise SystemExit(1)
 
     open_note(full_path)
@@ -661,16 +434,54 @@ def edit_note(path: str) -> None:
 
 @click.command("add")
 @click.argument("text")
-def add_to_today(text: str) -> None:
-    """Append a line to today's note."""
-    dt = date.today()
-    path = ensure_daily_note(dt)
+@click.option(
+    "--note",
+    "-N",
+    "target_note",
+    help="Add to specific note (path, alias, or notebook/note format)",
+)
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook to search for note (used with --note)",
+)
+def add_to_note(text: str, target_note: str | None, notebook: str | None) -> None:
+    """Append a line to a note (defaults to today's daily note).
 
-    # Append the text
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(f"\n{text}\n")
+    \b
+    Examples:
+      nb add "Quick thought"                       # Today's daily note
+      nb add "Note text" --note myproject          # Specific note by name
+      nb add "Note text" --note work/myproject     # Notebook/note format
+      nb add "Note text" --note myproject -n work  # Note in specific notebook
+      nb add "Note text" -N proj                   # Using alias
+    """
+    if target_note:
+        resolved_path = resolve_note_ref(target_note, notebook=notebook)
+        if not resolved_path:
+            console.print(f"[red]Note not found: {target_note}[/red]")
+            raise SystemExit(1)
 
-    console.print(f"[green]Added to {path.name}[/green]")
+        # Append the text
+        with open(resolved_path, "a", encoding="utf-8") as f:
+            f.write(f"\n{text}\n")
+
+        console.print(f"[green]Added to {resolved_path.name}[/green]")
+    else:
+        # Default: add to today's daily note
+        if notebook:
+            console.print(
+                "[yellow]Warning: --notebook/-n ignored without --note[/yellow]"
+            )
+
+        dt = date.today()
+        path = ensure_daily_note(dt)
+
+        # Append the text
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"\n{text}\n")
+
+        console.print(f"[green]Added to {path.name}[/green]")
 
 
 @click.command("list")

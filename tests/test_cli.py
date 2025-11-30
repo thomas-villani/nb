@@ -34,7 +34,7 @@ def cli_config(tmp_path: Path):
         notebooks=[
             NotebookConfig(name="daily", date_based=True),
             NotebookConfig(name="projects", date_based=False),
-            NotebookConfig(name="work", date_based=True),
+            NotebookConfig(name="work", date_based=False),
         ],
         linked_todos=[],
         linked_notes=[],
@@ -61,6 +61,8 @@ def cli_config(tmp_path: Path):
 @pytest.fixture
 def mock_cli_config(cli_config: Config, monkeypatch: pytest.MonkeyPatch):
     """Mock get_config() for CLI tests."""
+    # Reset any cached config first
+    config_module.reset_config()
     monkeypatch.setattr(config_module, "_config", cli_config)
     return cli_config
 
@@ -250,12 +252,79 @@ class TestSearchCommand:
 
 
 class TestAddCommand:
-    """Tests for add command (append to daily note)."""
+    """Tests for add command (append to notes)."""
 
     def test_add_to_today(self, cli_runner: CliRunner, mock_cli_config: Config):
+        """Default: add to today's daily note."""
         result = cli_runner.invoke(cli, ["add", "Some quick note content"])
 
         assert result.exit_code == 0
+
+    def test_add_to_specific_note(self, cli_runner: CliRunner, mock_cli_config: Config):
+        """Add to specific note with --note."""
+        notes_root = mock_cli_config.notes_root
+        note_path = notes_root / "projects" / "myproject.md"
+        note_path.write_text("# My Project\n\nSome content.\n")
+
+        result = cli_runner.invoke(
+            cli, ["add", "New line of text", "--note", "myproject"]
+        )
+
+        assert result.exit_code == 0
+        assert "Added to myproject.md" in result.output
+        content = note_path.read_text()
+        assert "New line of text" in content
+
+    def test_add_to_note_with_notebook_prefix(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Add to note using notebook/note format."""
+        notes_root = mock_cli_config.notes_root
+        note_path = notes_root / "work" / "tasks.md"
+        note_path.write_text("# Tasks\n")
+
+        result = cli_runner.invoke(
+            cli, ["add", "Important task", "--note", "work/tasks"]
+        )
+
+        assert result.exit_code == 0
+        assert "Added to tasks.md" in result.output
+        content = note_path.read_text()
+        assert "Important task" in content
+
+    def test_add_to_note_with_notebook_option(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Add to note using --note and --notebook separately."""
+        notes_root = mock_cli_config.notes_root
+        note_path = notes_root / "work" / "meetings.md"
+        note_path.write_text("# Meetings\n")
+
+        result = cli_runner.invoke(
+            cli, ["add", "Meeting note", "--note", "meetings", "-n", "work"]
+        )
+
+        assert result.exit_code == 0
+        assert "Added to meetings.md" in result.output
+        content = note_path.read_text()
+        assert "Meeting note" in content
+
+    def test_add_note_not_found(self, cli_runner: CliRunner, mock_cli_config: Config):
+        """Error when note doesn't exist."""
+        result = cli_runner.invoke(cli, ["add", "Some text", "--note", "nonexistent"])
+
+        assert result.exit_code == 1
+        assert "Note not found" in result.output
+
+    def test_add_notebook_ignored_without_note(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Warning when --notebook used without --note."""
+        result = cli_runner.invoke(cli, ["add", "Some text", "-n", "work"])
+
+        # Should still succeed (adds to daily)
+        assert result.exit_code == 0
+        assert "Warning" in result.output
 
 
 class TestAliases:

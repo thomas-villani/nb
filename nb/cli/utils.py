@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 
 from nb.config import get_config, init_config
+
+if TYPE_CHECKING:
+    from nb.models import Todo
 
 console = Console(highlight=False)
 
@@ -269,3 +273,247 @@ def resolve_note(
         return name_to_path.get(resolved_name)
 
     return None
+
+
+def get_display_path(path: Path) -> Path:
+    """Get a path suitable for display (relative to notes_root if possible).
+
+    Args:
+        path: Absolute or relative path to a note.
+
+    Returns:
+        Path relative to notes_root if possible, otherwise the original path.
+    """
+    config = get_config()
+    try:
+        return path.relative_to(config.notes_root)
+    except ValueError:
+        return path
+
+
+def ensure_note_path(path: str | Path, notes_root: Path | None = None) -> Path:
+    """Ensure path has .md extension and resolve to absolute path.
+
+    Args:
+        path: Path string or Path object (can be relative to notes_root).
+        notes_root: Override notes root directory.
+
+    Returns:
+        Absolute path with .md extension.
+    """
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    if isinstance(path, str):
+        path = Path(path)
+
+    if not path.suffix:
+        path = path.with_suffix(".md")
+
+    if not path.is_absolute():
+        path = notes_root / path
+
+    return path
+
+
+def open_or_show_note(path: Path, show: bool = False) -> None:
+    """Open a note in editor or print to console.
+
+    Args:
+        path: Absolute path to the note.
+        show: If True, print note to console instead of opening editor.
+    """
+    from nb.core.notes import open_note
+
+    if show:
+        print_note(path)
+    else:
+        rel_path = get_display_path(path)
+        console.print(f"[dim]Opening {rel_path}...[/dim]")
+        open_note(path)
+
+
+def resolve_note_ref(
+    note_ref: str,
+    notebook: str | None = None,
+    ensure_exists: bool = True,
+    create_if_date_based: bool = False,
+    interactive: bool = True,
+) -> Path | None:
+    """Unified note resolution handling all cases.
+
+    Resolves a note reference to an absolute path, handling:
+    - Note aliases (created with 'nb alias')
+    - Linked note aliases (from 'nb link')
+    - notebook/note format parsing
+    - Date-based notebooks (e.g., "friday" -> daily note for Friday)
+    - Fuzzy matching for note names
+    - Path with/without .md extension
+
+    Args:
+        note_ref: The note reference. Can be:
+            - A note alias (e.g., "myalias")
+            - A linked note alias (e.g., "nbtodo")
+            - A notebook/note format (e.g., "daily/friday")
+            - A date string for date-based notebooks (e.g., "friday", "nov 26")
+            - A path relative to notes_root (e.g., "projects/ideas")
+        notebook: Optional notebook context. If provided:
+            - For date-based notebooks, note_ref is parsed as a date.
+            - For non-date-based notebooks, note_ref is treated as a note name.
+        ensure_exists: If True, return None for non-existent notes.
+            If False, return the resolved path even if the file doesn't exist.
+        create_if_date_based: If True and notebook is date-based, create the note
+            if it doesn't exist.
+        interactive: If True, prompt user to select from fuzzy matches.
+
+    Returns:
+        Absolute path to the note, or None if not found.
+    """
+    from nb.core.aliases import get_note_by_alias
+    from nb.core.links import get_linked_note_in_notebook
+    from nb.core.notebooks import (
+        ensure_notebook_note,
+        get_notebook_note_path,
+        is_notebook_date_based,
+    )
+    from nb.utils.dates import parse_fuzzy_date
+
+    config = get_config()
+
+    # Parse notebook/note format if present
+    if "/" in note_ref and not notebook:
+        parts = note_ref.split("/", 1)
+        notebook = parts[0]
+        note_ref = parts[1]
+
+    # Check if note_ref is a note alias (only if no notebook specified)
+    if not notebook:
+        alias_path = get_note_by_alias(note_ref)
+        if alias_path and alias_path.exists():
+            return alias_path
+
+    # Resolve notebook with fuzzy matching if specified
+    if notebook:
+        nb_config = config.get_notebook(notebook)
+        if not nb_config:
+            resolved = resolve_notebook(notebook, interactive=interactive)
+            if resolved:
+                notebook = resolved
+            else:
+                return None
+
+        # Check if note_ref matches a linked note alias in this notebook
+        linked = get_linked_note_in_notebook(notebook, note_ref)
+        if linked:
+            return linked.path
+
+        # Handle date-based vs non-date-based notebooks
+        if is_notebook_date_based(notebook):
+            parsed = parse_fuzzy_date(note_ref)
+            if parsed:
+                if create_if_date_based:
+                    return ensure_notebook_note(notebook, dt=parsed)
+                else:
+                    note_path = get_notebook_note_path(notebook, dt=parsed)
+                    if ensure_exists and not note_path.exists():
+                        return None
+                    return note_path
+            else:
+                console.print(f"[red]Could not parse date: {note_ref}[/red]")
+                return None
+        else:
+            # Non-date-based notebook: treat note_ref as a name
+            try:
+                note_path = get_notebook_note_path(notebook, name=note_ref)
+            except ValueError as e:
+                console.print(f"[red]{e}[/red]")
+                return None
+
+            if not note_path.exists():
+                # Try fuzzy matching
+                resolved_path = resolve_note(
+                    note_ref, notebook=notebook, interactive=interactive
+                )
+                if resolved_path:
+                    # Convert to absolute if needed
+                    if not resolved_path.is_absolute():
+                        resolved_path = config.notes_root / resolved_path
+                    return resolved_path
+                if ensure_exists:
+                    return None
+            return note_path
+
+    # No notebook specified - check various possibilities
+
+    # First check if it's a path to an existing note
+    note_path = ensure_note_path(note_ref, notes_root=config.notes_root)
+    if note_path.exists():
+        return note_path
+
+    # Try to parse as a date (for daily notes)
+    parsed = parse_fuzzy_date(note_ref)
+    if parsed:
+        from nb.core.notes import ensure_daily_note, get_daily_note_path
+
+        if create_if_date_based:
+            return ensure_daily_note(parsed)
+        else:
+            daily_path = get_daily_note_path(parsed)
+            if ensure_exists and not daily_path.exists():
+                return None
+            return daily_path
+
+    # Try fuzzy matching across all notes
+    resolved_path = resolve_note(note_ref, interactive=interactive)
+    if resolved_path:
+        # Convert to absolute if needed
+        if not resolved_path.is_absolute():
+            resolved_path = config.notes_root / resolved_path
+        return resolved_path
+
+    return None
+
+
+def resolve_attachment_target(
+    target: str | None,
+) -> tuple[Path | None, "Todo | None"]:
+    """Resolve an attachment target to either a note path or todo.
+
+    Args:
+        target: Target string. Can be:
+            - None (defaults to today's daily note)
+            - A todo ID (8+ chars, no slashes)
+            - A note path (relative to notes_root)
+
+    Returns:
+        Tuple of (note_path, todo). One will be set, the other None.
+        If target is a todo, returns (None, todo).
+        If target is a note, returns (note_path, None).
+        If target is None, returns (today's daily note path, None).
+        If target not found, returns (None, None).
+    """
+    from datetime import date
+
+    from nb.core.notes import ensure_daily_note
+
+    config = get_config()
+
+    if target is None:
+        # Default to today's note
+        return (ensure_daily_note(date.today()), None)
+
+    # Check if it looks like a todo ID (8+ chars, no path separators)
+    if len(target) >= 8 and "/" not in target and "\\" not in target:
+        t = find_todo(target)
+        if t:
+            return (None, t)
+        # Fall through to try as note path
+
+    # Treat as note path
+    note_path = ensure_note_path(target, notes_root=config.notes_root)
+
+    if not note_path.exists():
+        console.print(f"[red]Note not found: {target}[/red]")
+        return (None, None)
+
+    return (note_path, None)

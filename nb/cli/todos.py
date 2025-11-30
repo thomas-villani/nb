@@ -1234,8 +1234,8 @@ def todo_done(todo_id: tuple[str, ...]) -> None:
             raise SystemExit(1)
 
         if t.completed:
-            console.print("[yellow]Todo is already completed.[/yellow]")
-            return
+            console.print(f"[yellow]Todo {_todo[:6]} is already completed.[/yellow]")
+            continue
 
         # Toggle in source file
         try:
@@ -1269,8 +1269,8 @@ def todo_undone(todo_id: tuple[str, ...]) -> None:
             raise SystemExit(1)
 
         if not t.completed:
-            console.print("[yellow]Todo is not completed.[/yellow]")
-            return
+            console.print(f"[yellow]Todo {_todo[:6]} is not completed.[/yellow]")
+            continue
 
         # Toggle in source file
         try:
@@ -1309,13 +1309,13 @@ def todo_start(todo_id: tuple[str, ...]) -> None:
 
         if t.completed:
             console.print(
-                "[yellow]Todo is already completed. Use 'nb todo undone' first.[/yellow]"
+                f"[yellow]Todo {_todo[:6]} is already completed. Use 'nb todo undone' first.[/yellow]"
             )
-            return
+            continue
 
         if t.in_progress:
-            console.print("[yellow]Todo is already in progress.[/yellow]")
-            return
+            console.print(f"[yellow]Todo {_todo[:6]} is already in progress.[/yellow]")
+            continue
 
         # Set status in source file
         try:
@@ -1355,13 +1355,13 @@ def todo_pause(todo_id: tuple[str, ...]) -> None:
 
         if t.completed:
             console.print(
-                "[yellow]Todo is completed. Use 'nb todo undone' first.[/yellow]"
+                f"[yellow]Todo {_todo[:6]} is completed. Use 'nb todo undone' first.[/yellow]"
             )
-            return
+            continue
 
         if not t.in_progress:
-            console.print("[yellow]Todo is not in progress.[/yellow]")
-            return
+            console.print(f"[yellow]Todo {_todo[:6]} is not in progress.[/yellow]")
+            continue
 
         # Set status in source file
         try:
