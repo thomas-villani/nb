@@ -85,9 +85,10 @@ nb last -n work           # Last modified note in work notebook
 nb last --viewed          # Open last viewed note (instead of modified)
 nb last --viewed -n work  # Last viewed note in work notebook
 
-nb history                # Show recently viewed notes
+nb history                # Show last 10 viewed notes (grouped by notebook)
 nb history -l 50          # Show last 50 viewed notes
 nb history -n work        # Filter by notebook
+nb history -f             # Show full paths instead of filenames
 ```
 
 Date-based notebooks organize notes by work week:
@@ -230,6 +231,8 @@ nb todo -c              # Include completed todos
 nb todo -n daily        # Show todos from a specific notebook
 nb todo -n daily -n work  # Filter by multiple notebooks
 nb todo --note projects/myproject  # Filter by specific note
+nb todo --note nbtodo              # Filter by linked note alias
+nb todo --note a --note b          # Filter by multiple notes
 nb todo --overdue       # Show overdue todos only
 nb todo -t work         # Filter by tag
 nb todo -T waiting      # Exclude todos with a tag
@@ -249,6 +252,8 @@ nb todo -s created      # Sort by creation date
 # Todo actions
 nb todo add "New task"  # Add to inbox (todo.md)
 nb todo add --today "Call dentist"  # Add to today's note
+nb todo add --note work/project "Document API"  # Add to specific note
+nb todo add --note work/project::Tasks "New task"  # Add under specific section
 nb todo done abc123     # Mark complete (by ID prefix)
 nb todo undone abc123   # Mark incomplete
 nb todo start abc123    # Mark as in-progress ([ ] -> [^])
@@ -264,6 +269,23 @@ nb todo --delete-view work-urgent  # Delete a view
 ```
 
 Todos are grouped by status and due date: OVERDUE, IN PROGRESS, DUE TODAY, DUE THIS WEEK, DUE NEXT WEEK, DUE LATER, NO DUE DATE.
+
+#### Adding Todos to Specific Notes
+
+Use `--note` / `-N` to add todos directly to a specific note instead of the inbox:
+
+```bash
+nb todo add "Review docs" --note work/project       # Add to work/project.md
+nb todo add "Call client" -N daily/2025-11-29       # Add to specific daily note
+nb todo add "New feature" --note ideas::Backlog     # Add under "Backlog" section
+nb ta "Quick task" -N work/project::Tasks           # Using alias with section
+```
+
+The syntax `notebook/note::Section` targets a section heading within the note:
+- If the section exists, the todo is added at the end of that section
+- If the section doesn't exist, it's created as a new `## Section` heading
+
+Note names support fuzzy matching - if no exact match is found, similar notes will be suggested.
 
 Todos can be hidden from `nb todo` at three levels:
 - **Notebook-level**: Set `todo_exclude: true` in notebook config
@@ -667,7 +689,7 @@ Reviewed the roadmap and assigned initial tasks.
 | `s` | `search` |
 | `ss` | `search --semantic` |
 | `td` | `todo` |
-| `ta` | `todo add` |
+| `ta` | `todo add` (supports `--today`, `--note`/`-N`) |
 | `nbs` | `notebooks` |
 
 ## Global Options

@@ -308,13 +308,32 @@ def query_todos(
     if notes:
         note_conditions = []
         for note_path in notes:
-            # Match notes by path ending (e.g., "daily/2025-01-01" matches ".../daily/2025-01-01.md")
-            note_conditions.append("t.source_path LIKE ?")
-            # Handle both with and without .md extension
-            if note_path.endswith(".md"):
-                params.append(f"%{note_path}")
+            # Check if this looks like a full/absolute path (contains drive letter or starts with /)
+            is_full_path = (
+                len(note_path) > 2 and note_path[1] == ":"  # Windows: C:/...
+            ) or note_path.startswith(
+                "/"
+            )  # Unix: /home/...
+
+            if is_full_path:
+                # For full paths (linked notes), match the path prefix
+                # This allows matching files within a linked directory
+                note_conditions.append("(t.source_path = ? OR t.source_path LIKE ?)")
+                # Exact match for files
+                if note_path.endswith(".md"):
+                    params.append(note_path)
+                else:
+                    params.append(f"{note_path}.md")
+                # Prefix match for directories (files within the linked dir)
+                params.append(f"{note_path}/%")
             else:
-                params.append(f"%{note_path}.md")
+                # Match notes by path ending (e.g., "daily/2025-01-01" matches ".../daily/2025-01-01.md")
+                note_conditions.append("t.source_path LIKE ?")
+                # Handle both with and without .md extension
+                if note_path.endswith(".md"):
+                    params.append(f"%{note_path}")
+                else:
+                    params.append(f"%{note_path}.md")
         conditions.append(f"({' OR '.join(note_conditions)})")
 
     if exclude_notebooks:
@@ -439,7 +458,8 @@ def get_sorted_todos(
         # Priority: 1, 2, 3, then 999 for no priority
         priority_key = todo.priority.value if todo.priority else 999
 
-        return (group, date_key, priority_key)
+        # line_number preserves document order for todos from the same source
+        return (group, date_key, priority_key, todo.line_number)
 
     return sorted(todos, key=sort_key)
 

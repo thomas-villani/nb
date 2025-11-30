@@ -61,11 +61,18 @@ todo_exclude: true
 - [x] Templates for notes - allow to define templates and create from a template with `nb new ... --template <template_name>`
 - [ ] Toml for config instead of yaml
 - [ ] Note titles -- how to integrate and use them as a way to open notes too? Or at least display in list? This already seems to be the case.
-- [ ] `nb stats` command for overview statistics
-- [ ] `nb tags` command to list all tags with counts
-- [ ] Improve formatting for `nb history` command - color code notebooks and sort by notebook, include aliases.
-- [ ] Should have stable relative ordering of todos from same list when same (or no) todo dates (and no other sorting specified)
-- [ ] Enhance `todo add` command to allow putting into specific notes, or adding to a specific section
+- [ ] `nb stats` command for overview statistics, especially usage stats and completion stats, some graphs?!
+- [ ] `nb tags` command to list all tags with counts, and allow batch replace/rename of tags
+- [x] Improve formatting for `nb history` command - color code notebooks and sort by notebook, include aliases.
+- [x] Should have stable relative ordering of todos from same list when same (or no) todo dates (and no other sorting specified)
+- [x] Enhance `todo add` command to allow putting into specific notes, or adding to a specific section
+- [x] Extend `nb todo` command to allow filtering from specific note
+- [ ] Dynamically check terminal width for output of `nb todo` and other commands to give nicer looking output. E.g. columns are not always aligned in `nb todo`
+- [ ] The command aliases aren't really aliases, they don't pass the flags or show the right `--help` text. They need to pass the flags too!
+- [ ] Allow short alias for any note
+- [ ] enhance index command to allow specifying specific notebook
+- [ ] Add `nbt` command as alias to `nb todo`
+- [ ] Check that `nb todo --note <NOTE>` filter can accept `notebook/note::section` syntax, allow partial section match
 
 ### Phase 5: Advanced TUI
 - [ ] Full Wijjit-based todo list view with richer interactions

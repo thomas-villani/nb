@@ -57,7 +57,7 @@ def register_todo_commands(cli: click.Group) -> None:
 @click.option(
     "--note",
     multiple=True,
-    help="Filter by specific note path (can be used multiple times)",
+    help="Filter by note path or linked alias (repeatable)",
 )
 @click.option(
     "--exclude-notebook",
@@ -137,6 +137,8 @@ def todo(
       nb todo -n daily        Show todos from 'daily' notebook only
       nb todo -n daily -n work  Filter by multiple notebooks
       nb todo --note myproject  Filter by specific note
+      nb todo --note nbtodo     Filter by linked note alias
+      nb todo --note a --note b  Filter by multiple notes
       nb todo -a              Include todos from excluded notebooks
       nb todo -c              Include completed todos
       nb todo -s tag          Sort by tag instead of source
@@ -220,7 +222,24 @@ def todo(
                 else:
                     raise SystemExit(1)
 
-        effective_notes = list(note) if note else []
+        # Resolve notes with fuzzy matching and linked note alias support
+        from nb.cli.utils import resolve_note_for_todo_filter
+
+        effective_notes: list[str] = []
+        for note_ref in note:
+            # Extract notebook if specified (notebook/note format)
+            nb_hint = None
+            if "/" in note_ref:
+                parts = note_ref.split("/", 1)
+                nb_hint = parts[0]
+
+            resolved = resolve_note_for_todo_filter(note_ref, notebook=nb_hint)
+            if resolved:
+                effective_notes.append(resolved)
+            else:
+                console.print(f"[yellow]Note not found: {note_ref}[/yellow]")
+                raise SystemExit(1)
+
         effective_tag = tag
         effective_priority = priority
         effective_exclude_tags = list(exclude_tag) if exclude_tag else []
@@ -546,18 +565,28 @@ def _list_todos(
         groups["NO DUE DATE"] = []
 
     # Sort todos within each group
+    # line_number is used as a tiebreaker to maintain document order for todos from the same source
     def get_sort_key(todo):
         if sort_by == "tag":
-            return (todo.tags[0].lower() if todo.tags else "zzz", todo.content.lower())
+            return (
+                todo.tags[0].lower() if todo.tags else "zzz",
+                todo.content.lower(),
+                todo.line_number,
+            )
         elif sort_by == "priority":
             # Priority 1 is highest, None is lowest
             prio = todo.priority.value if todo.priority else 999
-            return (prio, todo.content.lower())
+            return (prio, todo.content.lower(), todo.line_number)
         elif sort_by == "created":
-            return (todo.created_date or date.min, todo.content.lower())
+            return (
+                todo.created_date or date.min,
+                todo.content.lower(),
+                todo.line_number,
+            )
         else:  # source (default)
+            # For source sorting, put line_number before content to maintain document order
             source_str = _format_todo_source(todo)
-            return (source_str.lower(), todo.content.lower())
+            return (source_str.lower(), todo.line_number, todo.content.lower())
 
     for group_todos in groups.values():
         group_todos.sort(key=get_sort_key)
@@ -811,7 +840,13 @@ def _print_todo(t, indent: int = 0, widths: dict[str, int] | None = None) -> Non
     is_flag=True,
     help="Add to today's daily note instead of inbox",
 )
-def todo_add(text: str, add_today: bool) -> None:
+@click.option(
+    "--note",
+    "-N",
+    "target_note",
+    help="Add to specific note (path or path::section)",
+)
+def todo_add(text: str, add_today: bool, target_note: str | None) -> None:
     """Add a new todo to the inbox (or today's note with --today).
 
     TEXT can include inline metadata:
@@ -827,8 +862,50 @@ def todo_add(text: str, add_today: bool) -> None:
       nb todo add "Review PR @due(friday) #work"
       nb todo add "Urgent task @priority(1) @due(today)"
       nb todo add --today "Call dentist"
+      nb todo add --note work/project "Document API"
+      nb todo add --note work/project::Tasks "New task"
     """
-    if add_today:
+    from nb.core.todos import add_todo_to_note
+
+    if target_note:
+        # Parse note::section syntax
+        if "::" in target_note:
+            note_ref, section = target_note.split("::", 1)
+        else:
+            note_ref = target_note
+            section = None
+
+        # Extract notebook if specified (notebook/note format)
+        notebook = None
+        if "/" in note_ref:
+            parts = note_ref.split("/", 1)
+            notebook = parts[0]
+            note_name = parts[1]
+        else:
+            note_name = note_ref
+
+        # Resolve note with fuzzy matching
+        from nb.cli.utils import resolve_note
+
+        resolved_path = resolve_note(note_name, notebook=notebook)
+        if not resolved_path:
+            console.print(f"[red]Note not found: {note_ref}[/red]")
+            raise SystemExit(1)
+
+        try:
+            t = add_todo_to_note(text, resolved_path, section=section)
+            if section:
+                console.print(
+                    f"[green]Added to {resolved_path.name}::{section}:[/green] {t.content}"
+                )
+            else:
+                console.print(
+                    f"[green]Added to {resolved_path.name}:[/green] {t.content}"
+                )
+        except FileNotFoundError as e:
+            console.print(f"[red]{e}[/red]")
+            raise SystemExit(1)
+    elif add_today:
         t = add_todo_to_daily_note(text)
         console.print(f"[green]Added to today's note:[/green] {t.content}")
     else:
@@ -840,9 +917,51 @@ def todo_add(text: str, add_today: bool) -> None:
 @click.command("ta")
 @click.argument("text")
 @click.option("--today", "add_today", is_flag=True, help="Add to today's daily note")
-def todo_add_alias(text: str, add_today: bool) -> None:
+@click.option(
+    "--note", "-N", "target_note", help="Add to specific note (path or path::section)"
+)
+def todo_add_alias(text: str, add_today: bool, target_note: str | None) -> None:
     """Alias for 'todo add'."""
-    if add_today:
+    from nb.core.todos import add_todo_to_note
+
+    if target_note:
+        # Parse note::section syntax
+        if "::" in target_note:
+            note_ref, section = target_note.split("::", 1)
+        else:
+            note_ref = target_note
+            section = None
+
+        # Extract notebook if specified
+        notebook = None
+        if "/" in note_ref:
+            parts = note_ref.split("/", 1)
+            notebook = parts[0]
+            note_name = parts[1]
+        else:
+            note_name = note_ref
+
+        from nb.cli.utils import resolve_note
+
+        resolved_path = resolve_note(note_name, notebook=notebook)
+        if not resolved_path:
+            console.print(f"[red]Note not found: {note_ref}[/red]")
+            raise SystemExit(1)
+
+        try:
+            t = add_todo_to_note(text, resolved_path, section=section)
+            if section:
+                console.print(
+                    f"[green]Added to {resolved_path.name}::{section}:[/green] {t.content}"
+                )
+            else:
+                console.print(
+                    f"[green]Added to {resolved_path.name}:[/green] {t.content}"
+                )
+        except FileNotFoundError as e:
+            console.print(f"[red]{e}[/red]")
+            raise SystemExit(1)
+    elif add_today:
         t = add_todo_to_daily_note(text)
         console.print(f"[green]Added to today's note:[/green] {t.content}")
     else:
@@ -852,8 +971,8 @@ def todo_add_alias(text: str, add_today: bool) -> None:
 
 
 @todo.command("done")
-@click.argument("todo_id")
-def todo_done(todo_id: str) -> None:
+@click.argument("todo_id", nargs=-1)
+def todo_done(todo_id: tuple[str, ...]) -> None:
     """Mark a todo as completed.
 
     TODO_ID can be the full ID or just the first few characters.
@@ -863,33 +982,35 @@ def todo_done(todo_id: str) -> None:
     Examples:
       nb todo done abc123
       nb todo done abc123def456...
+      nb todo done abc123 def567   # Multiple IDs allowed
     """
-    t = find_todo(todo_id)
-    if not t:
-        console.print(f"[red]Todo not found: {todo_id}[/red]")
-        raise SystemExit(1)
-
-    if t.completed:
-        console.print("[yellow]Todo is already completed.[/yellow]")
-        return
-
-    # Toggle in source file
-    try:
-        if toggle_todo_in_file(t.source.path, t.line_number):
-            update_todo_completion(t.id, True)
-            console.print(f"[green]Completed:[/green] {t.content}")
-        else:
-            console.print("[red]Failed to update todo in source file.[/red]")
+    for _todo in todo_id:
+        t = find_todo(_todo)
+        if not t:
+            console.print(f"[red]Todo not found: {_todo}[/red]")
             raise SystemExit(1)
-    except PermissionError as e:
-        console.print(f"[red]{e}[/red]")
-        console.print("[dim]Use 'nb link' to enable sync for this file.[/dim]")
-        raise SystemExit(1)
+
+        if t.completed:
+            console.print("[yellow]Todo is already completed.[/yellow]")
+            return
+
+        # Toggle in source file
+        try:
+            if toggle_todo_in_file(t.source.path, t.line_number):
+                update_todo_completion(t.id, True)
+                console.print(f"[green]Completed:[/green] {t.content}")
+            else:
+                console.print("[red]Failed to update todo in source file.[/red]")
+                raise SystemExit(1)
+        except PermissionError as e:
+            console.print(f"[red]{e}[/red]")
+            console.print("[dim]Use 'nb link' to enable sync for this file.[/dim]")
+            raise SystemExit(1)
 
 
 @todo.command("undone")
-@click.argument("todo_id")
-def todo_undone(todo_id: str) -> None:
+@click.argument("todo_id", nargs=-1)
+def todo_undone(todo_id: tuple[str, ...]) -> None:
     """Mark a todo as incomplete (reopen it).
 
     TODO_ID can be the full ID or just the first few characters.
@@ -898,32 +1019,33 @@ def todo_undone(todo_id: str) -> None:
     Examples:
       nb todo undone abc123
     """
-    t = find_todo(todo_id)
-    if not t:
-        console.print(f"[red]Todo not found: {todo_id}[/red]")
-        raise SystemExit(1)
-
-    if not t.completed:
-        console.print("[yellow]Todo is not completed.[/yellow]")
-        return
-
-    # Toggle in source file
-    try:
-        if toggle_todo_in_file(t.source.path, t.line_number):
-            update_todo_completion(t.id, False)
-            console.print(f"[green]Reopened:[/green] {t.content}")
-        else:
-            console.print("[red]Failed to update todo in source file.[/red]")
+    for _todo in todo_id:
+        t = find_todo(_todo)
+        if not t:
+            console.print(f"[red]Todo not found: {_todo}[/red]")
             raise SystemExit(1)
-    except PermissionError as e:
-        console.print(f"[red]{e}[/red]")
-        console.print("[dim]Use 'nb link' to enable sync for this file.[/dim]")
-        raise SystemExit(1)
+
+        if not t.completed:
+            console.print("[yellow]Todo is not completed.[/yellow]")
+            return
+
+        # Toggle in source file
+        try:
+            if toggle_todo_in_file(t.source.path, t.line_number):
+                update_todo_completion(t.id, False)
+                console.print(f"[green]Reopened:[/green] {t.content}")
+            else:
+                console.print("[red]Failed to update todo in source file.[/red]")
+                raise SystemExit(1)
+        except PermissionError as e:
+            console.print(f"[red]{e}[/red]")
+            console.print("[dim]Use 'nb link' to enable sync for this file.[/dim]")
+            raise SystemExit(1)
 
 
 @todo.command("start")
-@click.argument("todo_id")
-def todo_start(todo_id: str) -> None:
+@click.argument("todo_id", nargs=-1)
+def todo_start(todo_id: tuple[str, ...]) -> None:
     """Mark a todo as in-progress.
 
     Changes the todo marker from [ ] to [^] in the source file.
@@ -935,40 +1057,42 @@ def todo_start(todo_id: str) -> None:
     Examples:
       nb todo start abc123
     """
-    t = find_todo(todo_id)
-    if not t:
-        console.print(f"[red]Todo not found: {todo_id}[/red]")
-        raise SystemExit(1)
 
-    if t.completed:
-        console.print(
-            "[yellow]Todo is already completed. Use 'nb todo undone' first.[/yellow]"
-        )
-        return
-
-    if t.in_progress:
-        console.print("[yellow]Todo is already in progress.[/yellow]")
-        return
-
-    # Set status in source file
-    try:
-        if set_todo_status_in_file(
-            t.source.path, t.line_number, TodoStatus.IN_PROGRESS
-        ):
-            update_todo_status(t.id, TodoStatus.IN_PROGRESS)
-            console.print(f"[yellow]Started:[/yellow] {t.content}")
-        else:
-            console.print("[red]Failed to update todo in source file.[/red]")
+    for _todo in todo_id:
+        t = find_todo(_todo)
+        if not t:
+            console.print(f"[red]Todo not found: {_todo}[/red]")
             raise SystemExit(1)
-    except PermissionError as e:
-        console.print(f"[red]{e}[/red]")
-        console.print("[dim]Use 'nb link' to enable sync for this file.[/dim]")
-        raise SystemExit(1)
+
+        if t.completed:
+            console.print(
+                "[yellow]Todo is already completed. Use 'nb todo undone' first.[/yellow]"
+            )
+            return
+
+        if t.in_progress:
+            console.print("[yellow]Todo is already in progress.[/yellow]")
+            return
+
+        # Set status in source file
+        try:
+            if set_todo_status_in_file(
+                t.source.path, t.line_number, TodoStatus.IN_PROGRESS
+            ):
+                update_todo_status(t.id, TodoStatus.IN_PROGRESS)
+                console.print(f"[yellow]Started:[/yellow] {t.content}")
+            else:
+                console.print("[red]Failed to update todo in source file.[/red]")
+                raise SystemExit(1)
+        except PermissionError as e:
+            console.print(f"[red]{e}[/red]")
+            console.print("[dim]Use 'nb link' to enable sync for this file.[/dim]")
+            raise SystemExit(1)
 
 
 @todo.command("pause")
-@click.argument("todo_id")
-def todo_pause(todo_id: str) -> None:
+@click.argument("todo_id", nargs=-1)
+def todo_pause(todo_id: tuple[str, ...]) -> None:
     """Pause an in-progress todo (return to pending).
 
     Changes the todo marker from [^] to [ ] in the source file.
@@ -979,31 +1103,37 @@ def todo_pause(todo_id: str) -> None:
     Examples:
       nb todo pause abc123
     """
-    t = find_todo(todo_id)
-    if not t:
-        console.print(f"[red]Todo not found: {todo_id}[/red]")
-        raise SystemExit(1)
 
-    if t.completed:
-        console.print("[yellow]Todo is completed. Use 'nb todo undone' first.[/yellow]")
-        return
-
-    if not t.in_progress:
-        console.print("[yellow]Todo is not in progress.[/yellow]")
-        return
-
-    # Set status in source file
-    try:
-        if set_todo_status_in_file(t.source.path, t.line_number, TodoStatus.PENDING):
-            update_todo_status(t.id, TodoStatus.PENDING)
-            console.print(f"[dim]Paused:[/dim] {t.content}")
-        else:
-            console.print("[red]Failed to update todo in source file.[/red]")
+    for _todo in todo_id:
+        t = find_todo(_todo)
+        if not t:
+            console.print(f"[red]Todo not found: {_todo}[/red]")
             raise SystemExit(1)
-    except PermissionError as e:
-        console.print(f"[red]{e}[/red]")
-        console.print("[dim]Use 'nb link' to enable sync for this file.[/dim]")
-        raise SystemExit(1)
+
+        if t.completed:
+            console.print(
+                "[yellow]Todo is completed. Use 'nb todo undone' first.[/yellow]"
+            )
+            return
+
+        if not t.in_progress:
+            console.print("[yellow]Todo is not in progress.[/yellow]")
+            return
+
+        # Set status in source file
+        try:
+            if set_todo_status_in_file(
+                t.source.path, t.line_number, TodoStatus.PENDING
+            ):
+                update_todo_status(t.id, TodoStatus.PENDING)
+                console.print(f"[dim]Paused:[/dim] {t.content}")
+            else:
+                console.print("[red]Failed to update todo in source file.[/red]")
+                raise SystemExit(1)
+        except PermissionError as e:
+            console.print(f"[red]{e}[/red]")
+            console.print("[dim]Use 'nb link' to enable sync for this file.[/dim]")
+            raise SystemExit(1)
 
 
 @todo.command("show")

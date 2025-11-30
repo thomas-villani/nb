@@ -478,6 +478,142 @@ def get_inbox_path(notes_root: Path | None = None) -> Path:
     return notes_root / "todo.md"
 
 
+def add_todo_to_note(
+    text: str,
+    note_path: Path,
+    section: str | None = None,
+    notes_root: Path | None = None,
+) -> Todo:
+    """Add a todo to a specific note, optionally under a section heading.
+
+    Args:
+        text: The todo text (can include @due, @priority, #tags)
+        note_path: Path to the note (absolute or relative to notes_root)
+        section: Optional section heading to add todo under (case-insensitive)
+        notes_root: Override notes root directory
+
+    Returns:
+        The created Todo object.
+
+    """
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    # Resolve path
+    if not note_path.is_absolute():
+        full_path = notes_root / note_path
+    else:
+        full_path = note_path
+
+    if not full_path.exists():
+        raise FileNotFoundError(f"Note not found: {note_path}")
+
+    # Read current content
+    content = full_path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+
+    # Determine where to insert the todo
+    if section:
+        # Find the section heading (case-insensitive)
+        section_lower = section.lower()
+        section_line_idx = None
+        next_heading_idx = None
+
+        for i, line in enumerate(lines):
+            # Check if this is a markdown heading
+            heading_match = HEADING_PATTERN.match(line)
+            if heading_match:
+                heading_text = heading_match.group("text").strip()
+                if heading_text.lower() == section_lower:
+                    section_line_idx = i
+                elif section_line_idx is not None and next_heading_idx is None:
+                    # Found the next heading after our section
+                    next_heading_idx = i
+                    break
+
+            # Also check for colon labels
+            stripped = line.strip()
+            if stripped and not stripped.startswith("-"):
+                colon_match = COLON_LABEL_PATTERN.match(stripped)
+                if colon_match:
+                    label = colon_match.group("text").strip()
+                    if label.lower() == section_lower:
+                        section_line_idx = i
+                    elif section_line_idx is not None and next_heading_idx is None:
+                        next_heading_idx = i
+                        break
+
+        if section_line_idx is not None:
+            # Insert after the section heading, before the next heading
+            if next_heading_idx is not None:
+                # Find the last non-empty line before next heading
+                insert_idx = next_heading_idx
+                # Insert before the next heading
+                while (
+                    insert_idx > section_line_idx + 1
+                    and not lines[insert_idx - 1].strip()
+                ):
+                    insert_idx -= 1
+            else:
+                # No next heading, insert at end of file
+                insert_idx = len(lines)
+                # Ensure there's a blank line before if content exists
+                if lines and lines[-1].strip():
+                    lines.append("")
+                    insert_idx = len(lines)
+
+            lines.insert(insert_idx, f"- [ ] {text}")
+            line_number = insert_idx + 1
+        else:
+            # Section not found, create it at the end
+            if lines and lines[-1].strip():
+                lines.append("")
+            lines.append(f"## {section}")
+            lines.append("")
+            lines.append(f"- [ ] {text}")
+            line_number = len(lines)
+    else:
+        # No section specified, append at end
+        line_number = len(lines) + 1
+        lines.append(f"- [ ] {text}")
+
+    # Write back to file
+    full_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    # Create and return Todo object
+    clean_content = clean_todo_content(text)
+
+    # Determine notebook from path
+    from nb.core.notebooks import get_notebook_for_file
+
+    notebook = get_notebook_for_file(full_path)
+
+    source = TodoSource(
+        type="note",
+        path=full_path,
+        external=False,
+        alias=None,
+    )
+
+    return Todo(
+        id=make_todo_id(full_path, clean_content),
+        content=clean_content,
+        raw_content=text,
+        status=TodoStatus.PENDING,
+        source=source,
+        line_number=line_number,
+        created_date=date.today(),
+        due_date=parse_due_date(text),
+        priority=parse_priority(text),
+        tags=parse_tags(text),
+        notebook=notebook,
+        parent_id=None,
+        children=[],
+        attachments=[],
+        section=section,
+    )
+
+
 def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
     """Add a new todo to a daily note.
 

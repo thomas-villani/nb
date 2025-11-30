@@ -115,6 +115,69 @@ def resolve_notebook(name: str, interactive: bool = True) -> str | None:
     )
 
 
+def resolve_note_for_todo_filter(
+    note_ref: str,
+    notebook: str | None = None,
+) -> str | None:
+    """Resolve a note reference for todo filtering.
+
+    This handles:
+    - Linked note aliases (e.g., "nbtodo" resolves to the linked file path)
+    - Linked todo aliases (e.g., "mytodos" for linked todo files)
+    - Regular notes (e.g., "notebook/note-name" or just "note-name")
+
+    Args:
+        note_ref: The note reference (name, path, or linked alias).
+        notebook: Optional notebook to narrow search.
+
+    Returns:
+        A path string suitable for use in query_todos notes filter,
+        or None if not found.
+
+    """
+    from nb.core.links import (
+        get_linked_file,
+        get_linked_note,
+        get_linked_note_in_notebook,
+    )
+    from nb.utils.hashing import normalize_path
+
+    config = get_config()
+
+    # Strip @ prefix if present
+    check_ref = note_ref[1:] if note_ref.startswith("@") else note_ref
+
+    # If notebook specified, check for linked note in that notebook first
+    if notebook:
+        linked = get_linked_note_in_notebook(notebook, check_ref)
+        if linked:
+            return normalize_path(linked.path)
+
+    # Check if it matches a linked note alias (from config or DB)
+    linked_note = get_linked_note(check_ref)
+    if linked_note:
+        return normalize_path(linked_note.path)
+
+    # Also check linked todo files (from config or DB)
+    linked_file = get_linked_file(check_ref)
+    if linked_file:
+        return normalize_path(linked_file.path)
+
+    # Try to resolve as a regular note (only if no @ prefix)
+    if not note_ref.startswith("@"):
+        resolved_path = resolve_note(note_ref, notebook=notebook, interactive=True)
+        if resolved_path:
+            # Return the path relative to notes_root for LIKE matching
+            try:
+                rel_path = resolved_path.relative_to(config.notes_root)
+                return normalize_path(rel_path)
+            except ValueError:
+                # External path, return full normalized path
+                return normalize_path(resolved_path)
+
+    return None
+
+
 def resolve_note(
     note_ref: str,
     notebook: str | None = None,
@@ -138,18 +201,22 @@ def resolve_note(
     config = get_config()
 
     # Get candidate notes
+    # get_notebook_notes_with_linked returns tuples (path, is_linked, alias)
+    # list_notes returns just paths
+    note_paths: list[Path] = []
     if notebook:
-        notes = get_notebook_notes_with_linked(notebook)
+        notes_with_linked = get_notebook_notes_with_linked(notebook)
+        note_paths = [path for path, _, _ in notes_with_linked]
     else:
-        notes = list_notes(notes_root=config.notes_root)
+        note_paths = list_notes(notes_root=config.notes_root)
 
-    if not notes:
+    if not note_paths:
         return None
 
     # Build a mapping from display names to paths
     # Use stem (filename without extension) as the display name
     name_to_path: dict[str, Path] = {}
-    for note_path in notes:
+    for note_path in note_paths:
         # Use the stem as the primary lookup key
         stem = note_path.stem
         if stem not in name_to_path:

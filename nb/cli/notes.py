@@ -192,19 +192,26 @@ def last_alias(show: bool, notebook: str | None, viewed: bool) -> None:
 
 
 @click.command("history")
-@click.option("--limit", "-l", default=20, help="Number of entries to show")
+@click.option("--limit", "-l", default=10, help="Number of entries to show")
 @click.option("--notebook", "-n", help="Filter by notebook")
-def history_cmd(limit: int, notebook: str | None) -> None:
+@click.option(
+    "--full-path", "-f", is_flag=True, help="Show full paths instead of filenames"
+)
+def history_cmd(limit: int, notebook: str | None, full_path: bool) -> None:
     """Show recently viewed notes.
 
-    Displays a list of notes you've recently opened, with timestamps.
+    Displays a list of notes you've recently opened, grouped by notebook
+    with color coding and timestamps.
 
     \b
     Examples:
-      nb history             # Show last 20 viewed notes
+      nb history             # Show last 10 viewed notes
       nb history -l 50       # Show last 50 viewed notes
       nb history -n work     # Show recently viewed notes in 'work' notebook
+      nb history -f          # Show full paths instead of filenames
     """
+    from collections import defaultdict
+
     from nb.core.notes import get_recently_viewed_notes
 
     views = get_recently_viewed_notes(limit=limit, notebook=notebook)
@@ -217,15 +224,71 @@ def history_cmd(limit: int, notebook: str | None) -> None:
 
     console.print("\n[bold]Recently Viewed Notes[/bold]\n")
 
+    # Group views by notebook
+    views_by_notebook: dict[str, list] = defaultdict(list)
     for path, viewed_at in views:
         try:
             rel_path = path.relative_to(config.notes_root)
+            # Get notebook from path (first directory component)
+            if len(rel_path.parts) > 1:
+                nb_name = rel_path.parts[0]
+            else:
+                nb_name = ""  # Root-level notes
         except ValueError:
             rel_path = path
+            nb_name = "@external"
 
-        # Format the timestamp
-        time_str = viewed_at.strftime("%Y-%m-%d %H:%M")
-        console.print(f"  [dim]{time_str}[/dim]  {rel_path}")
+        views_by_notebook[nb_name].append((path, rel_path, viewed_at))
+
+    # Sort notebooks alphabetically (empty string last)
+    sorted_notebooks = sorted(
+        views_by_notebook.keys(), key=lambda x: (x == "", x.lower())
+    )
+
+    for nb_name in sorted_notebooks:
+        nb_views = views_by_notebook[nb_name]
+
+        # Get notebook display info (color and icon)
+        if nb_name and nb_name != "@external":
+            color, icon = get_notebook_display_info(nb_name)
+            icon_prefix = f"{icon} " if icon else ""
+            console.print(f"[bold {color}]{icon_prefix}{nb_name}[/bold {color}]")
+        elif nb_name == "@external":
+            console.print("[bold dim]@external[/bold dim]")
+        else:
+            console.print("[bold dim](root)[/bold dim]")
+
+        # Sort views by timestamp (most recent first) within each notebook
+        nb_views.sort(key=lambda x: x[2], reverse=True)
+
+        for abs_path, rel_path, viewed_at in nb_views:
+            # Format the timestamp
+            time_str = viewed_at.strftime("%Y-%m-%d %H:%M")
+
+            # Determine display path
+            if full_path:
+                display_path = str(rel_path)
+            else:
+                display_path = rel_path.name
+
+            # Check for alias (linked notes)
+            alias_str = ""
+            # Check if this is a linked note by looking for alias in source
+            for ln in config.linked_notes:
+                try:
+                    if ln.path.is_file() and ln.path.resolve() == abs_path.resolve():
+                        alias_str = f" [dim](@{ln.alias})[/dim]"
+                        break
+                    elif ln.path.is_dir():
+                        abs_path.relative_to(ln.path)
+                        alias_str = f" [dim](@{ln.alias})[/dim]"
+                        break
+                except ValueError:
+                    continue
+
+            console.print(f"  [dim]{time_str}[/dim]  {display_path}{alias_str}")
+
+        console.print()  # Blank line between notebooks
 
 
 @click.command("open")
