@@ -91,6 +91,8 @@ def register_todo_commands(cli: click.Group) -> None:
 )
 @click.option("--include-completed", "-c", is_flag=True, help="Include completed todos")
 @click.option("-i", "--interactive", is_flag=True, help="Open interactive todo viewer")
+@click.option("--limit", "-l", type=int, help="Limit the number of todos displayed")
+@click.option("--offset", "-o", type=int, default=0, help="Skip the first N todos")
 @click.pass_context
 def todo(
     ctx: click.Context,
@@ -116,6 +118,8 @@ def todo(
     show_all: bool,
     include_completed: bool,
     interactive: bool,
+    limit: int | None,
+    offset: int,
 ) -> None:
     """Manage todos.
 
@@ -186,6 +190,8 @@ def todo(
       -a, --all         Include all sources (even excluded notebooks)
       -c, --include-completed   Include completed todos
       -i, --interactive         Launch interactive TUI viewer
+      -l, --limit N     Limit output to N todos
+      -o, --offset N    Skip first N todos (use with --limit for pagination)
 
     Notebooks with todo_exclude: true in config are hidden by default.
     Notes with todo_exclude: true in frontmatter are also hidden.
@@ -363,6 +369,8 @@ def todo(
                 sort_by=sort_by,
                 include_completed=effective_include_completed,
                 exclude_note_excluded=exclude_note_excluded,
+                limit=limit,
+                offset=offset,
             )
 
 
@@ -490,6 +498,8 @@ def _list_todos(
     sort_by: str = "source",
     include_completed: bool = False,
     exclude_note_excluded: bool = True,
+    limit: int | None = None,
+    offset: int = 0,
 ) -> None:
     """List todos with optional filters."""
     # Determine completion filter
@@ -554,6 +564,26 @@ def _list_todos(
     if not todos:
         console.print("[dim]No todos found.[/dim]")
         return
+
+    # Apply offset and limit for pagination
+    total_count = len(todos)
+    if offset > 0:
+        todos = todos[offset:]
+    if limit is not None:
+        todos = todos[:limit]
+
+    if not todos:
+        console.print(
+            f"[dim]No todos in range (offset {offset}, total {total_count}).[/dim]"
+        )
+        return
+
+    # Show pagination info if limit/offset is used
+    if limit is not None or offset > 0:
+        end_idx = min(offset + len(todos), total_count)
+        console.print(
+            f"[dim]Showing {offset + 1}-{end_idx} of {total_count} todos[/dim]"
+        )
 
     # Calculate next week range
     next_week_end = week_end + timedelta(days=7)

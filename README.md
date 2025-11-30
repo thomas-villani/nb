@@ -109,11 +109,16 @@ nb new -n ideas my-idea    # Create named note in notebook
 nb new -n work -T meeting  # Create note using a template
 nb edit daily/2025-11-27   # Edit an existing note
 nb add "Quick thought"     # Append text to today's note
+nb add "Note" --note myproject       # Append to specific note
+nb add "Note" --note work/myproject  # Notebook/note format
+nb add "Note" -N proj                # Using alias
 nb list                    # List latest 3 notes per notebook (with colors/tags)
 nb list --all              # List all notes in all notebooks
 nb list --week             # List this week's daily notes
+nb list --month            # List this month's daily notes
 nb list -n work            # List notes in work notebook
 nb list -n work --week     # List this week's notes in work notebook
+nb list -f                 # Show full paths to notes
 
 nb stream                  # Browse all notes interactively
 nb stream -n daily         # Browse daily notes
@@ -277,6 +282,11 @@ nb todo -s tag          # Sort by first tag (default: source)
 nb todo -s priority     # Sort by priority
 nb todo -s created      # Sort by creation date
 
+# Pagination
+nb todo --limit 10      # Show only first 10 todos
+nb todo -l 5            # Short form
+nb todo -l 10 -o 10     # Show todos 11-20 (offset + limit)
+
 # Todo actions
 nb todo add "New task"  # Add to inbox (todo.md)
 nb todo add --today "Call dentist"  # Add to today's note
@@ -348,7 +358,9 @@ nb search -t mytag      # Filter by tag
 nb search -n daily      # Filter by notebook
 nb search "query" --when "last 2 weeks"  # Date range filter
 nb search "query" --since friday         # From a date onwards
+nb search "query" --until "nov 20"       # Up to a date
 nb search "query" --recent               # Boost recent results
+nb search "query" --limit 5              # Limit number of results
 
 nb grep "pattern"       # Regex search
 nb grep "TODO.*urgent" -C 5  # With context lines
@@ -454,6 +466,7 @@ nb attach open note.md --line 15
 ```bash
 nb index              # Rebuild notes and todos index
 nb index --force      # Force full reindex
+nb index -n daily     # Only reindex a specific notebook
 nb index --rebuild    # Drop and recreate database (for schema changes)
 nb index --embeddings # Rebuild search embeddings
 ```
