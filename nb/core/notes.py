@@ -58,6 +58,7 @@ def create_note(
     title: str | None = None,
     dt: date | None = None,
     tags: list[str] | None = None,
+    template: str | None = None,
     notes_root: Path | None = None,
 ) -> Path:
     """Create a new note at the specified path.
@@ -67,6 +68,7 @@ def create_note(
         title: Optional title for the note
         dt: Date for the note (defaults to today)
         tags: Optional list of tags
+        template: Optional template name to use
         notes_root: Override notes root directory
 
     Returns:
@@ -91,8 +93,25 @@ def create_note(
     # Create directory structure
     full_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Generate content
-    content = create_note_template(title=title, dt=dt, tags=tags)
+    # Generate content - use template if specified
+    if template:
+        from nb.core.templates import read_template, render_template
+
+        template_content = read_template(template, notes_root)
+        if template_content:
+            # Determine notebook from path
+            notebook = path.parts[0] if len(path.parts) > 1 else None
+            content = render_template(
+                template_content,
+                title=title,
+                notebook=notebook,
+                dt=dt,
+            )
+        else:
+            # Template not found, fall back to default
+            content = create_note_template(title=title, dt=dt, tags=tags)
+    else:
+        content = create_note_template(title=title, dt=dt, tags=tags)
 
     # Write file
     full_path.write_text(content, encoding="utf-8")

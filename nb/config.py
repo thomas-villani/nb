@@ -20,6 +20,7 @@ class NotebookConfig:
     path: Path | None = None  # External path (None = inside notes_root)
     color: str | None = None  # Display color (e.g., "blue", "green", "#ff5500")
     icon: str | None = None  # Display icon/emoji (e.g., "📝", "🔧")
+    template: str | None = None  # Default template name for new notes
 
     @property
     def is_external(self) -> bool:
@@ -294,6 +295,7 @@ def _parse_notebooks(data: list[Any]) -> list[NotebookConfig]:
                     path=ext_path,
                     color=item.get("color"),
                     icon=item.get("icon"),
+                    template=item.get("template"),
                 )
             )
     return result
@@ -432,6 +434,8 @@ def save_config(config: Config) -> None:
             nb_dict["color"] = nb.color
         if nb.icon is not None:
             nb_dict["icon"] = nb.icon
+        if nb.template is not None:
+            nb_dict["template"] = nb.template
         notebooks_data.append(nb_dict)
 
     data = {
@@ -619,6 +623,7 @@ NOTEBOOK_SETTINGS = {
     "icon": "Display icon/emoji (e.g., 📝, 🔧, or name like 'wrench')",
     "date_based": "Use date-based organization (true/false)",
     "todo_exclude": "Exclude from nb todo by default (true/false)",
+    "template": "Default template name for new notes",
 }
 
 # Map of emoji names to emoji characters for convenient CLI input
@@ -839,6 +844,12 @@ def set_config_value(key: str, value: str) -> bool:
                 nb.icon = None
             else:
                 nb.icon = resolve_emoji(value)
+        elif setting == "template":
+            # Set default template name
+            if value.lower() in ("", "none"):
+                nb.template = None
+            else:
+                nb.template = value
     else:
         return False
 

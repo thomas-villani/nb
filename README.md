@@ -5,6 +5,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 ## Features
 
 - **Daily notes** - Automatic date-organized journal entries with week-based folders
+- **Note templates** - Create reusable templates with variables for new notes
 - **Todo management** - Extract and track todos from any markdown file with in-progress support
 - **Todo views** - Save and reuse filter configurations for quick access
 - **Multiple notebooks** - Organize notes by project, including external directories
@@ -100,6 +101,7 @@ daily/2025/Nov25-Dec01/2025-11-27.md
 nb new projects/idea       # Create a new note
 nb new -n work             # Create today's note in work notebook
 nb new -n ideas my-idea    # Create named note in notebook
+nb new -n work -T meeting  # Create note using a template
 nb edit daily/2025-11-27   # Edit an existing note
 nb add "Quick thought"     # Append text to today's note
 nb list                    # List latest 3 notes per notebook (with colors/tags)
@@ -112,6 +114,69 @@ nb stream                  # Browse all notes interactively
 nb stream -n daily         # Browse daily notes
 nb stream -w "last week"   # Browse last week's notes
 nb stream -n daily -w "last 2 weeks"  # Daily notes from last 2 weeks
+```
+
+### Note Templates
+
+Create reusable templates for new notes with variable substitution:
+
+```bash
+nb template list            # List available templates
+nb template new meeting     # Create and edit a new template
+nb template edit meeting    # Edit an existing template
+nb template show meeting    # Display template contents
+nb template remove meeting  # Delete a template
+```
+
+Templates are stored in `.nb/templates/` as markdown files. Use variables that get replaced when creating notes:
+
+| Variable | Description |
+|----------|-------------|
+| `{{ date }}` | ISO date (2025-11-29) |
+| `{{ datetime }}` | ISO datetime |
+| `{{ notebook }}` | Notebook name |
+| `{{ title }}` | Note title |
+
+Example template (`meeting.md`):
+
+```markdown
+---
+date: {{ date }}
+---
+
+# {{ title }}
+
+## Attendees
+
+-
+
+## Agenda
+
+-
+
+## Notes
+
+## Action Items
+
+- [ ]
+```
+
+#### Using Templates
+
+```bash
+nb new -n work -T meeting           # Use template when creating note
+nb new project-kickoff -n projects -T meeting
+```
+
+#### Default Templates per Notebook
+
+Configure a default template for a notebook in config:
+
+```yaml
+notebooks:
+  - name: work
+    date_based: true
+    template: meeting   # Auto-use .nb/templates/meeting.md
 ```
 
 ### Notebook Management
@@ -416,6 +481,7 @@ todo_views:
 | `path` | External directory path (makes notebook external) |
 | `color` | Display color in listings (e.g., blue, green, cyan, magenta, #ff5500) |
 | `icon` | Display icon/emoji prefix (e.g., 📅, 🔧, 📝) |
+| `template` | Default template name for new notes in this notebook |
 
 ### Environment Variables
 
@@ -441,6 +507,9 @@ todo_views:
     ├── config.yaml
     ├── index.db              # SQLite database
     ├── vectors/              # Search embeddings
+    ├── templates/            # Note templates
+    │   ├── meeting.md
+    │   └── daily.md
     └── attachments/          # Copied attachments
 
 # External notebook (configured via path:)

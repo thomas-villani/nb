@@ -317,16 +317,21 @@ def ensure_notebook_note(
     notebook: str,
     dt: date | None = None,
     name: str | None = None,
+    template: str | None = None,
 ) -> Path:
     """Ensure a note exists in a notebook, creating it if necessary.
 
     For date-based notebooks, creates the daily note with a header.
     For flat notebooks, creates an empty note with a title.
 
+    If a template is specified or the notebook has a default template,
+    it will be used instead of the built-in templates.
+
     Args:
         notebook: Name of the notebook
         dt: Date for date-based notebooks (defaults to today)
         name: Filename for flat notebooks (required if not date-based)
+        template: Template name to use (overrides notebook default)
 
     Returns:
         Path to the note file.
@@ -337,6 +342,35 @@ def ensure_notebook_note(
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Resolve template: explicit > notebook default > none
+        config = get_config()
+        nb_config = config.get_notebook(notebook)
+        resolved_template = template
+        if resolved_template is None and nb_config and nb_config.template:
+            resolved_template = nb_config.template
+
+        if resolved_template:
+            from nb.core.templates import read_template, render_template
+
+            template_content = read_template(resolved_template)
+            if template_content:
+                if dt is None:
+                    dt = date.today()
+                title = (
+                    name.replace("-", " ").replace("_", " ").title()
+                    if name
+                    else dt.strftime("%A, %B %d, %Y")
+                )
+                content = render_template(
+                    template_content,
+                    title=title,
+                    notebook=notebook,
+                    dt=dt,
+                )
+                path.write_text(content, encoding="utf-8")
+                return path
+
+        # Fall back to built-in templates
         if is_notebook_date_based(notebook):
             if dt is None:
                 dt = date.today()

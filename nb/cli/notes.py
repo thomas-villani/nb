@@ -485,7 +485,13 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
 @click.argument("path", required=False)
 @click.option("--notebook", "-n", help="Notebook to create the note in")
 @click.option("--title", "-t", help="Title for the note")
-def new_note(path: str | None, notebook: str | None, title: str | None) -> None:
+@click.option("--template", "-T", "template_name", help="Template to use for the note")
+def new_note(
+    path: str | None,
+    notebook: str | None,
+    title: str | None,
+    template_name: str | None,
+) -> None:
     """Create a new note.
 
     PATH is the location for the note. Can be:
@@ -495,21 +501,42 @@ def new_note(path: str | None, notebook: str | None, title: str | None) -> None:
 
     The .md extension is added automatically if not present.
 
+    Use --template/-T to apply a template when creating the note.
+    Templates are stored in .nb/templates/.
+
     \b
     Examples:
-      nb new -n daily           # Today's note in daily (date-based)
-      nb new ideas -n projects  # projects/ideas.md
-      nb new projects/roadmap   # projects/roadmap.md
+      nb new -n daily             # Today's note in daily (date-based)
+      nb new ideas -n projects    # projects/ideas.md
+      nb new projects/roadmap     # projects/roadmap.md
+      nb new -n work -T meeting   # New note with meeting template
     """
     from nb.core.notebooks import ensure_notebook_note, is_notebook_date_based
+    from nb.core.templates import list_templates, template_exists
 
     config = get_config()
+
+    # Resolve template: explicit flag > notebook default > none
+    resolved_template = None
+    if template_name:
+        if not template_exists(template_name):
+            console.print(f"[red]Template not found:[/red] {template_name}")
+            available = list_templates()
+            if available:
+                console.print(f"[dim]Available: {', '.join(available)}[/dim]")
+            raise SystemExit(1)
+        resolved_template = template_name
+    elif notebook:
+        # Check for notebook default template
+        nb_config = config.get_notebook(notebook)
+        if nb_config and nb_config.template:
+            resolved_template = nb_config.template
 
     # If notebook specified but no path, check if it's date-based
     if notebook and not path:
         if is_notebook_date_based(notebook):
             # Create/open today's note in this date-based notebook
-            full_path = ensure_notebook_note(notebook)
+            full_path = ensure_notebook_note(notebook, template=resolved_template)
             console.print(
                 f"[green]Opening:[/green] {full_path.relative_to(config.notes_root)}"
             )
@@ -569,7 +596,7 @@ def new_note(path: str | None, notebook: str | None, title: str | None) -> None:
         raise SystemExit(1)
 
     try:
-        full_path = create_note(note_path, title=title)
+        full_path = create_note(note_path, title=title, template=resolved_template)
         console.print(f"[green]Created:[/green] {note_path}")
         open_note(full_path)
     except FileExistsError:

@@ -58,13 +58,13 @@ todo_exclude: true
 - [x] Command Line completion!!
 - [x] Add a way from command line to open with other editor (e.g. nb open <note> --notepad)
 - [x] predefine a list of common emojis to set as icon from config for project
-- [ ] Templates for notes - allow to define templates and create from a template with `nb new ... --template <template_name>`
+- [x] Templates for notes - allow to define templates and create from a template with `nb new ... --template <template_name>`
 - [ ] Toml for config instead of yaml
 - [ ] Note titles -- how to integrate and use them as a way to open notes too? Or at least display in list? This already seems to be the case.
 - [ ] `nb stats` command for overview statistics
 - [ ] `nb tags` command to list all tags with counts
 - [ ] Improve formatting for `nb history` command - color code notebooks and sort by notebook, include aliases.
-- [ ] Should have stable relative ordering of todos from same list without todo dates for default sorting.
+- [ ] Should have stable relative ordering of todos from same list when same (or no) todo dates (and no other sorting specified)
 - [ ] Enhance `todo add` command to allow putting into specific notes, or adding to a specific section
 
 ### Phase 5: Advanced TUI
