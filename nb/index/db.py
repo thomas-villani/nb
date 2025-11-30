@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 # Current schema version
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -171,6 +171,18 @@ SCHEMA_V9 = """
 ALTER TABLE todos ADD COLUMN section TEXT;
 """
 
+# Phase 9 additions: todo status column (pending, in_progress, completed)
+SCHEMA_V10 = """
+-- Add status column to todos table for in-progress support
+ALTER TABLE todos ADD COLUMN status TEXT DEFAULT 'pending';
+
+-- Migrate existing data from completed column to status
+UPDATE todos SET status = CASE WHEN completed = 1 THEN 'completed' ELSE 'pending' END;
+
+-- Add index for status filtering
+CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status);
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -182,6 +194,7 @@ MIGRATIONS: dict[int, str] = {
     7: SCHEMA_V7,
     8: SCHEMA_V8,
     9: SCHEMA_V9,
+    10: SCHEMA_V10,
 }
 
 

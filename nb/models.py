@@ -28,6 +28,34 @@ class Priority(Enum):
             return None
 
 
+class TodoStatus(Enum):
+    """Todo status states."""
+
+    PENDING = "pending"  # [ ]
+    IN_PROGRESS = "in_progress"  # [^]
+    COMPLETED = "completed"  # [x] or [X]
+
+    @classmethod
+    def from_marker(cls, marker: str) -> TodoStatus:
+        """Create TodoStatus from checkbox marker character."""
+        if marker in ("x", "X"):
+            return cls.COMPLETED
+        elif marker == "^":
+            return cls.IN_PROGRESS
+        else:
+            return cls.PENDING
+
+    @property
+    def marker(self) -> str:
+        """Return the checkbox marker for this status."""
+        if self == TodoStatus.COMPLETED:
+            return "x"
+        elif self == TodoStatus.IN_PROGRESS:
+            return "^"
+        else:
+            return " "
+
+
 @dataclass
 class Attachment:
     """An attachment to a note or todo."""
@@ -71,7 +99,7 @@ class Todo:
     id: str
     content: str  # Cleaned text without metadata markers
     raw_content: str  # Original line content
-    completed: bool
+    status: TodoStatus
     source: TodoSource
     line_number: int
     created_date: date
@@ -84,6 +112,16 @@ class Todo:
     attachments: list[Attachment] = field(default_factory=list)
     details: str | None = None  # Multi-line details/description below the todo
     section: str | None = None  # Section heading above the todo
+
+    @property
+    def completed(self) -> bool:
+        """Check if todo is completed (backwards compatibility)."""
+        return self.status == TodoStatus.COMPLETED
+
+    @property
+    def in_progress(self) -> bool:
+        """Check if todo is in progress."""
+        return self.status == TodoStatus.IN_PROGRESS
 
     @property
     def is_overdue(self) -> bool:

@@ -249,7 +249,11 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
       nb open myproject -n ideas  # Open ideas/myproject.md
       nb open friday -n work      # Open Friday in work notebook
       nb open mytodo -n nbcli     # Open linked note 'mytodo' in notebook 'nbcli'
+
+    Both notebook and note names support fuzzy matching - if no exact match
+    is found, similar options will be suggested interactively.
     """
+    from nb.cli.utils import resolve_notebook, resolve_note
     from nb.core.links import get_linked_note_in_notebook
     from nb.core.notebooks import (
         ensure_notebook_note,
@@ -259,6 +263,16 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
 
     config = get_config()
     show = ctx.obj and ctx.obj.get("show")
+
+    # Resolve notebook with fuzzy matching if specified
+    if notebook:
+        nb_config = config.get_notebook(notebook)
+        if not nb_config:
+            resolved = resolve_notebook(notebook)
+            if resolved:
+                notebook = resolved
+            else:
+                raise SystemExit(1)
 
     # If notebook is specified, handle it
     if notebook:
@@ -302,8 +316,12 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
                 raise SystemExit(1)
 
             if not note_path.exists():
-                console.print(f"[red]Note not found: {notebook}/{note_ref}[/red]")
-                raise SystemExit(1)
+                # Try fuzzy matching
+                resolved_path = resolve_note(note_ref, notebook=notebook)
+                if resolved_path:
+                    note_path = resolved_path
+                else:
+                    raise SystemExit(1)
 
             if show:
                 print_note(note_path)

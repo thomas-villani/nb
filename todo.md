@@ -52,17 +52,20 @@ todo_exclude: true
 - [x] Allow defining a color (and/or icon?) for each notebook that is used in display listings (especially `nb todo`)
 - [x] Do todos inherit the tag from the note? They probably should.
 - [x] Refactor cli.py - split into submodules
-- [ ] Allow todo "views" to be defined with specific filters and quick from cli like `nb todo -v <VIEWNAME>`
-- [ ] Fuzzy finding for notebooks and notes from cli input (if not a fuzzy date). E.g. `nb open <NOTE> -n <NOTEBOOK>` should give suggestions if similar note/notebook is found but not exact match (difflib has a fuzzy matcher I think)
-- [ ] Add a way to signal todo in progress, (I typically mark `[^]` for todos in progress) and update `nb todo` with a section for `IN PROGRESS`
-- [ ] Templates for notes - allow to define templates and create from a template with `nb new ... --template <template_name>`
+- [x] Allow todo "views" to be defined with specific filters to be defined via `nb todo --create-view <VIEWNAME>` and then called from cli like `nb todo -v <VIEWNAME>`. Should probably have a way to list views
+- [x] Fuzzy finding for notebooks and notes from cli input (if not a fuzzy date). E.g. `nb open <NOTE> -n <NOTEBOOK>` should give suggestions if similar note/notebook is found but not exact match (difflib has a fuzzy matcher I think)
+- [x] Add a way to signal todo in progress, (I typically mark `[^]` for todos in progress) and update `nb todo` with a section for `IN PROGRESS`
 - [x] Command Line completion!!
+- [x] Add a way from command line to open with other editor (e.g. nb open <note> --notepad)
+- [x] predefine a list of common emojis to set as icon from config for project
+- [ ] Templates for notes - allow to define templates and create from a template with `nb new ... --template <template_name>`
 - [ ] Toml for config instead of yaml
-- [ ] Add a way from command line to open with other editor (e.g. nb open <note> --notepad)
 - [ ] Note titles -- how to integrate and use them as a way to open notes too? Or at least display in list? This already seems to be the case.
 - [ ] `nb stats` command for overview statistics
 - [ ] `nb tags` command to list all tags with counts
-- [x] predefine a list of common emojis to set as icon from config for project
+- [ ] Improve formatting for `nb history` command - color code notebooks and sort by notebook, include aliases.
+- [ ] Should have stable relative ordering of todos from same list without todo dates for default sorting.
+- [ ] Enhance `todo add` command to allow putting into specific notes, or adding to a specific section
 
 ### Phase 5: Advanced TUI
 - [ ] Full Wijjit-based todo list view with richer interactions
@@ -81,7 +84,7 @@ todo_exclude: true
 - [ ] Better error messages and user feedback
 - [ ] Documentation site with examples
 
-### Future Enhancements
+### Phase 6: Future Enhancements
 - [ ] Recurring todos (`@recur(weekly)`)
 - [ ] Export to various formats (HTML, PDF)
 - [ ] Mobile companion app / sync story

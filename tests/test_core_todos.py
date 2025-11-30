@@ -31,18 +31,18 @@ class TestPatterns:
         match = TODO_PATTERN.match("- [ ] Task description")
         assert match is not None
         assert match.group("indent") == ""
-        assert match.group("done") == " "
+        assert match.group("state") == " "
         assert match.group("content") == "Task description"
 
     def test_todo_pattern_checked(self):
         match = TODO_PATTERN.match("- [x] Completed task")
         assert match is not None
-        assert match.group("done") == "x"
+        assert match.group("state") == "x"
 
     def test_todo_pattern_checked_uppercase(self):
         match = TODO_PATTERN.match("- [X] Completed task")
         assert match is not None
-        assert match.group("done") == "X"
+        assert match.group("state") == "X"
 
     def test_todo_pattern_indented(self):
         match = TODO_PATTERN.match("  - [ ] Indented task")
@@ -380,6 +380,67 @@ class TestExtractTodos:
         assert "Some notes about this task" in main.details
         assert "More details here" in main.details
         assert len(main.children) == 1
+
+    def test_inline_tags_not_inherited_across_todos(self, mock_config, create_note):
+        """Inline tags from one todo should NOT be inherited by other todos.
+
+        Regression test: Previously, extract_tags() was pulling all inline #tags
+        from the entire note body and applying them to every todo. Only frontmatter
+        tags should be inherited.
+        """
+        notes_root = mock_config.notes_root
+
+        content = """\
+---
+tags: [shared]
+---
+# Tasks
+
+- [ ] First task #tag1
+- [ ] Second task #tag2
+- [ ] Third task with no tag
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        todos = extract_todos(note_path, notes_root=notes_root)
+
+        assert len(todos) == 3
+
+        # First todo should have frontmatter tag + its own inline tag
+        assert set(todos[0].tags) == {"shared", "tag1"}
+
+        # Second todo should have frontmatter tag + its own inline tag
+        assert set(todos[1].tags) == {"shared", "tag2"}
+
+        # Third todo should only have the frontmatter tag (not tag1 or tag2)
+        assert set(todos[2].tags) == {"shared"}
+
+    def test_frontmatter_tags_inherited_to_all_todos(self, mock_config, create_note):
+        """Frontmatter tags should be inherited by all todos in the note."""
+        notes_root = mock_config.notes_root
+
+        content = """\
+---
+tags: [project, important]
+---
+# Tasks
+
+- [ ] Task without inline tags
+- [ ] Task with inline tag #extra
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        todos = extract_todos(note_path, notes_root=notes_root)
+
+        assert len(todos) == 2
+        # Both todos inherit frontmatter tags
+        assert "project" in todos[0].tags
+        assert "important" in todos[0].tags
+        assert "project" in todos[1].tags
+        assert "important" in todos[1].tags
+        # Only second todo has the inline tag
+        assert "extra" not in todos[0].tags
+        assert "extra" in todos[1].tags
 
 
 class TestToggleTodoInFile:

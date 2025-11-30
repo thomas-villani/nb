@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from nb.index.db import get_db
-from nb.models import Priority, Todo, TodoSource
+from nb.models import Priority, Todo, TodoSource, TodoStatus
 from nb.utils.hashing import normalize_path
 
 
@@ -19,11 +19,18 @@ def _row_to_todo(row) -> Todo:
         alias=row["source_alias"],
     )
 
+    # Handle status from DB, with fallback to completed for unmigrated data
+    if "status" in row.keys() and row["status"]:
+        status = TodoStatus(row["status"])
+    else:
+        # Fallback for old data without status column
+        status = TodoStatus.COMPLETED if row["completed"] else TodoStatus.PENDING
+
     return Todo(
         id=row["id"],
         content=row["content"],
         raw_content=row["raw_content"],
-        completed=bool(row["completed"]),
+        status=status,
         source=source,
         line_number=row["line_number"],
         created_date=(
@@ -73,16 +80,17 @@ def upsert_todo(todo: Todo) -> None:
     db.execute(
         """
         INSERT OR REPLACE INTO todos (
-            id, content, raw_content, completed, source_type, source_path,
+            id, content, raw_content, completed, status, source_type, source_path,
             source_external, source_alias, line_number, created_date,
             due_date, priority, project, parent_id, content_hash, details, section
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             todo.id,
             todo.content,
             todo.raw_content,
-            1 if todo.completed else 0,
+            1 if todo.completed else 0,  # Keep completed for backwards compat
+            todo.status.value,
             todo.source.type,
             normalize_path(todo.source.path),
             1 if todo.source.external else 0,
@@ -153,24 +161,45 @@ def delete_todos_for_source(source_path: Path) -> None:
 
 
 def update_todo_completion(todo_id: str, completed: bool) -> None:
-    """Update a todo's completion status."""
+    """Update a todo's completion status.
+
+    This also updates the status column for consistency.
+    """
     db = get_db()
+    status = TodoStatus.COMPLETED if completed else TodoStatus.PENDING
     db.execute(
-        "UPDATE todos SET completed = ? WHERE id = ?",
-        (1 if completed else 0, todo_id),
+        "UPDATE todos SET completed = ?, status = ? WHERE id = ?",
+        (1 if completed else 0, status.value, todo_id),
+    )
+    db.commit()
+
+
+def update_todo_status(todo_id: str, status: TodoStatus) -> None:
+    """Update a todo's status.
+
+    This also updates the completed column for backwards compatibility.
+    """
+    db = get_db()
+    completed = 1 if status == TodoStatus.COMPLETED else 0
+    db.execute(
+        "UPDATE todos SET status = ?, completed = ? WHERE id = ?",
+        (status.value, completed, todo_id),
     )
     db.commit()
 
 
 def query_todos(
     completed: bool | None = None,
+    status: TodoStatus | None = None,
+    include_in_progress: bool = True,
     due_start: date | None = None,
     due_end: date | None = None,
     created_start: date | None = None,
     created_end: date | None = None,
     overdue: bool = False,
     priority: int | None = None,
-    notebook: str | None = None,
+    notebooks: list[str] | None = None,
+    notes: list[str] | None = None,
     exclude_notebooks: list[str] | None = None,
     tag: str | None = None,
     exclude_tags: list[str] | None = None,
@@ -181,14 +210,17 @@ def query_todos(
     """Query todos with filters.
 
     Args:
-        completed: Filter by completion status
+        completed: Filter by completion status (backwards compat, prefer status)
+        status: Filter by specific TodoStatus
+        include_in_progress: When completed=False, also include in_progress todos
         due_start: Filter by due date >= this
         due_end: Filter by due date <= this
         created_start: Filter by created date >= this
         created_end: Filter by created date <= this
         overdue: Only include overdue todos
         priority: Filter by priority level (1, 2, or 3)
-        notebook: Filter by notebook name (stored as project)
+        notebooks: Filter by notebook names (stored as project in DB)
+        notes: Filter by specific note paths (relative to notes root)
         exclude_notebooks: List of notebooks to exclude
         tag: Filter by tag
         exclude_tags: List of tags to exclude
@@ -223,9 +255,23 @@ def query_todos(
         sql += " " + " ".join(joins)
 
     # Filter conditions
-    if completed is not None:
-        conditions.append("t.completed = ?")
-        params.append(1 if completed else 0)
+    # Prefer status over completed if both provided
+    if status is not None:
+        conditions.append("t.status = ?")
+        params.append(status.value)
+    elif completed is not None:
+        if completed:
+            conditions.append("t.status = ?")
+            params.append(TodoStatus.COMPLETED.value)
+        else:
+            # Not completed means pending or in_progress
+            if include_in_progress:
+                conditions.append("t.status IN (?, ?)")
+                params.append(TodoStatus.PENDING.value)
+                params.append(TodoStatus.IN_PROGRESS.value)
+            else:
+                conditions.append("t.status = ?")
+                params.append(TodoStatus.PENDING.value)
 
     if due_start:
         conditions.append("t.due_date >= ?")
@@ -244,16 +290,32 @@ def query_todos(
         params.append(created_end.isoformat())
 
     if overdue:
-        conditions.append("t.due_date < ? AND t.completed = 0")
+        conditions.append("t.due_date < ? AND t.status != ?")
         params.append(date.today().isoformat())
+        params.append(TodoStatus.COMPLETED.value)
 
     if priority:
         conditions.append("t.priority = ?")
         params.append(priority)
 
-    if notebook:
-        conditions.append("t.project = ?")
-        params.append(notebook)
+    # Filter by notebooks
+    if notebooks:
+        placeholders = ", ".join("?" for _ in notebooks)
+        conditions.append(f"t.project IN ({placeholders})")
+        params.extend(notebooks)
+
+    # Handle notes filter (matches source_path containing the note path)
+    if notes:
+        note_conditions = []
+        for note_path in notes:
+            # Match notes by path ending (e.g., "daily/2025-01-01" matches ".../daily/2025-01-01.md")
+            note_conditions.append("t.source_path LIKE ?")
+            # Handle both with and without .md extension
+            if note_path.endswith(".md"):
+                params.append(f"%{note_path}")
+            else:
+                params.append(f"%{note_path}.md")
+        conditions.append(f"({' OR '.join(note_conditions)})")
 
     if exclude_notebooks:
         placeholders = ", ".join("?" for _ in exclude_notebooks)
@@ -312,7 +374,8 @@ def get_sorted_todos(
     completed: bool | None = False,
     tag: str | None = None,
     exclude_tags: list[str] | None = None,
-    notebook: str | None = None,
+    notebooks: list[str] | None = None,
+    notes: list[str] | None = None,
     exclude_notebooks: list[str] | None = None,
     priority: int | None = None,
     due_start: date | None = None,
@@ -325,10 +388,11 @@ def get_sorted_todos(
 
     Sorting order:
     1. Overdue (oldest first)
-    2. Due today
-    3. Due this week (by date)
-    4. Due later (by date)
-    5. No due date (by created date, oldest first)
+    2. In Progress (by due date, then created date)
+    3. Due today
+    4. Due this week (by date)
+    5. Due later (by date)
+    6. No due date (by created date, oldest first)
 
     Within each group, secondary sort by priority (1 > 2 > 3 > none).
     """
@@ -336,7 +400,8 @@ def get_sorted_todos(
         completed=completed,
         tag=tag,
         exclude_tags=exclude_tags,
-        notebook=notebook,
+        notebooks=notebooks,
+        notes=notes,
         exclude_notebooks=exclude_notebooks,
         priority=priority,
         due_start=due_start,
@@ -350,21 +415,25 @@ def get_sorted_todos(
     today = date.today()
 
     def sort_key(todo: Todo) -> tuple:
-        # Group: 0=overdue, 1=today, 2=this week, 3=later, 4=no due date
-        if todo.due_date is None:
-            group = 4
+        # Group: 0=overdue, 1=in_progress, 2=today, 3=this week, 4=later, 5=no due date
+        # In-progress todos get their own group (1) regardless of due date
+        if todo.in_progress:
+            group = 1
+            date_key = todo.due_date or todo.created_date or today
+        elif todo.due_date is None:
+            group = 5
             date_key = todo.created_date or today
         elif todo.due_date < today:
             group = 0
             date_key = todo.due_date
         elif todo.due_date == today:
-            group = 1
-            date_key = todo.due_date
-        elif (todo.due_date - today).days <= 7:
             group = 2
             date_key = todo.due_date
-        else:
+        elif (todo.due_date - today).days <= 7:
             group = 3
+            date_key = todo.due_date
+        else:
+            group = 4
             date_key = todo.due_date
 
         # Priority: 1, 2, 3, then 999 for no priority
@@ -381,20 +450,26 @@ def get_todo_stats() -> dict[str, int]:
 
     total = db.fetchone("SELECT COUNT(*) as count FROM todos WHERE parent_id IS NULL")
     completed = db.fetchone(
-        "SELECT COUNT(*) as count FROM todos WHERE parent_id IS NULL AND completed = 1"
+        "SELECT COUNT(*) as count FROM todos WHERE parent_id IS NULL AND status = ?",
+        (TodoStatus.COMPLETED.value,),
+    )
+    in_progress = db.fetchone(
+        "SELECT COUNT(*) as count FROM todos WHERE parent_id IS NULL AND status = ?",
+        (TodoStatus.IN_PROGRESS.value,),
     )
     overdue = db.fetchone(
-        "SELECT COUNT(*) as count FROM todos WHERE parent_id IS NULL AND completed = 0 AND due_date < ?",
-        (date.today().isoformat(),),
+        "SELECT COUNT(*) as count FROM todos WHERE parent_id IS NULL AND status != ? AND due_date < ?",
+        (TodoStatus.COMPLETED.value, date.today().isoformat()),
     )
     due_today = db.fetchone(
-        "SELECT COUNT(*) as count FROM todos WHERE parent_id IS NULL AND completed = 0 AND due_date = ?",
-        (date.today().isoformat(),),
+        "SELECT COUNT(*) as count FROM todos WHERE parent_id IS NULL AND status != ? AND due_date = ?",
+        (TodoStatus.COMPLETED.value, date.today().isoformat()),
     )
 
     return {
         "total": total["count"] if total else 0,
         "completed": completed["count"] if completed else 0,
+        "in_progress": in_progress["count"] if in_progress else 0,
         "open": (total["count"] if total else 0)
         - (completed["count"] if completed else 0),
         "overdue": overdue["count"] if overdue else 0,

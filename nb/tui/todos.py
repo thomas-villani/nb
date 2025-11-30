@@ -12,12 +12,13 @@ from rich.table import Table
 from rich.text import Text
 
 from nb.config import get_config
-from nb.core.todos import toggle_todo_in_file
+from nb.core.todos import set_todo_status_in_file, toggle_todo_in_file
 from nb.index.todos_repo import (
     get_sorted_todos,
     update_todo_completion,
+    update_todo_status,
 )
-from nb.models import Todo
+from nb.models import Todo, TodoStatus
 from nb.utils.dates import get_week_range
 
 
@@ -52,7 +53,7 @@ class TodoViewState:
     cursor: int = 0
     show_completed: bool = False
     filter_tag: str | None = None
-    filter_notebook: str | None = None
+    filter_notebooks: list[str] | None = None
     exclude_notebooks: list[str] | None = None
     message: str | None = None
 
@@ -87,7 +88,7 @@ class TodoViewState:
         self.todos = get_sorted_todos(
             completed=completed,
             tag=self.filter_tag,
-            notebook=self.filter_notebook,
+            notebooks=self.filter_notebooks,
             exclude_notebooks=self.exclude_notebooks,
         )
         # Clamp cursor
@@ -126,9 +127,16 @@ def render_todo_table(state: TodoViewState) -> Table:
         cursor = ">" if is_selected else " "
         cursor_style = "bold cyan" if is_selected else ""
 
-        # Checkbox
-        checkbox = "[x]" if todo.completed else "[ ]"
-        checkbox_style = "green" if todo.completed else "dim"
+        # Checkbox: [x]=completed, [^]=in-progress, [ ]=pending
+        if todo.completed:
+            checkbox = "[x]"
+            checkbox_style = "green"
+        elif todo.in_progress:
+            checkbox = "[^]"
+            checkbox_style = "yellow bold"
+        else:
+            checkbox = "[ ]"
+            checkbox_style = "dim"
 
         # Task content
         content = todo.content
@@ -204,12 +212,12 @@ def render_help_bar() -> Text:
     help_text.append("up/down  ")
     help_text.append(" space ", style="bold cyan")
     help_text.append("toggle  ")
+    help_text.append(" s ", style="bold cyan")
+    help_text.append("start  ")
     help_text.append(" e ", style="bold cyan")
     help_text.append("edit  ")
     help_text.append(" c ", style="bold cyan")
     help_text.append("completed  ")
-    help_text.append(" g/G ", style="bold cyan")
-    help_text.append("top/bottom  ")
     help_text.append(" q ", style="bold cyan")
     help_text.append("quit")
     return help_text
@@ -294,7 +302,7 @@ def get_key() -> str:
 def run_interactive_todos(
     show_completed: bool = False,
     tag: str | None = None,
-    notebook: str | None = None,
+    notebooks: list[str] | None = None,
     exclude_notebooks: list[str] | None = None,
 ) -> None:
     """Run the interactive todo viewer.
@@ -302,7 +310,7 @@ def run_interactive_todos(
     Args:
         show_completed: Whether to include completed todos.
         tag: Filter by tag.
-        notebook: Filter by notebook.
+        notebooks: Filter by notebooks.
         exclude_notebooks: Notebooks to exclude.
 
     """
@@ -316,7 +324,7 @@ def run_interactive_todos(
     todos = get_sorted_todos(
         completed=completed,
         tag=tag,
-        notebook=notebook,
+        notebooks=notebooks,
         exclude_notebooks=exclude_notebooks,
     )
 
@@ -324,7 +332,7 @@ def run_interactive_todos(
         todos=todos,
         show_completed=show_completed,
         filter_tag=tag,
-        filter_notebook=notebook,
+        filter_notebooks=notebooks,
         exclude_notebooks=exclude_notebooks,
     )
 
@@ -382,6 +390,29 @@ def run_interactive_todos(
                     editor=config.editor,
                 )
                 state.refresh_todos()
+
+        elif key == "s":  # Toggle in-progress status
+            todo = state.current_todo()
+            if todo:
+                if todo.completed:
+                    state.message = "Cannot start completed todo. Reopen first."
+                else:
+                    try:
+                        # Toggle between pending and in-progress
+                        if todo.in_progress:
+                            new_status = TodoStatus.PENDING
+                            action = "Paused"
+                        else:
+                            new_status = TodoStatus.IN_PROGRESS
+                            action = "Started"
+                        if set_todo_status_in_file(
+                            todo.source.path, todo.line_number, new_status
+                        ):
+                            update_todo_status(todo.id, new_status)
+                            state.message = f"{action}: {todo.content[:40]}"
+                            state.refresh_todos()
+                    except PermissionError as e:
+                        state.message = f"Error: {e}"
 
         elif key == "c":  # Toggle show completed
             state.show_completed = not state.show_completed

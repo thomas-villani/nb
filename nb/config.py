@@ -61,6 +61,31 @@ class EmbeddingsConfig:
 
 
 @dataclass
+class TodoViewConfig:
+    """Configuration for a saved todo view.
+
+    Views store filter settings that can be applied when listing todos.
+    """
+
+    name: str
+    filters: dict[str, Any] = field(default_factory=dict)
+    # Filter keys supported:
+    # - notebooks: list[str] - filter to specific notebooks
+    # - notes: list[str] - filter to specific note paths
+    # - exclude_notebooks: list[str] - exclude notebooks
+    # - priority: int - filter by priority (1, 2, 3)
+    # - tags: list[str] - filter by tags
+    # - exclude_tags: list[str] - exclude tags
+    # - due_today: bool - show only due today
+    # - due_week: bool - show only due this week
+    # - overdue: bool - show only overdue
+    # - hide_later: bool - hide "DUE LATER" section
+    # - hide_no_date: bool - hide "NO DUE DATE" section
+    # - focus: bool - shorthand for hide_later + hide_no_date
+    # - include_completed: bool - include completed todos
+
+
+@dataclass
 class Config:
     """Application configuration."""
 
@@ -76,9 +101,21 @@ class Config:
     )
     linked_todos: list[LinkedTodoConfig] = field(default_factory=list)
     linked_notes: list[LinkedNoteConfig] = field(default_factory=list)
+    todo_views: list[TodoViewConfig] = field(default_factory=list)
     embeddings: EmbeddingsConfig = field(default_factory=EmbeddingsConfig)
     date_format: str = "%Y-%m-%d"
     time_format: str = "%H:%M"
+
+    def get_todo_view(self, name: str) -> TodoViewConfig | None:
+        """Get a todo view configuration by name."""
+        for view in self.todo_views:
+            if view.name == name:
+                return view
+        return None
+
+    def todo_view_names(self) -> list[str]:
+        """Get list of todo view names."""
+        return [view.name for view in self.todo_views]
 
     def get_notebook(self, name: str) -> NotebookConfig | None:
         """Get a notebook configuration by name."""
@@ -305,6 +342,19 @@ def _parse_embeddings(data: dict[str, Any] | None) -> EmbeddingsConfig:
     )
 
 
+def _parse_todo_views(data: list[dict[str, Any]]) -> list[TodoViewConfig]:
+    """Parse todo_views configuration."""
+    result = []
+    for item in data:
+        result.append(
+            TodoViewConfig(
+                name=item["name"],
+                filters=item.get("filters", {}),
+            )
+        )
+    return result
+
+
 def load_config(config_path: Path | None = None) -> Config:
     """Load configuration from YAML file.
 
@@ -337,6 +387,7 @@ def load_config(config_path: Path | None = None) -> Config:
 
     linked_todos = _parse_linked_todos(data.get("linked_todos", []))
     linked_notes = _parse_linked_notes(data.get("linked_notes", []))
+    todo_views = _parse_todo_views(data.get("todo_views", []))
     embeddings = _parse_embeddings(data.get("embeddings"))
     date_format = data.get("date_format", "%Y-%m-%d")
     time_format = data.get("time_format", "%H:%M")
@@ -347,6 +398,7 @@ def load_config(config_path: Path | None = None) -> Config:
         notebooks=notebooks,
         linked_todos=linked_todos,
         linked_notes=linked_notes,
+        todo_views=todo_views,
         embeddings=embeddings,
         date_format=date_format,
         time_format=time_format,
@@ -400,6 +452,9 @@ def save_config(config: Config) -> None:
                 "sync": ln.sync,
             }
             for ln in config.linked_notes
+        ],
+        "todo_views": [
+            {"name": view.name, "filters": view.filters} for view in config.todo_views
         ],
         "embeddings": embeddings_data,
         "date_format": config.date_format,

@@ -5,8 +5,10 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 ## Features
 
 - **Daily notes** - Automatic date-organized journal entries with week-based folders
-- **Todo management** - Extract and track todos from any markdown file
+- **Todo management** - Extract and track todos from any markdown file with in-progress support
+- **Todo views** - Save and reuse filter configurations for quick access
 - **Multiple notebooks** - Organize notes by project, including external directories
+- **Fuzzy finding** - Auto-suggest notebooks and notes when exact match not found
 - **Unified search** - Keyword, semantic, and hybrid search powered by localvectordb
 - **Note streaming** - Browse notes interactively with keyboard navigation
 - **Linked files** - Index external todo files and note directories
@@ -124,12 +126,31 @@ nb notebooks create vault --from ~/Obsidian   # External directory
 nb notebooks remove old-project               # Remove from config
 ```
 
+### Fuzzy Finding
+
+When you specify a notebook or note that doesn't exist, nb will suggest similar matches:
+
+```bash
+$ nb open myproject -n idas
+No exact match for 'idas'. Did you mean:
+  1. ideas
+  2. daily
+  0. Cancel
+Select [1]: 1
+Opening ideas/myproject.md...
+```
+
+This works with:
+- `nb open` - notebook and note names
+- `nb todo -n` - notebook filters
+
 ### Todos
 
 Todos are extracted from markdown files using GitHub-style checkboxes:
 
 ```markdown
 - [ ] Task to do @due(friday) @priority(1) #urgent
+- [^] In-progress task (currently working on)
 - [x] Completed task
   - [ ] Subtask (nested todos are supported)
 ```
@@ -137,11 +158,13 @@ Todos are extracted from markdown files using GitHub-style checkboxes:
 #### Commands
 
 ```bash
-nb todo                 # List all open todos (grouped by due date)
+nb todo                 # List all open todos (grouped by status and due date)
 nb todo -f              # Focus mode: hide "due later" and "no date" sections
 nb todo -a              # Include todos from all sources (even excluded notebooks)
 nb todo -c              # Include completed todos
 nb todo -n daily        # Show todos from a specific notebook
+nb todo -n daily -n work  # Filter by multiple notebooks
+nb todo --note projects/myproject  # Filter by specific note
 nb todo --overdue       # Show overdue todos only
 nb todo -t work         # Filter by tag
 nb todo -T waiting      # Exclude todos with a tag
@@ -158,15 +181,24 @@ nb todo -s tag          # Sort by first tag (default: source)
 nb todo -s priority     # Sort by priority
 nb todo -s created      # Sort by creation date
 
+# Todo actions
 nb todo add "New task"  # Add to inbox (todo.md)
 nb todo add --today "Call dentist"  # Add to today's note
 nb todo done abc123     # Mark complete (by ID prefix)
 nb todo undone abc123   # Mark incomplete
+nb todo start abc123    # Mark as in-progress ([ ] -> [^])
+nb todo pause abc123    # Pause in-progress todo ([^] -> [ ])
 nb todo show abc123     # Show todo details
 nb todo edit abc123     # Open source file at todo line
+
+# Saved views
+nb todo -n work -t urgent --create-view work-urgent  # Save current filters as a view
+nb todo -v work-urgent  # Apply saved view
+nb todo --list-views    # List all saved views
+nb todo --delete-view work-urgent  # Delete a view
 ```
 
-Todos are grouped by due date: OVERDUE, DUE TODAY, DUE THIS WEEK, DUE NEXT WEEK, DUE LATER, NO DUE DATE.
+Todos are grouped by status and due date: OVERDUE, IN PROGRESS, DUE TODAY, DUE THIS WEEK, DUE NEXT WEEK, DUE LATER, NO DUE DATE.
 
 Todos can be hidden from `nb todo` at three levels:
 - **Notebook-level**: Set `todo_exclude: true` in notebook config
@@ -184,9 +216,11 @@ nb todo -i              # Launch interactive viewer
 Keyboard shortcuts:
 - `j/k` - Navigate up/down
 - `Space` - Toggle completion
+- `s` - Toggle in-progress status (start/pause)
 - `e` - Edit (open source file)
 - `c` - Toggle showing completed
 - `g/G` - Jump to top/bottom
+- `r` - Refresh
 - `q` - Quit
 
 ### Search
@@ -357,6 +391,19 @@ linked_notes:
 embeddings:
   provider: ollama      # or "openai"
   model: nomic-embed-text
+
+# Saved todo views (created with --create-view)
+todo_views:
+  - name: work-urgent
+    filters:
+      notebooks: [work]
+      tag: urgent
+      hide_later: true
+  - name: daily-focus
+    filters:
+      notebooks: [daily]
+      hide_later: true
+      hide_no_date: true
 ```
 
 ### Notebook Options
@@ -429,11 +476,22 @@ todo_exclude: true  # Hide todos from this note in nb todo
 Todos use GitHub-style checkboxes with optional metadata:
 
 ```markdown
-- [ ] Incomplete task
+- [ ] Pending task
+- [^] In-progress task (currently being worked on)
 - [x] Completed task
   - [ ] Nested subtask
   - [x] Completed subtask
 ```
+
+#### Todo Status
+
+| Marker | Status | Description |
+|--------|--------|-------------|
+| `[ ]` | Pending | Task not yet started |
+| `[^]` | In Progress | Task currently being worked on |
+| `[x]` | Completed | Task finished |
+
+Use `nb todo start <id>` to mark a todo as in-progress, or `nb todo pause <id>` to return it to pending.
 
 #### Multi-line Details
 

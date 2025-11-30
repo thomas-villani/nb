@@ -7,12 +7,13 @@ from datetime import date
 from pathlib import Path
 
 from nb.config import get_config
-from nb.models import Attachment, Priority, Todo, TodoSource
+from nb.models import Attachment, Priority, Todo, TodoSource, TodoStatus
 from nb.utils.dates import parse_fuzzy_date
 from nb.utils.hashing import make_attachment_id, make_todo_id
 
 # Regex patterns for todo parsing
-TODO_PATTERN = re.compile(r"^(?P<indent>\s*)- \[(?P<done>[ xX])\] (?P<content>.+)$")
+# Captures: [ ] pending, [x]/[X] completed, [^] in progress
+TODO_PATTERN = re.compile(r"^(?P<indent>\s*)- \[(?P<state>[ xX^])\] (?P<content>.+)$")
 DUE_PATTERN = re.compile(r"@due\((?P<date>[^)]+)\)")
 PRIORITY_PATTERN = re.compile(r"@priority\((?P<level>[123])\)")
 TAG_PATTERN = re.compile(r"#([^ ]+)")
@@ -100,13 +101,20 @@ def extract_todos(
     content = path.read_text(encoding="utf-8")
     lines = content.splitlines()
 
-    # Extract tags from note frontmatter to inherit to todos
+    # Extract tags from note frontmatter only to inherit to todos
+    # (Inline body tags are parsed per-todo, not inherited to all todos)
     note_tags: list[str] = []
     try:
-        from nb.utils.markdown import extract_tags, parse_note_file
+        from nb.utils.markdown import parse_note_file
 
-        meta, body = parse_note_file(path)
-        note_tags = extract_tags(meta, body)
+        meta, _ = parse_note_file(path)
+        # Only extract frontmatter tags, not inline body tags
+        if "tags" in meta:
+            fm_tags = meta["tags"]
+            if isinstance(fm_tags, list):
+                note_tags = [str(t).lower() for t in fm_tags]
+            elif isinstance(fm_tags, str):
+                note_tags = [t.strip().lower() for t in fm_tags.split(",") if t.strip()]
     except Exception:
         pass  # If frontmatter parsing fails, continue without inherited tags
 
@@ -209,7 +217,8 @@ def extract_todos(
         finalize_details()
 
         indent = len(match.group("indent"))
-        done = match.group("done").lower() == "x"
+        state_marker = match.group("state")
+        status = TodoStatus.from_marker(state_marker)
         raw_content = match.group("content")
 
         # Parse metadata
@@ -224,7 +233,7 @@ def extract_todos(
             id=make_todo_id(path, clean_content),
             content=clean_content,
             raw_content=raw_content,
-            completed=done,
+            status=status,
             source=source,
             line_number=line_num,
             created_date=created_date,
@@ -297,6 +306,9 @@ def toggle_todo_in_file(
 ) -> bool:
     """Toggle a todo's completion status in its source file.
 
+    Cycles through: pending -> completed -> pending
+    (Does not affect in-progress status - use set_todo_status_in_file for that)
+
     Args:
         path: Path to the file
         line_number: 1-based line number of the todo
@@ -328,14 +340,69 @@ def toggle_todo_in_file(
     if not match:
         return False
 
-    done = match.group("done")
+    state = match.group("state")
 
-    if done.lower() == "x":
-        # Mark as incomplete
+    if state.lower() == "x":
+        # Mark as incomplete (pending)
         new_line = line.replace("[x]", "[ ]").replace("[X]", "[ ]")
+    elif state == "^":
+        # In-progress -> completed
+        new_line = line.replace("[^]", "[x]")
     else:
-        # Mark as complete
+        # Pending -> completed
         new_line = line.replace("[ ]", "[x]")
+
+    lines[line_number - 1] = new_line
+
+    # Write back
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return True
+
+
+def set_todo_status_in_file(
+    path: Path,
+    line_number: int,
+    new_status: TodoStatus,
+    check_linked_sync: bool = True,
+) -> bool:
+    """Set a todo's status to a specific state in its source file.
+
+    Args:
+        path: Path to the file
+        line_number: 1-based line number of the todo
+        new_status: The status to set
+        check_linked_sync: Whether to check if linked file allows sync
+
+    Returns:
+        True if successfully updated, False otherwise.
+
+    Raises:
+        PermissionError: If the file is a linked file with sync disabled.
+
+    """
+    if not path.exists():
+        return False
+
+    # Check if we're allowed to modify this file
+    if check_linked_sync and not can_toggle_linked_file(path):
+        raise PermissionError(f"Cannot modify linked file (sync disabled): {path.name}")
+
+    content = path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+
+    if line_number < 1 or line_number > len(lines):
+        return False
+
+    line = lines[line_number - 1]
+    match = TODO_PATTERN.match(line)
+
+    if not match:
+        return False
+
+    # Replace the checkbox marker with the new status marker
+    new_marker = new_status.marker
+    # Match any of the three markers and replace
+    new_line = re.sub(r"\[[ xX^]\]", f"[{new_marker}]", line, count=1)
 
     lines[line_number - 1] = new_line
 
@@ -389,7 +456,7 @@ def add_todo_to_inbox(text: str, notes_root: Path | None = None) -> Todo:
         id=make_todo_id(inbox_path, clean_content),
         content=clean_content,
         raw_content=text,
-        completed=False,
+        status=TodoStatus.PENDING,
         source=source,
         line_number=line_number,
         created_date=date.today(),
@@ -455,7 +522,7 @@ def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
         id=make_todo_id(note_path, clean_content),
         content=clean_content,
         raw_content=text,
-        completed=False,
+        status=TodoStatus.PENDING,
         source=source,
         line_number=line_number,
         created_date=dt,
