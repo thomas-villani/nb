@@ -79,12 +79,12 @@ def link_list() -> None:
     help="Exclude todos from 'nb todo' unless explicitly requested",
 )
 def link_add(
-    path: str,
-    alias: str | None,
-    sync: bool,
-    notebook: str | None,
-    no_recursive: bool,
-    todo_exclude: bool,
+        path: str,
+        alias: str | None,
+        sync: bool,
+        notebook: str | None,
+        no_recursive: bool,
+        todo_exclude: bool,
 ) -> None:
     """Link an external file or directory.
 

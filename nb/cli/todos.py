@@ -95,31 +95,31 @@ def register_todo_commands(cli: click.Group) -> None:
 @click.option("--offset", "-o", type=int, default=0, help="Skip the first N todos")
 @click.pass_context
 def todo(
-    ctx: click.Context,
-    created_today: bool,
-    created_week: bool,
-    due_today: bool,
-    due_week: bool,
-    overdue: bool,
-    priority: int | None,
-    tag: str | None,
-    exclude_tag: tuple[str, ...],
-    notebook: tuple[str, ...],
-    note: tuple[str, ...],
-    exclude_notebook: tuple[str, ...],
-    view: str | None,
-    create_view: str | None,
-    list_views: bool,
-    delete_view: str | None,
-    hide_later: bool,
-    hide_no_date: bool,
-    focus: bool,
-    sort_by: str,
-    show_all: bool,
-    include_completed: bool,
-    interactive: bool,
-    limit: int | None,
-    offset: int,
+        ctx: click.Context,
+        created_today: bool,
+        created_week: bool,
+        due_today: bool,
+        due_week: bool,
+        overdue: bool,
+        priority: int | None,
+        tag: str | None,
+        exclude_tag: tuple[str, ...],
+        notebook: tuple[str, ...],
+        note: tuple[str, ...],
+        exclude_notebook: tuple[str, ...],
+        view: str | None,
+        create_view: str | None,
+        list_views: bool,
+        delete_view: str | None,
+        hide_later: bool,
+        hide_no_date: bool,
+        focus: bool,
+        sort_by: str,
+        show_all: bool,
+        include_completed: bool,
+        interactive: bool,
+        limit: int | None,
+        offset: int,
 ) -> None:
     """Manage todos.
 
@@ -356,7 +356,7 @@ def todo(
             # Determine if we should exclude notes with todo_exclude
             # Don't exclude when --all, specific notebooks, or specific notes requested
             exclude_note_excluded = (
-                not show_all and not effective_notebooks and not notes_filter
+                    not show_all and not effective_notebooks and not notes_filter
             )
 
             # Default: list todos
@@ -431,16 +431,16 @@ def _delete_todo_view(config, view_name: str) -> None:
 
 
 def _create_todo_view(
-    config,
-    name: str,
-    notebooks: list[str] | None = None,
-    notes: list[str] | None = None,
-    tag: str | None = None,
-    priority: int | None = None,
-    exclude_tags: list[str] | None = None,
-    hide_later: bool = False,
-    hide_no_date: bool = False,
-    include_completed: bool = False,
+        config,
+        name: str,
+        notebooks: list[str] | None = None,
+        notes: list[str] | None = None,
+        tag: str | None = None,
+        priority: int | None = None,
+        exclude_tags: list[str] | None = None,
+        hide_later: bool = False,
+        hide_no_date: bool = False,
+        include_completed: bool = False,
 ) -> None:
     """Create a new todo view from current filters."""
     # Build filters dict (only include non-empty values)
@@ -490,25 +490,25 @@ def _create_todo_view(
 
 
 def _list_todos(
-    created_today: bool = False,
-    created_week: bool = False,
-    due_today: bool = False,
-    due_week: bool = False,
-    overdue: bool = False,
-    priority: int | None = None,
-    tag: str | None = None,
-    exclude_tags: list[str] | None = None,
-    notebooks: list[str] | None = None,
-    notes: list[str] | None = None,
-    sections: list[str] | None = None,
-    exclude_notebooks: list[str] | None = None,
-    hide_later: bool = False,
-    hide_no_date: bool = False,
-    sort_by: str = "source",
-    include_completed: bool = False,
-    exclude_note_excluded: bool = True,
-    limit: int | None = None,
-    offset: int = 0,
+        created_today: bool = False,
+        created_week: bool = False,
+        due_today: bool = False,
+        due_week: bool = False,
+        overdue: bool = False,
+        priority: int | None = None,
+        tag: str | None = None,
+        exclude_tags: list[str] | None = None,
+        notebooks: list[str] | None = None,
+        notes: list[str] | None = None,
+        sections: list[str] | None = None,
+        exclude_notebooks: list[str] | None = None,
+        hide_later: bool = False,
+        hide_no_date: bool = False,
+        sort_by: str = "source",
+        include_completed: bool = False,
+        exclude_note_excluded: bool = True,
+        limit: int | None = None,
+        offset: int = 0,
 ) -> None:
     """List todos with optional filters."""
     # Determine completion filter
@@ -944,7 +944,7 @@ def _format_colored_todo_source(t, width: int = 0, max_section_len: int = 15) ->
         # Color notebook part
         if parts["notebook"] and remaining.startswith(parts["notebook"]):
             colored_parts.append(f"[{color}]{icon_prefix}{parts['notebook']}[/{color}]")
-            remaining = remaining[len(parts["notebook"]) :]
+            remaining = remaining[len(parts["notebook"]):]
             icon_prefix = ""  # Only show icon once
         elif parts["notebook"]:
             # Notebook itself was truncated
@@ -964,10 +964,10 @@ def _format_colored_todo_source(t, width: int = 0, max_section_len: int = 15) ->
                     note_part = remaining[:-1]  # Remove ellipsis for now
             if remaining.startswith(parts["note"]):
                 colored_parts.append(f"[blue]{parts['note']}[/blue]")
-                remaining = remaining[len(parts["note"]) :]
+                remaining = remaining[len(parts["note"]):]
             elif note_part:
                 colored_parts.append(f"[blue]{note_part}[/blue]")
-                remaining = remaining[len(note_part) :]
+                remaining = remaining[len(note_part):]
 
         # Color "::" separator and section part
         if remaining.startswith("::"):
@@ -1071,7 +1071,7 @@ def _format_colored_compact_source(t, width: int = 0) -> str:
 
 
 def _print_todo(
-    t, indent: int = 0, widths: dict[str, int | bool] | None = None
+        t, indent: int = 0, widths: dict[str, int | bool] | None = None
 ) -> None:
     """Print a single todo with formatting."""
     prefix = "  " * indent
@@ -1301,7 +1301,7 @@ def _complete_todo_with_children(t) -> int:
 
         # Set child to completed in source file
         if set_todo_status_in_file(
-            child.source.path, child.line_number, TodoStatus.COMPLETED
+                child.source.path, child.line_number, TodoStatus.COMPLETED
         ):
             update_todo_completion(child.id, True)
             children_completed += 1
@@ -1447,7 +1447,7 @@ def todo_start(todo_id: tuple[str, ...]) -> None:
         # Set status in source file
         try:
             if set_todo_status_in_file(
-                t.source.path, t.line_number, TodoStatus.IN_PROGRESS
+                    t.source.path, t.line_number, TodoStatus.IN_PROGRESS
             ):
                 update_todo_status(t.id, TodoStatus.IN_PROGRESS)
                 console.print(f"[yellow]Started:[/yellow] {t.content}")
@@ -1501,7 +1501,7 @@ def todo_pause(todo_id: tuple[str, ...]) -> None:
         # Set status in source file
         try:
             if set_todo_status_in_file(
-                t.source.path, t.line_number, TodoStatus.PENDING
+                    t.source.path, t.line_number, TodoStatus.PENDING
             ):
                 update_todo_status(t.id, TodoStatus.PENDING)
                 console.print(f"[dim]Paused:[/dim] {t.content}")

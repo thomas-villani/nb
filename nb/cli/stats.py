@@ -99,7 +99,7 @@ def _resample(values: list[int], target_width: int) -> list[int]:
 
 
 def render_bar(
-    value: int, max_value: int, width: int = 20, char: str | None = None
+        value: int, max_value: int, width: int = 20, char: str | None = None
 ) -> str:
     """Render a horizontal bar.
 
@@ -140,7 +140,7 @@ def render_completion_bar(completed: int, total: int, width: int = 20) -> str:
     pct = completed / total
     filled = int(pct * width)
     bar = fill_char * filled + empty_char * (width - filled)
-    return f"{bar} {pct*100:3.0f}%"
+    return f"{bar} {pct * 100:3.0f}%"
 
 
 @click.command("stats")
@@ -154,13 +154,13 @@ def render_completion_bar(completed: int, total: int, width: int = 20) -> str:
 @click.option("--by-tag", is_flag=True, help="Show top tags by usage")
 @click.option("--compact", "-c", is_flag=True, help="Compact single-panel view")
 def stats_cmd(
-    notebooks: tuple[str, ...],
-    exclude_notebooks: tuple[str, ...],
-    days: int,
-    by_notebook: bool,
-    by_priority: bool,
-    by_tag: bool,
-    compact: bool,
+        notebooks: tuple[str, ...],
+        exclude_notebooks: tuple[str, ...],
+        days: int,
+        by_notebook: bool,
+        by_priority: bool,
+        by_tag: bool,
+        compact: bool,
 ) -> None:
     """Show todo statistics dashboard.
 
@@ -237,12 +237,12 @@ def _render_compact_stats(stats: dict, activity: dict) -> None:
 
 
 def _render_full_dashboard(
-    stats: dict,
-    activity: dict,
-    show_notebook: bool,
-    show_priority: bool,
-    show_tag: bool,
-    days: int,
+        stats: dict,
+        activity: dict,
+        show_notebook: bool,
+        show_priority: bool,
+        show_tag: bool,
+        days: int,
 ) -> None:
     """Render full multi-panel dashboard."""
     panels = []

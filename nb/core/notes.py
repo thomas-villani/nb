@@ -55,12 +55,12 @@ def ensure_daily_note(dt: date, notes_root: Path | None = None) -> Path:
 
 
 def create_note(
-    path: Path,
-    title: str | None = None,
-    dt: date | None = None,
-    tags: list[str] | None = None,
-    template: str | None = None,
-    notes_root: Path | None = None,
+        path: Path,
+        title: str | None = None,
+        dt: date | None = None,
+        tags: list[str] | None = None,
+        template: str | None = None,
+        notes_root: Path | None = None,
 ) -> Path:
     """Create a new note at the specified path.
 
@@ -121,8 +121,8 @@ def create_note(
 
 
 def get_last_modified_note(
-    notebook: str | None = None,
-    notes_root: Path | None = None,
+        notebook: str | None = None,
+        notes_root: Path | None = None,
 ) -> Path | None:
     """Get the most recently modified note.
 
@@ -157,8 +157,8 @@ def get_last_modified_note(
 
 
 def get_latest_notes_per_notebook(
-    limit: int = 3,
-    notes_root: Path | None = None,
+        limit: int = 3,
+        notes_root: Path | None = None,
 ) -> dict[str, list[tuple[Path, str | None, list[str]]]]:
     """Get the latest N notes from each notebook.
 
@@ -209,7 +209,7 @@ def get_latest_notes_per_notebook(
 
 
 def get_all_notes(
-    notes_root: Path | None = None,
+        notes_root: Path | None = None,
 ) -> list[tuple[Path, str | None, str, list[str]]]:
     """Get all notes from all notebooks.
 
@@ -284,8 +284,8 @@ def update_note_mtime(path: Path, notes_root: Path | None = None) -> None:
 
 
 def get_last_viewed_note(
-    notebook: str | None = None,
-    notes_root: Path | None = None,
+        notebook: str | None = None,
+        notes_root: Path | None = None,
 ) -> Path | None:
     """Get the most recently viewed note.
 
@@ -325,9 +325,9 @@ def get_last_viewed_note(
 
 
 def get_recently_viewed_notes(
-    limit: int = 20,
-    notebook: str | None = None,
-    notes_root: Path | None = None,
+        limit: int = 20,
+        notebook: str | None = None,
+        notes_root: Path | None = None,
 ) -> list[tuple[Path, datetime]]:
     """Get recently viewed notes with timestamps.
 
@@ -373,9 +373,9 @@ def get_recently_viewed_notes(
 
 
 def get_recently_modified_notes(
-    limit: int = 20,
-    notebook: str | None = None,
-    notes_root: Path | None = None,
+        limit: int = 20,
+        notebook: str | None = None,
+        notes_root: Path | None = None,
 ) -> list[tuple[Path, datetime]]:
     """Get recently modified notes with timestamps.
 
@@ -637,7 +637,7 @@ def get_notebook_for_path(path: Path) -> str:
 
 
 def list_notes(
-    notebook: str | None = None, notes_root: Path | None = None
+        notebook: str | None = None, notes_root: Path | None = None
 ) -> list[Path]:
     """List all notes, optionally filtered by notebook.
 
@@ -676,9 +676,9 @@ def list_notes(
 
 
 def list_daily_notes(
-    start: date | None = None,
-    end: date | None = None,
-    notes_root: Path | None = None,
+        start: date | None = None,
+        end: date | None = None,
+        notes_root: Path | None = None,
 ) -> list[Path]:
     """List daily notes within a date range.
 
@@ -724,10 +724,10 @@ def list_daily_notes(
 
 
 def list_notebook_notes_by_date(
-    notebook: str,
-    start: date | None = None,
-    end: date | None = None,
-    notes_root: Path | None = None,
+        notebook: str,
+        start: date | None = None,
+        end: date | None = None,
+        notes_root: Path | None = None,
 ) -> list[Path]:
     """List notes from a notebook within a date range.
 

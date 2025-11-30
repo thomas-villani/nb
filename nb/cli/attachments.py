@@ -28,7 +28,7 @@ def attach() -> None:
 @click.option("--title", "-t", help="Display title for the attachment")
 @click.option("--copy", "-c", is_flag=True, help="Copy file to attachments directory")
 def attach_file(
-    file_path: str, target: str | None, title: str | None, copy: bool
+        file_path: str, target: str | None, title: str | None, copy: bool
 ) -> None:
     """Attach a file to a note or todo.
 

@@ -140,9 +140,9 @@ def generate_frontmatter(meta: dict[str, Any]) -> str:
 
 
 def create_note_template(
-    title: str | None = None,
-    dt: date | None = None,
-    tags: list[str] | None = None,
+        title: str | None = None,
+        dt: date | None = None,
+        tags: list[str] | None = None,
 ) -> str:
     """Generate a note template with frontmatter.
 
