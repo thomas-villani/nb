@@ -11,7 +11,7 @@ from nb.config import get_config
 from nb.core.notes import get_note
 from nb.core.todos import extract_todos
 from nb.index.db import Database, get_db
-from nb.index.todos_repo import delete_todos_for_source, upsert_todo
+from nb.index.todos_repo import delete_todos_for_source, upsert_todos_batch
 from nb.utils.hashing import make_note_hash, normalize_path
 
 # Thread-local storage for database connections
@@ -241,10 +241,9 @@ def index_note(
     # Delete existing todos for this file
     delete_todos_for_source(full_path)
 
-    # Extract and index new todos
+    # Extract and index new todos (batch for performance)
     todos = extract_todos(full_path, source_type=source_type, notes_root=notes_root)
-    for todo in todos:
-        upsert_todo(todo)
+    upsert_todos_batch(todos)
 
 
 def index_all_notes(
@@ -434,10 +433,9 @@ def _index_note_thread_safe(
     # Delete existing todos for this file
     delete_todos_for_source(full_path)
 
-    # Extract and index new todos
+    # Extract and index new todos (batch for performance)
     todos = extract_todos(full_path, source_type=source_type, notes_root=notes_root)
-    for todo in todos:
-        upsert_todo(todo)
+    upsert_todos_batch(todos)
 
 
 def rebuild_search_index(notes_root: Path | None = None) -> int:
@@ -532,10 +530,9 @@ def index_todos_from_file(path: Path, notes_root: Path | None = None) -> int:
     # Delete existing todos for this file
     delete_todos_for_source(path)
 
-    # Extract and index new todos
+    # Extract and index new todos (batch for performance)
     todos = extract_todos(path, source_type=source_type, notes_root=notes_root)
-    for todo in todos:
-        upsert_todo(todo)
+    upsert_todos_batch(todos)
 
     return len(todos)
 
@@ -557,7 +554,7 @@ def scan_linked_files() -> int:
         # Delete existing todos for this linked file
         delete_todos_for_source(linked.path)
 
-        # Extract and index todos
+        # Extract and index todos (batch for performance)
         todos = extract_todos(
             linked.path,
             source_type="linked",
@@ -566,9 +563,8 @@ def scan_linked_files() -> int:
             alias=linked.alias,
         )
 
-        for todo in todos:
-            upsert_todo(todo)
-            total_todos += 1
+        upsert_todos_batch(todos)
+        total_todos += len(todos)
 
     return total_todos
 
@@ -590,7 +586,7 @@ def index_linked_file(path: Path, alias: str | None = None) -> int:
     # Delete existing todos for this file
     delete_todos_for_source(path)
 
-    # Extract and index todos
+    # Extract and index todos (batch for performance)
     todos = extract_todos(
         path,
         source_type="linked",
@@ -599,8 +595,7 @@ def index_linked_file(path: Path, alias: str | None = None) -> int:
         alias=alias,
     )
 
-    for todo in todos:
-        upsert_todo(todo)
+    upsert_todos_batch(todos)
 
     return len(todos)
 
@@ -781,7 +776,7 @@ def index_linked_note(
         except Exception:
             pass
 
-    # Also index todos from this file
+    # Also index todos from this file (batch for performance)
     delete_todos_for_source(path)
     todos = extract_todos(
         path,
@@ -791,8 +786,7 @@ def index_linked_note(
         notes_root=notes_root,
         notebook=notebook,
     )
-    for todo in todos:
-        upsert_todo(todo)
+    upsert_todos_batch(todos)
 
 
 def scan_linked_notes() -> int:

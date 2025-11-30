@@ -217,21 +217,6 @@ notebooks:
   #   path: ~/Documents/Obsidian/vault
   #   date_based: false
 
-# Linked external todo files (optional)
-# linked_todos:
-#   - path: ~/code/myproject/TODO.md
-#     alias: myproject
-#     sync: true
-
-# Linked external note files or directories (optional)
-# linked_notes:
-#   - path: ~/docs/wiki
-#     alias: wiki
-#     notebook: wiki        # Virtual notebook name
-#     recursive: true       # Scan subdirectories
-#   - path: ~/code/project/docs/design.md
-#     alias: project-design
-
 # Embedding configuration for semantic search
 embeddings:
   provider: ollama    # "ollama" or "openai"
@@ -301,37 +286,6 @@ def _parse_notebooks(data: list[Any]) -> list[NotebookConfig]:
     return result
 
 
-def _parse_linked_todos(data: list[dict[str, Any]]) -> list[LinkedTodoConfig]:
-    """Parse linked_todos configuration."""
-    result = []
-    for item in data:
-        result.append(
-            LinkedTodoConfig(
-                path=expand_path(item["path"]),
-                alias=item["alias"],
-                sync=item.get("sync", True),
-            )
-        )
-    return result
-
-
-def _parse_linked_notes(data: list[dict[str, Any]]) -> list[LinkedNoteConfig]:
-    """Parse linked_notes configuration."""
-    result = []
-    for item in data:
-        result.append(
-            LinkedNoteConfig(
-                path=expand_path(item["path"]),
-                alias=item["alias"],
-                notebook=item.get("notebook"),
-                recursive=item.get("recursive", True),
-                todo_exclude=item.get("todo_exclude", False),
-                sync=item.get("sync", True),
-            )
-        )
-    return result
-
-
 def _parse_embeddings(data: dict[str, Any] | None) -> EmbeddingsConfig:
     """Parse embeddings configuration."""
     if data is None:
@@ -387,8 +341,7 @@ def load_config(config_path: Path | None = None) -> Config:
     raw_notebooks = data.get("notebooks", ["daily", "projects", "work", "personal"])
     notebooks = _parse_notebooks(raw_notebooks)
 
-    linked_todos = _parse_linked_todos(data.get("linked_todos", []))
-    linked_notes = _parse_linked_notes(data.get("linked_notes", []))
+    # Note: linked_todos and linked_notes are stored in the database, not config
     todo_views = _parse_todo_views(data.get("todo_views", []))
     embeddings = _parse_embeddings(data.get("embeddings"))
     date_format = data.get("date_format", "%Y-%m-%d")
@@ -398,8 +351,6 @@ def load_config(config_path: Path | None = None) -> Config:
         notes_root=notes_root,
         editor=editor,
         notebooks=notebooks,
-        linked_todos=linked_todos,
-        linked_notes=linked_notes,
         todo_views=todo_views,
         embeddings=embeddings,
         date_format=date_format,
@@ -438,25 +389,11 @@ def save_config(config: Config) -> None:
             nb_dict["template"] = nb.template
         notebooks_data.append(nb_dict)
 
+    # Note: linked_todos and linked_notes are stored in the database, not config
     data = {
         "notes_root": str(config.notes_root),
         "editor": config.editor,
         "notebooks": notebooks_data,
-        "linked_todos": [
-            {"path": str(lt.path), "alias": lt.alias, "sync": lt.sync}
-            for lt in config.linked_todos
-        ],
-        "linked_notes": [
-            {
-                "path": str(ln.path),
-                "alias": ln.alias,
-                "notebook": ln.notebook,
-                "recursive": ln.recursive,
-                "todo_exclude": ln.todo_exclude,
-                "sync": ln.sync,
-            }
-            for ln in config.linked_notes
-        ],
         "todo_views": [
             {"name": view.name, "filters": view.filters} for view in config.todo_views
         ],

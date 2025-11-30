@@ -253,9 +253,10 @@ def get_notebook_for_file(path: Path) -> str | None:
     # Check internal notebooks (under notes_root)
     try:
         relative = path.relative_to(config.notes_root)
-        if len(relative.parts) > 0:
-            # First directory component is the notebook
+        if len(relative.parts) > 1:
+            # First directory component is the notebook (only if file is in a subdirectory)
             return relative.parts[0]
+        # File is in root of notes_root (e.g., ~/notes/quick.md) - no notebook
     except ValueError:
         pass
 

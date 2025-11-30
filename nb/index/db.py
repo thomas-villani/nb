@@ -348,6 +348,8 @@ def rebuild_db(db: Database) -> None:
 
     This is useful when the data format has changed and a clean
     reindex is needed.
+
+    Also clears the localvectordb index to prevent ghost search results.
     """
     # Drop all tables in reverse dependency order
     tables = [
@@ -370,6 +372,22 @@ def rebuild_db(db: Database) -> None:
             pass
 
     db.commit()
+
+    # Clear localvectordb to prevent ghost search results
+    try:
+        from nb.config import get_config
+        import shutil
+
+        config = get_config()
+        vectors_path = config.vectors_path
+        if vectors_path.exists():
+            shutil.rmtree(vectors_path)
+        # Also reset the search singleton so it recreates from scratch
+        from nb.index.search import reset_search
+
+        reset_search()
+    except Exception:
+        pass  # Don't fail rebuild if vector clearing fails
 
     # Recreate schema from scratch
     apply_migrations(db)

@@ -15,8 +15,6 @@ from nb.config import (
     LinkedTodoConfig,
     NotebookConfig,
     _parse_embeddings,
-    _parse_linked_notes,
-    _parse_linked_todos,
     _parse_notebooks,
     add_notebook,
     ensure_directories,
@@ -249,50 +247,6 @@ class TestParseNotebooks:
         assert result[0].is_external is True
 
 
-class TestParseLinkedTodos:
-    """Tests for _parse_linked_todos function."""
-
-    def test_basic(self):
-        data = [{"path": "~/project/TODO.md", "alias": "project"}]
-        result = _parse_linked_todos(data)
-
-        assert len(result) == 1
-        assert result[0].alias == "project"
-        assert result[0].sync is True
-
-    def test_with_sync(self):
-        data = [{"path": "~/project/TODO.md", "alias": "project", "sync": False}]
-        result = _parse_linked_todos(data)
-
-        assert result[0].sync is False
-
-
-class TestParseLinkedNotes:
-    """Tests for _parse_linked_notes function."""
-
-    def test_basic(self):
-        data = [{"path": "~/docs", "alias": "docs"}]
-        result = _parse_linked_notes(data)
-
-        assert len(result) == 1
-        assert result[0].alias == "docs"
-        assert result[0].recursive is True
-
-    def test_with_options(self):
-        data = [
-            {
-                "path": "~/docs",
-                "alias": "docs",
-                "notebook": "external",
-                "recursive": False,
-            }
-        ]
-        result = _parse_linked_notes(data)
-
-        assert result[0].notebook == "external"
-        assert result[0].recursive is False
-
-
 class TestParseEmbeddings:
     """Tests for _parse_embeddings function."""
 
@@ -357,9 +311,6 @@ class TestSaveConfig:
                 NotebookConfig(name="daily", date_based=True),
                 NotebookConfig(name="work", date_based=False, todo_exclude=True),
             ],
-            linked_todos=[
-                LinkedTodoConfig(path=Path("/project/TODO.md"), alias="proj")
-            ],
         )
 
         save_config(cfg)
@@ -370,7 +321,6 @@ class TestSaveConfig:
         assert loaded.editor == "code"
         assert len(loaded.notebooks) == 2
         assert loaded.notebooks[1].todo_exclude is True
-        assert len(loaded.linked_todos) == 1
 
 
 class TestEnsureDirectories:

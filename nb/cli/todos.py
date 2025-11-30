@@ -1076,9 +1076,12 @@ def _print_todo(
         created_str = f"+{t.created_date.strftime('%m/%d')}"
 
     due_str = ""
-    due_color = "red"
+    due_color = "yellow"  # Default to yellow for future due dates
     if show_due and t.due_date:
         due_str = t.due_date.strftime("%b %d")
+        # Red if due today or overdue (and not completed)
+        if t.due_date <= date.today() and not t.completed:
+            due_color = "red"
 
     priority_str = ""
     if t.priority:

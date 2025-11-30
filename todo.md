@@ -74,10 +74,12 @@ todo_exclude: true
 - [x] Allow adding an alias for any note (not just linked notes)
 - [x] enhance index command to allow specifying specific notebook
 - [x] update `nb add` to allow to add to any note (but default to today's)
-- [ ] Add a flag (--full) for `nb list` to show full paths
-
-- [^] Review code, check for DRY refactor opportunities and bugs
-- [ ] Address code review comments
+- [x] Add a flag (--full) for `nb list` to show full paths
+- [x] Review code, check for DRY refactor opportunities and bugs
+- [x] Address code review comments
+- [ ] Enhance `nb stream` to allow streaming recently viewed or recently modified notes
+- [x] `nb history` shows linked notes under "@external" rather than in the notebook they're linked to
+    Shows same file multiple times (should condense to one line with "+4" or something) 
 
 ### Phase 5: Advanced TUI
 - [ ] Full Wijjit-based todo list view with richer interactions
@@ -95,6 +97,12 @@ todo_exclude: true
 - [ ] Performance optimization for large note collections
 - [ ] Better error messages and user feedback
 - [ ] Documentation site with examples
+- [ ] Refactor: Remove legacy config-based linked_todos/linked_notes storage
+  - [x] Remove from DEFAULT_CONFIG_YAML template and parse/save functions
+  - [ ] Remove `linked_todos` and `linked_notes` fields from Config dataclass
+  - [ ] Remove `save_to_config` branches in links.py (add/remove functions)
+  - [ ] Simplify `list_linked_files()` and `list_linked_notes()` to DB-only
+
 
 ### Phase 6: Future Enhancements
 - [ ] Recurring todos (`@recur(weekly)`)

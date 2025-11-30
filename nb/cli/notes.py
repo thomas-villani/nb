@@ -142,9 +142,11 @@ def history_cmd(limit: int, notebook: str | None, full_path: bool) -> None:
     """
     from collections import defaultdict
 
+    from nb.core.links import list_linked_notes
     from nb.core.notes import get_recently_viewed_notes
 
-    views = get_recently_viewed_notes(limit=limit, notebook=notebook)
+    # Request more views than limit to account for deduplication
+    views = get_recently_viewed_notes(limit=limit * 3, notebook=notebook)
 
     if not views:
         console.print("[dim]No view history found.[/dim]")
@@ -152,11 +154,42 @@ def history_cmd(limit: int, notebook: str | None, full_path: bool) -> None:
 
     config = get_config()
 
+    # Get linked notes from database (not just config)
+    linked_notes = list_linked_notes()
+
     console.print("\n[bold]Recently Viewed Notes[/bold]\n")
+
+    # Deduplicate views by path, keeping most recent timestamp and count
+    # Use dict to track: path -> (most_recent_timestamp, view_count)
+    seen_paths: dict[Path, tuple[list, int]] = {}
+    unique_views: list[tuple[Path, list, int]] = []  # (path, [timestamps], total_count)
+
+    for path, viewed_at in views:
+        resolved = path.resolve()
+        if resolved in seen_paths:
+            # Already seen this file - just increment count
+            seen_paths[resolved] = (
+                seen_paths[resolved][0],
+                seen_paths[resolved][1] + 1,
+            )
+        else:
+            # First time seeing this file
+            seen_paths[resolved] = ([viewed_at], 1)
+            unique_views.append((path, [viewed_at], 1))
+
+    # Update counts in unique_views
+    final_views = []
+    for path, timestamps, _ in unique_views:
+        resolved = path.resolve()
+        _, count = seen_paths[resolved]
+        final_views.append((path, timestamps, count))
+        if len(final_views) >= limit:
+            break
 
     # Group views by notebook
     views_by_notebook: dict[str, list] = defaultdict(list)
-    for path, viewed_at in views:
+    for path, timestamps, view_count in final_views:
+        # Determine notebook - check linked notes first for external paths
         try:
             rel_path = path.relative_to(config.notes_root)
             # Get notebook from path (first directory component)
@@ -164,15 +197,38 @@ def history_cmd(limit: int, notebook: str | None, full_path: bool) -> None:
                 nb_name = rel_path.parts[0]
             else:
                 nb_name = ""  # Root-level notes
+            linked_alias = None
         except ValueError:
+            # Path is outside notes_root - check if it's a linked note
             rel_path = path
             nb_name = "@external"
+            linked_alias = None
 
-        views_by_notebook[nb_name].append((path, rel_path, viewed_at))
+            # Check linked notes (from database) to find proper notebook
+            for ln in linked_notes:
+                if ln.path.is_file() and ln.path.resolve() == path.resolve():
+                    nb_name = ln.notebook or f"@{ln.alias}"
+                    linked_alias = ln.alias
+                    rel_path = Path(ln.alias + path.suffix)
+                    break
+                elif ln.path.is_dir():
+                    try:
+                        inner_rel = path.relative_to(ln.path)
+                        nb_name = ln.notebook or f"@{ln.alias}"
+                        linked_alias = ln.alias
+                        rel_path = inner_rel
+                        break
+                    except ValueError:
+                        continue
 
-    # Sort notebooks alphabetically (empty string last)
+        views_by_notebook[nb_name].append(
+            (path, rel_path, timestamps, view_count, linked_alias)
+        )
+
+    # Sort notebooks alphabetically (empty string last, @external last)
     sorted_notebooks = sorted(
-        views_by_notebook.keys(), key=lambda x: (x == "", x.lower())
+        views_by_notebook.keys(),
+        key=lambda x: (x == "@external", x == "", x.lower()),
     )
 
     for nb_name in sorted_notebooks:
@@ -188,12 +244,12 @@ def history_cmd(limit: int, notebook: str | None, full_path: bool) -> None:
         else:
             console.print("[bold dim](root)[/bold dim]")
 
-        # Sort views by timestamp (most recent first) within each notebook
-        nb_views.sort(key=lambda x: x[2], reverse=True)
+        # Sort views by most recent timestamp within each notebook
+        nb_views.sort(key=lambda x: x[2][0], reverse=True)
 
-        for abs_path, rel_path, viewed_at in nb_views:
-            # Format the timestamp
-            time_str = viewed_at.strftime("%Y-%m-%d %H:%M")
+        for abs_path, rel_path, timestamps, view_count, linked_alias in nb_views:
+            # Format the timestamp (use most recent)
+            time_str = timestamps[0].strftime("%Y-%m-%d %H:%M")
 
             # Determine display path
             if full_path:
@@ -201,18 +257,19 @@ def history_cmd(limit: int, notebook: str | None, full_path: bool) -> None:
             else:
                 display_path = rel_path.name
 
-            # Check for alias (linked notes)
-            alias_str = ""
-            # Check if this is a linked note by looking for alias in source
-            for ln in config.linked_notes:
-                if ln.path.is_file() and ln.path.resolve() == abs_path.resolve():
-                    alias_str = f" [dim](@{ln.alias})[/dim]"
-                    break
-                elif ln.path.is_dir() and abs_path.is_relative_to(ln.path):
-                    alias_str = f" [dim](@{ln.alias})[/dim]"
-                    break
+            # Show count if viewed multiple times
+            count_str = ""
+            if view_count > 1:
+                count_str = f" [dim](+{view_count - 1})[/dim]"
 
-            console.print(f"  [dim]{time_str}[/dim]  {display_path}{alias_str}")
+            # Show linked alias if applicable
+            alias_str = ""
+            if linked_alias:
+                alias_str = f" [dim](@{linked_alias})[/dim]"
+
+            console.print(
+                f"  [dim]{time_str}[/dim]  {display_path}{alias_str}{count_str}"
+            )
 
         console.print()  # Blank line between notebooks
 

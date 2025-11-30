@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import date, datetime
 from pathlib import Path
 
@@ -438,7 +439,9 @@ def open_note(path: Path, line: int | None = None) -> None:
         if mtime_before is None or mtime_after != mtime_before:
             update_note_mtime(path, config.notes_root)
             # Re-index the note to pick up any todo changes
+            print("Syncing nb...", end="", file=sys.stderr, flush=True)
             _reindex_note_after_edit(path, config.notes_root)
+            print(" done", file=sys.stderr)
     except OSError:
         pass
 
@@ -455,7 +458,7 @@ def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
 
     """
     from nb.core.todos import extract_todos
-    from nb.index.todos_repo import delete_todos_for_source, upsert_todo
+    from nb.index.todos_repo import delete_todos_for_source, upsert_todos_batch
 
     # Check if this is a linked note (external file)
     try:
@@ -513,8 +516,8 @@ def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
         notes_root=notes_root,
         notebook=None,
     )
-    for todo in todos:
-        upsert_todo(todo)
+    # Batch insert for performance (single commit instead of one per todo)
+    upsert_todos_batch(todos)
 
 
 def get_note(path: Path, notes_root: Path | None = None) -> Note | None:

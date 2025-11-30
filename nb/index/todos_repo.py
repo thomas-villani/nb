@@ -57,11 +57,15 @@ def _load_todo_tags(todo_id: str) -> list[str]:
     return [row["tag"] for row in rows]
 
 
-def upsert_todo(todo: Todo) -> None:
+def upsert_todo(todo: Todo, commit: bool = True) -> None:
     """Insert or update a todo in the database.
 
     Preserves created_date for existing todos.
     Sets completed_date when status changes to completed.
+
+    Args:
+        todo: The Todo to upsert.
+        commit: If True, commit immediately. Set False for batch operations.
     """
     db = get_db()
 
@@ -129,6 +133,23 @@ def upsert_todo(todo: Todo) -> None:
             "INSERT INTO todo_tags (todo_id, tag) VALUES (?, ?)",
             [(todo.id, tag) for tag in todo.tags],
         )
+
+    if commit:
+        db.commit()
+
+
+def upsert_todos_batch(todos: list[Todo]) -> None:
+    """Insert or update multiple todos in a single transaction.
+
+    This is much faster than calling upsert_todo repeatedly for large batches.
+    """
+    if not todos:
+        return
+
+    db = get_db()
+
+    for todo in todos:
+        upsert_todo(todo, commit=False)
 
     db.commit()
 
