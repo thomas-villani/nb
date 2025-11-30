@@ -89,8 +89,8 @@ class NoteSearch:
                 embedding_provider=self.config.embeddings.provider,
                 embedding_model=self.config.embeddings.model,
                 embedding_config=embedding_config if embedding_config else None,
-                chunking_method="paragraphs",
-                chunk_size=500,
+                chunking_method=self.config.embeddings.chunking_method,
+                chunk_size=self.config.embeddings.chunk_size,
             )
         return self._db
 
@@ -116,6 +116,53 @@ class NoteSearch:
             ids=[str(note.path)],
         )
 
+    def index_notes_batch(
+        self,
+        notes: list[tuple["Note", str]],
+    ) -> int:
+        """Add or update multiple notes in the search index in a single batch.
+
+        This is significantly faster than calling index_note() repeatedly
+        because it reduces the number of embedding API calls.
+
+        Args:
+            notes: List of (note, content) tuples to index.
+
+        Returns:
+            Number of notes successfully indexed.
+        """
+        if not notes:
+            return 0
+
+        documents = []
+        metadata_list = []
+        ids = []
+
+        for note, content in notes:
+            if not content:
+                continue
+            documents.append(content)
+            metadata_list.append(
+                {
+                    "path": str(note.path),
+                    "title": note.title,
+                    "notebook": note.notebook,
+                    "date": note.date.isoformat() if note.date else None,
+                    "tags": note.tags,
+                }
+            )
+            ids.append(str(note.path))
+
+        if not documents:
+            return 0
+
+        self.db.upsert(
+            documents=documents,
+            metadata=metadata_list,
+            ids=ids,
+        )
+        return len(documents)
+
     def delete_note(self, path: str) -> None:
         """Remove a note from the search index.
 
@@ -139,6 +186,7 @@ class NoteSearch:
         date_start: str | None = None,
         date_end: str | None = None,
         recency_boost: float = 0.0,
+        score_threshold: float = 0.4,
     ) -> list[SearchResult]:
         """Search notes using keyword, semantic, or hybrid search.
 
@@ -151,6 +199,7 @@ class NoteSearch:
             date_start: Filter to notes on or after this date (ISO format).
             date_end: Filter to notes on or before this date (ISO format).
             recency_boost: Weight (0-1) to boost recent results. 0 = no boost.
+            score_threshold: Minimum score for result to be displayed
 
         Returns:
             List of search results sorted by relevance (with optional recency boost).
@@ -176,6 +225,8 @@ class NoteSearch:
                 k=fetch_k,
                 filters=combined_filters if combined_filters else None,
                 vector_weight=vector_weight,
+                score_threshold=score_threshold,
+                return_type="chunks",  # Return matching chunks, not whole documents
             )
         except Exception as e:
             # Handle case where index is empty or query fails
@@ -289,6 +340,8 @@ def grep_notes(
     notes_root: Path,
     context_lines: int = 2,
     case_sensitive: bool = False,
+    notebook: str | None = None,
+    note_path: Path | None = None,
 ) -> list[GrepResult]:
     """Search notes with regex pattern matching.
 
@@ -300,11 +353,15 @@ def grep_notes(
         notes_root: Root directory containing notes.
         context_lines: Number of lines of context before/after match.
         case_sensitive: Whether to do case-sensitive matching.
+        notebook: Filter to files in this notebook.
+        note_path: Filter to a specific note file.
 
     Returns:
         List of grep results with matched lines and context.
 
     """
+    from nb.config import get_config
+
     results = []
     flags = 0 if case_sensitive else re.IGNORECASE
 
@@ -313,8 +370,65 @@ def grep_notes(
     except re.error as e:
         raise ValueError(f"Invalid regex pattern: {e}")
 
-    # Find all markdown files, excluding .nb directory
-    for md_file in notes_root.rglob("*.md"):
+    # If a specific note path is given, only search that file
+    if note_path:
+        files_to_search = [
+            note_path if note_path.is_absolute() else notes_root / note_path
+        ]
+    else:
+        # Find all markdown files, excluding .nb directory
+        files_to_search = []
+
+        # Get notebook config for filtering
+        config = get_config()
+        notebook_path = None
+
+        if notebook:
+            nb_config = config.get_notebook(notebook)
+            if nb_config:
+                if nb_config.path:
+                    # External notebook
+                    notebook_path = nb_config.path
+                else:
+                    # Internal notebook
+                    notebook_path = notes_root / notebook
+
+        # Scan notes_root
+        for md_file in notes_root.rglob("*.md"):
+            # Skip hidden directories and .nb
+            if any(
+                part.startswith(".") for part in md_file.relative_to(notes_root).parts
+            ):
+                continue
+
+            # Apply notebook filter
+            if notebook_path:
+                if (
+                    notebook_path not in md_file.parents
+                    and md_file.parent != notebook_path
+                ):
+                    continue
+
+            files_to_search.append(md_file)
+
+        # Also search external notebooks
+        for nb in config.external_notebooks():
+            if nb.path and nb.path.exists():
+                # If filtering by notebook, only include matching external notebooks
+                if notebook and nb.name != notebook:
+                    continue
+
+                for md_file in nb.path.rglob("*.md"):
+                    # Skip hidden directories
+                    try:
+                        rel_parts = md_file.relative_to(nb.path).parts
+                        if any(part.startswith(".") for part in rel_parts):
+                            continue
+                    except ValueError:
+                        continue
+                    files_to_search.append(md_file)
+
+    for md_file in files_to_search:
         # Skip hidden directories and .nb
         if any(part.startswith(".") for part in md_file.parts):
             continue
@@ -325,12 +439,19 @@ def grep_notes(
             # Skip files we can't read
             continue
 
+        # Determine relative path for display
+        try:
+            rel_path = md_file.relative_to(notes_root)
+        except ValueError:
+            # External file - use absolute path or just filename
+            rel_path = md_file
+
         lines = content.splitlines()
         for i, line in enumerate(lines):
             if regex.search(line):
                 results.append(
                     GrepResult(
-                        path=md_file.relative_to(notes_root),
+                        path=rel_path,
                         line_number=i + 1,
                         line_content=line,
                         context_before=lines[max(0, i - context_lines) : i],

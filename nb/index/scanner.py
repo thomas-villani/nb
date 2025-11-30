@@ -6,6 +6,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 from nb.config import get_config
 from nb.core.notes import get_note
@@ -246,12 +247,57 @@ def index_note(
     upsert_todos_batch(todos)
 
 
+def count_files_to_index(
+    notes_root: Path | None = None,
+    force: bool = False,
+    notebook: str | None = None,
+) -> int:
+    """Count the number of files that need to be indexed.
+
+    This is useful for progress reporting - call before index_all_notes()
+    to know the total count.
+
+    Args:
+        notes_root: Override notes root directory
+        force: If True, count all files (not just changed ones)
+        notebook: If specified, only count files in this notebook
+
+    Returns:
+        Number of files that need indexing.
+    """
+    config = get_config()
+    if notes_root is None:
+        notes_root = config.notes_root
+
+    note_files = scan_notes(notes_root)
+
+    # Filter to specific notebook if requested
+    if notebook:
+        notebook_config = config.get_notebook(notebook)
+        if notebook_config:
+            if notebook_config.path:
+                notebook_path = notebook_config.path
+            else:
+                notebook_path = notes_root / notebook
+            note_files = [
+                f
+                for f in note_files
+                if notebook_path in f.parents or f.parent == notebook_path
+            ]
+
+    if force:
+        return len(note_files)
+
+    return len([path for path in note_files if needs_reindex(path, notes_root)])
+
+
 def index_all_notes(
     notes_root: Path | None = None,
     force: bool = False,
     index_vectors: bool = True,
     max_workers: int = 4,
     notebook: str | None = None,
+    on_progress: "Callable[[int], None] | None" = None,
 ) -> int:
     """Index all notes in the notes root.
 
@@ -261,6 +307,8 @@ def index_all_notes(
         index_vectors: Whether to also index to localvectordb for search
         max_workers: Maximum number of parallel workers (default 4)
         notebook: If specified, only index files in this notebook
+        on_progress: Optional callback called after each file is indexed.
+            The callback receives the number of files indexed so far.
 
     Returns:
         Number of files indexed.
@@ -304,6 +352,8 @@ def index_all_notes(
             try:
                 index_note(path, notes_root, index_vectors=index_vectors)
                 count += 1
+                if on_progress:
+                    on_progress(count)
             except Exception:
                 pass
         return count
@@ -321,6 +371,8 @@ def index_all_notes(
             try:
                 future.result()
                 count += 1
+                if on_progress:
+                    on_progress(count)
             except Exception:
                 # Log error but continue with other files
                 pass
@@ -438,19 +490,33 @@ def _index_note_thread_safe(
     upsert_todos_batch(todos)
 
 
-def rebuild_search_index(notes_root: Path | None = None) -> int:
+def rebuild_search_index(
+    notes_root: Path | None = None,
+    notebook: str | None = None,
+    on_progress: "Callable[[int], None] | None" = None,
+    batch_size: int = 25,
+) -> int:
     """Rebuild the localvectordb search index from scratch.
 
     Reads all notes from the database and indexes them to localvectordb.
     Useful when the vector index is corrupted or needs to be regenerated.
 
+    Uses batch indexing for significantly better performance - batching
+    reduces the number of embedding API calls.
+
     Args:
         notes_root: Override notes root directory
+        notebook: If specified, only rebuild index for this notebook
+        on_progress: Optional callback called after each note is indexed.
+            The callback receives the number of notes indexed so far.
+        batch_size: Number of notes to index in each batch (default 25).
 
     Returns:
         Number of notes indexed.
 
     """
+    from nb.models import Note
+
     if notes_root is None:
         notes_root = get_config().notes_root
 
@@ -462,17 +528,48 @@ def rebuild_search_index(notes_root: Path | None = None) -> int:
     db = get_db()
     search = get_search()
 
-    # Get all notes from database
-    rows = db.fetchall("SELECT path, title, date, notebook, content FROM notes")
+    # Get notes from database (optionally filtered by notebook)
+    if notebook:
+        rows = db.fetchall(
+            "SELECT path, title, date, notebook, content FROM notes WHERE notebook = ?",
+            (notebook,),
+        )
+    else:
+        rows = db.fetchall("SELECT path, title, date, notebook, content FROM notes")
+
+    if not rows:
+        return 0
+
     count = 0
+    batch: list[tuple[Note, str]] = []
+    pending_progress = 0  # Track notes added to batch but not yet reported
+
+    def flush_batch() -> int:
+        """Flush the current batch to the search index."""
+        nonlocal batch
+        if not batch:
+            return 0
+        try:
+            indexed = search.index_notes_batch(batch)
+            batch = []
+            return indexed
+        except Exception:
+            # Fall back to one-by-one indexing on batch failure
+            indexed = 0
+            for note, content in batch:
+                try:
+                    search.index_note(note, content)
+                    indexed += 1
+                except Exception:
+                    pass
+            batch = []
+            return indexed
 
     for row in rows:
         if not row["content"]:
             continue
 
         # Build a simple note-like object for indexing
-        from nb.models import Note
-
         note = Note(
             path=Path(row["path"]),
             title=row["title"] or "",
@@ -500,12 +597,189 @@ def rebuild_search_index(notes_root: Path | None = None) -> int:
             except ValueError:
                 pass
 
+        batch.append((note, row["content"]))
+        pending_progress += 1
+
+        # Flush batch when it reaches the batch size
+        if len(batch) >= batch_size:
+            indexed = flush_batch()
+            count += indexed
+            # Report progress for all notes in the batch
+            if on_progress:
+                for _ in range(pending_progress):
+                    on_progress(count)
+            pending_progress = 0
+
+    # Flush any remaining notes
+    if batch:
+        indexed = flush_batch()
+        count += indexed
+        if on_progress:
+            for _ in range(pending_progress):
+                on_progress(count)
+
+    return count
+
+
+def count_notes_for_search_rebuild(notebook: str | None = None) -> int:
+    """Count notes that will be processed during search index rebuild.
+
+    Args:
+        notebook: If specified, only count notes in this notebook.
+
+    Returns:
+        Number of notes with content to index.
+    """
+    if not ENABLE_VECTOR_INDEXING:
+        return 0
+
+    db = get_db()
+    if notebook:
+        row = db.fetchone(
+            "SELECT COUNT(*) as cnt FROM notes WHERE notebook = ? AND content IS NOT NULL AND content != ''",
+            (notebook,),
+        )
+    else:
+        row = db.fetchone(
+            "SELECT COUNT(*) as cnt FROM notes WHERE content IS NOT NULL AND content != ''"
+        )
+    return row["cnt"] if row else 0
+
+
+def sync_search_index(
+    notebook: str | None = None,
+    on_progress: "Callable[[int], None] | None" = None,
+    batch_size: int = 25,
+) -> int:
+    """Sync notes from SQLite to VectorDB that are missing from VectorDB.
+
+    This is more efficient than a full rebuild when only some notes are missing.
+    Uses batch indexing for better performance.
+
+    Args:
+        notebook: If specified, only sync notes from this notebook
+        on_progress: Optional callback called after each batch is synced.
+            The callback receives the number of notes synced so far.
+        batch_size: Number of notes to index in each batch (default 25).
+
+    Returns:
+        Number of notes synced.
+
+    """
+    from nb.models import Note
+
+    if not ENABLE_VECTOR_INDEXING:
+        return 0
+
+    from nb.index.search import get_search
+
+    db = get_db()
+    search = get_search()
+
+    # Get all note paths from SQLite (optionally filtered by notebook)
+    if notebook:
+        sqlite_rows = db.fetchall(
+            "SELECT path, title, date, notebook, content FROM notes WHERE notebook = ?",
+            (notebook,),
+        )
+    else:
+        sqlite_rows = db.fetchall(
+            "SELECT path, title, date, notebook, content FROM notes"
+        )
+
+    if not sqlite_rows:
+        return 0
+
+    # Get all note paths from VectorDB
+    try:
+        vector_filter = {"notebook": notebook} if notebook else {}
+        vector_docs = search.db.filter(where=vector_filter, limit=10000)
+        vector_paths = {d.metadata.get("path") for d in vector_docs}
+    except Exception:
+        # If VectorDB query fails, treat as empty
+        vector_paths = set()
+
+    count = 0
+    batch: list[tuple[Note, str]] = []
+    pending_progress = 0  # Track notes added to batch but not yet reported
+
+    def flush_batch() -> int:
+        """Flush the current batch to the search index."""
+        nonlocal batch
+        if not batch:
+            return 0
         try:
-            search.index_note(note, row["content"])
-            count += 1
+            indexed = search.index_notes_batch(batch)
+            batch = []
+            return indexed
         except Exception:
-            # Continue on errors
-            pass
+            # Fall back to one-by-one indexing on batch failure
+            indexed = 0
+            for note, content in batch:
+                try:
+                    search.index_note(note, content)
+                    indexed += 1
+                except Exception:
+                    pass
+            batch = []
+            return indexed
+
+    # Find notes in SQLite but not in VectorDB
+    for row in sqlite_rows:
+        if row["path"] in vector_paths:
+            continue
+
+        if not row["content"]:
+            continue
+
+        # Build note object
+        note = Note(
+            path=Path(row["path"]),
+            title=row["title"] or "",
+            date=None,
+            tags=[],
+            links=[],
+            attachments=[],
+            notebook=row["notebook"] or "",
+            content_hash="",
+        )
+
+        # Get tags
+        tag_rows = db.fetchall(
+            "SELECT tag FROM note_tags WHERE note_path = ?",
+            (row["path"],),
+        )
+        note.tags = [r["tag"] for r in tag_rows]
+
+        # Parse date
+        if row["date"]:
+            from datetime import date as date_type
+
+            try:
+                note.date = date_type.fromisoformat(row["date"])
+            except ValueError:
+                pass
+
+        batch.append((note, row["content"]))
+        pending_progress += 1
+
+        # Flush batch when it reaches the batch size
+        if len(batch) >= batch_size:
+            indexed = flush_batch()
+            count += indexed
+            # Report progress for all notes in the batch
+            if on_progress:
+                for _ in range(pending_progress):
+                    on_progress(count)
+            pending_progress = 0
+
+    # Flush any remaining notes
+    if batch:
+        indexed = flush_batch()
+        count += indexed
+        if on_progress:
+            for _ in range(pending_progress):
+                on_progress(count)
 
     return count
 
@@ -789,8 +1063,16 @@ def index_linked_note(
     upsert_todos_batch(todos)
 
 
-def scan_linked_notes() -> int:
+def scan_linked_notes(
+    notebook_filter: str | None = None,
+    on_progress: "Callable[[int], None] | None" = None,
+) -> int:
     """Scan all linked external note files/directories and index them.
+
+    Args:
+        notebook_filter: If specified, only scan linked notes for this notebook.
+        on_progress: Optional callback called after each note is indexed.
+            The callback receives the number of notes indexed so far.
 
     Returns the number of notes indexed.
     """
@@ -803,9 +1085,14 @@ def scan_linked_notes() -> int:
         if not linked.path.exists():
             continue
 
+        notebook = linked.notebook or f"@{linked.alias}"
+
+        # Filter by notebook if specified
+        if notebook_filter and notebook != notebook_filter:
+            continue
+
         # Get all files from this linked source
         files = scan_linked_note_files(linked)
-        notebook = linked.notebook or f"@{linked.alias}"
 
         for file_path in files:
             index_linked_note(
@@ -815,8 +1102,38 @@ def scan_linked_notes() -> int:
                 todo_exclude=linked.todo_exclude,
             )
             total_notes += 1
+            if on_progress:
+                on_progress(total_notes)
 
     return total_notes
+
+
+def count_linked_notes(notebook_filter: str | None = None) -> int:
+    """Count the number of linked notes that would be scanned.
+
+    Args:
+        notebook_filter: If specified, only count linked notes for this notebook.
+
+    Returns:
+        Total number of linked note files.
+    """
+    from nb.core.links import list_linked_notes, scan_linked_note_files
+
+    linked_notes = list_linked_notes()
+    total = 0
+
+    for linked in linked_notes:
+        if not linked.path.exists():
+            continue
+
+        notebook = linked.notebook or f"@{linked.alias}"
+        if notebook_filter and notebook != notebook_filter:
+            continue
+
+        files = scan_linked_note_files(linked)
+        total += len(files)
+
+    return total
 
 
 def index_single_linked_note(alias: str) -> int:

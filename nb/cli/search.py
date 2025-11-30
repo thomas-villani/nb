@@ -39,6 +39,13 @@ def register_search_commands(cli: click.Group) -> None:
     "--recent", is_flag=True, help="Boost recent results (30% recency weight)"
 )
 @click.option("--limit", default=20, help="Max results")
+@click.option(
+    "--threshold",
+    "-T",
+    default=0.4,
+    type=float,
+    help="Return results above this score (default 0.4)",
+)
 def search_cmd(
     query: str,
     semantic: bool,
@@ -50,6 +57,7 @@ def search_cmd(
     until_date: str | None,
     recent: bool,
     limit: int,
+    threshold: float,
 ) -> None:
     """Search notes by keyword, semantic similarity, or both (hybrid).
 
@@ -121,21 +129,35 @@ def search_cmd(
     recency_boost = 0.3 if recent else 0.0
 
     try:
+        from nb.cli.utils import spinner
+
         search = get_search()
-        results = search.search(
-            query,
-            search_type=search_type,
-            k=limit,
-            filters=filters if filters else None,
-            date_start=date_start,
-            date_end=date_end,
-            recency_boost=recency_boost,
-        )
+        with spinner("Searching"):
+            results = search.search(
+                query,
+                search_type=search_type,
+                k=limit,
+                filters=filters if filters else None,
+                date_start=date_start,
+                date_end=date_end,
+                recency_boost=recency_boost,
+                score_threshold=threshold,
+            )
     except Exception as e:
+        error_msg = str(e).lower()
         console.print(f"[red]Search failed:[/red] {e}")
-        console.print(
-            "[dim]Make sure the index is built and embeddings are available.[/dim]"
-        )
+        if "empty" in error_msg or "no documents" in error_msg:
+            console.print(
+                "[dim]Hint: Run 'nb index --embeddings' to build the search index.[/dim]"
+            )
+        elif "connection" in error_msg or "ollama" in error_msg:
+            console.print(
+                "[dim]Hint: Make sure Ollama is running for embedding generation.[/dim]"
+            )
+        else:
+            console.print(
+                "[dim]Hint: Run 'nb index --embeddings' to rebuild the search index.[/dim]"
+            )
         raise SystemExit(1)
 
     if not results:
@@ -189,21 +211,49 @@ def search_cmd(
 @click.option(
     "-i", "--ignore-case/--case-sensitive", default=True, help="Case sensitivity"
 )
-def grep_cmd(pattern: str, context_lines: int, ignore_case: bool) -> None:
+@click.option("--notebook", "-n", help="Filter by notebook")
+@click.option("--note", help="Filter by specific note (path or alias)")
+def grep_cmd(
+    pattern: str,
+    context_lines: int,
+    ignore_case: bool,
+    notebook: str | None,
+    note: str | None,
+) -> None:
     """Search notes with regex pattern matching.
 
     Unlike 'search', this performs raw regex matching on the files.
     Useful for finding exact strings, code snippets, or patterns.
 
+    \b
     Examples:
         nb grep "TODO.*urgent"
         nb grep "def\\s+\\w+" -C 5
         nb grep "API_KEY" --case-sensitive
+        nb grep "config" -n nbcli
+        nb grep "setup" --note features
 
     """
     from nb.index.search import grep_notes
 
     config = get_config()
+
+    # Resolve note path if specified
+    note_path = None
+    if note:
+        from nb.cli.utils import resolve_note_ref
+        from nb.utils.fuzzy import UserCancelled
+
+        try:
+            resolved = resolve_note_ref(note, notebook=notebook, ensure_exists=True)
+            if resolved:
+                note_path = resolved
+            else:
+                console.print(f"[red]Note not found: {note}[/red]")
+                raise SystemExit(1)
+        except UserCancelled:
+            console.print("[dim]Cancelled.[/dim]")
+            raise SystemExit(1)
 
     try:
         results = grep_notes(
@@ -211,6 +261,8 @@ def grep_cmd(pattern: str, context_lines: int, ignore_case: bool) -> None:
             config.notes_root,
             context_lines=context_lines,
             case_sensitive=not ignore_case,
+            notebook=notebook,
+            note_path=note_path,
         )
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
@@ -253,9 +305,19 @@ def grep_cmd(pattern: str, context_lines: int, ignore_case: bool) -> None:
 @click.option("--force", "-f", is_flag=True, help="Force reindex all files")
 @click.option("--rebuild", is_flag=True, help="Drop and recreate the database")
 @click.option("--embeddings", "-e", is_flag=True, help="Rebuild search embeddings")
+@click.option(
+    "--vectors-only",
+    "-v",
+    is_flag=True,
+    help="Only rebuild vectors (skip file indexing)",
+)
 @click.option("--notebook", "-n", help="Only reindex this notebook")
 def index_cmd(
-    force: bool, rebuild: bool, embeddings: bool, notebook: str | None
+    force: bool,
+    rebuild: bool,
+    embeddings: bool,
+    vectors_only: bool,
+    notebook: str | None,
 ) -> None:
     """Rebuild the notes and todos index.
 
@@ -269,43 +331,107 @@ def index_cmd(
       nb index -n daily      # Only reindex the 'daily' notebook
       nb index --rebuild     # Drop database and reindex (fixes schema issues)
       nb index --embeddings  # Rebuild semantic search vectors
+      nb index --vectors-only  # Rebuild only vectors (e.g., after changing embedding model)
     """
-    from nb.index.scanner import index_all_notes
+    from nb.cli.utils import progress_bar, spinner
+    from nb.index.scanner import (
+        count_files_to_index,
+        count_linked_notes,
+        count_notes_for_search_rebuild,
+        index_all_notes,
+        scan_linked_notes,
+    )
     from nb.index.todos_repo import get_todo_stats
+
+    # Handle --vectors-only: skip file indexing, just rebuild vectors
+    if vectors_only:
+        if rebuild:
+            console.print("[red]Cannot use --vectors-only with --rebuild[/red]")
+            console.print(
+                "[dim]Hint: Use --embeddings instead to rebuild both database and vectors.[/dim]"
+            )
+            raise SystemExit(1)
+
+        search_total = count_notes_for_search_rebuild(notebook=notebook)
+        if search_total > 0:
+            from nb.index.scanner import rebuild_search_index
+
+            with progress_bar("Rebuilding vectors", total=search_total) as advance:
+                search_count = rebuild_search_index(
+                    notebook=notebook,
+                    on_progress=lambda _: advance(),
+                )
+            console.print(f"[green]Rebuilt vectors for {search_count} notes.[/green]")
+        else:
+            console.print("[dim]No notes to rebuild vectors for.[/dim]")
+            console.print(
+                "[dim]Hint: Run 'nb index' first to index notes to the database.[/dim]"
+            )
+        return
 
     if rebuild:
         if notebook:
             console.print("[red]Cannot use --rebuild with --notebook[/red]")
+            console.print(
+                "[dim]Hint: Use --force to reindex a specific notebook without dropping the database.[/dim]"
+            )
             raise SystemExit(1)
-        console.print("[yellow]Rebuilding database from scratch...[/yellow]")
-        from nb.index.db import get_db, rebuild_db
+        with spinner("Rebuilding database"):
+            from nb.index.db import get_db, rebuild_db
 
-        db = get_db()
-        rebuild_db(db)
+            db = get_db()
+            rebuild_db(db)
         console.print("[green]Database rebuilt.[/green]")
         force = True  # Force reindex after rebuild
 
-    if notebook:
-        console.print(f"[dim]Indexing notebook '{notebook}'...[/dim]")
+    # Count files to index
+    files_count = count_files_to_index(force=force, notebook=notebook)
+
+    if files_count > 0:
+        scope = f"'{notebook}'" if notebook else "all notebooks"
+        with progress_bar(f"Indexing {scope}", total=files_count) as advance:
+            indexed = index_all_notes(
+                force=force,
+                notebook=notebook,
+                on_progress=lambda _: advance(),
+            )
+        console.print(f"[green]Indexed {indexed} files.[/green]")
     else:
-        console.print("[dim]Indexing notes...[/dim]")
-    count = index_all_notes(force=force, notebook=notebook)
-    console.print(f"[green]Indexed {count} files.[/green]")
+        console.print("[dim]No files need indexing.[/dim]")
 
-    # Also reindex linked notes (skip if specific notebook requested)
-    if not notebook:
-        from nb.index.scanner import scan_linked_notes
-
-        linked_count = scan_linked_notes()
+    # Index linked notes
+    linked_total = count_linked_notes(notebook_filter=notebook)
+    if linked_total > 0:
+        with progress_bar("Indexing linked notes", total=linked_total) as advance:
+            linked_count = scan_linked_notes(
+                notebook_filter=notebook,
+                on_progress=lambda _: advance(),
+            )
         if linked_count:
             console.print(f"[green]Indexed {linked_count} linked notes.[/green]")
 
     if embeddings:
-        console.print("[dim]Rebuilding search index...[/dim]")
-        from nb.index.scanner import rebuild_search_index
+        # Rebuild semantic search vectors
+        search_total = count_notes_for_search_rebuild(notebook=notebook)
+        if search_total > 0:
+            from nb.index.scanner import rebuild_search_index
 
-        search_count = rebuild_search_index()
-        console.print(f"[green]Indexed {search_count} notes for search.[/green]")
+            with progress_bar("Building embeddings", total=search_total) as advance:
+                search_count = rebuild_search_index(
+                    notebook=notebook,
+                    on_progress=lambda _: advance(),
+                )
+            console.print(f"[green]Indexed {search_count} notes for search.[/green]")
+        else:
+            console.print("[dim]No notes to index for search.[/dim]")
+    else:
+        # Sync any notes missing from VectorDB (lightweight operation)
+        from nb.index.scanner import sync_search_index
+
+        with spinner("Syncing search index"):
+            synced = sync_search_index(notebook=notebook)
+        if synced:
+            console.print(f"[dim]Synced {synced} notes to search index.[/dim]")
 
     stats = get_todo_stats()
     console.print(f"Todos: {stats['open']} open, {stats['completed']} completed")

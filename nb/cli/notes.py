@@ -771,6 +771,7 @@ def alias_note(alias_name: str, note_ref: str, notebook: str | None) -> None:
     resolved = resolve_note(note_name, notebook=notebook, interactive=True)
     if not resolved:
         console.print(f"[red]Note not found: {note_ref}[/red]")
+        console.print("[dim]Hint: Use 'nb stream' or 'nb search' to find notes.[/dim]")
         raise SystemExit(1)
 
     try:

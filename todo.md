@@ -81,9 +81,13 @@ todo_exclude: true
 - [x] `nb history` shows linked notes under "@external" rather than in the notebook they're linked to
     Shows same file multiple times (should condense to one line with "+4" or something) 
 - [x] Make `nb history` not group by notebook by default, instead have the notebook source colored in the same line as the history line. Allow grouping with a `--group` flag
-- [ ] If parent todo completed, auto complete child todos
+- [x] If parent todo completed, auto complete child todos
 - [ ] What else should be configurable?
-- [ ] Must reindex file after 'nb todo add --note'
+
+- [x] Must reindex file after 'nb todo add --note'
+- [x] Add --note and --notebook filter to grep command
+- [ ] Need progress / spinners for long-running tasks (syncing and reindexing and search)
+
 
 ### Phase 5: Advanced TUI
 - [ ] Full Wijjit-based todo list view with richer interactions
@@ -106,20 +110,16 @@ todo_exclude: true
   - [x] Remove `linked_todos` and `linked_notes` fields from Config dataclass
   - [x] Remove `save_to_config` branches in links.py (add/remove functions)
   - [x] Simplify `list_linked_files()` and `list_linked_notes()` to DB-only
+- [ ] Optimize imports and startup speed of cli
 
 
 ### Phase 6: Future Enhancements
 - [ ] Recurring todos (`@recur(weekly)`)
 - [ ] Export to various formats (HTML, PDF)
-- [ ] Mobile companion app / sync story
 - [ ] Calendar view for due dates
-- [ ] Pomodoro timer integration?? What is this?
 - [ ] Due date reminders (optional notifications)
-- [ ] Watcher service in background for indexing.
 - [ ] Would it be possible to integrate more directly into the email/calendar/outlook contacts? Is there any benefit?
-- [ ] Web viewer - this would be easy with the all2md library.
-- [ ] How do we make it available via the cloud?
-- [ ] Add '@startby'
+- [ ] Add '@startby' to todos
 
 ---
 

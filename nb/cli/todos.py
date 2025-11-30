@@ -1075,6 +1075,8 @@ def _print_todo(
 ) -> None:
     """Print a single todo with formatting."""
     prefix = "  " * indent
+    indent_width = len(prefix)
+
     # Checkbox indicator: x=completed, ^=in-progress, o=pending
     if t.completed:
         checkbox = "[green]x[/green]"
@@ -1089,8 +1091,10 @@ def _print_todo(
     compact_source = widths.get("compact_source", False) if widths else False
 
     # Build content - truncate if needed for alignment
+    # Reduce content width by indent amount to keep columns aligned
     content = t.content
-    content_width = widths["content"] if widths else len(content)
+    base_content_width = widths["content"] if widths else len(content)
+    content_width = max(base_content_width - indent_width, 10)  # minimum 10 chars
     if len(content) > content_width:
         content_display = content[: content_width - 1] + "…"
     else:
@@ -1283,6 +1287,31 @@ def todo_add(text: str, add_today: bool, target_note: str | None) -> None:
     console.print(f"[dim]ID: {t.id[:6]}[/dim]")
 
 
+def _complete_todo_with_children(t) -> int:
+    """Complete a todo and all its children recursively.
+
+    Returns the count of children that were completed.
+    """
+    children_completed = 0
+    children = get_todo_children(t.id)
+
+    for child in children:
+        if child.completed:
+            continue
+
+        # Set child to completed in source file
+        if set_todo_status_in_file(
+            child.source.path, child.line_number, TodoStatus.COMPLETED
+        ):
+            update_todo_completion(child.id, True)
+            children_completed += 1
+
+            # Recursively complete grandchildren
+            children_completed += _complete_todo_with_children(child)
+
+    return children_completed
+
+
 @todo.command("done")
 @click.argument("todo_id", nargs=-1)
 def todo_done(todo_id: tuple[str, ...]) -> None:
@@ -1290,6 +1319,8 @@ def todo_done(todo_id: tuple[str, ...]) -> None:
 
     TODO_ID can be the full ID or just the first few characters.
     The 6-character ID shown in 'nb todo' output is usually sufficient.
+
+    If the todo has child todos (subtasks), they will also be marked as completed.
 
     \b
     Examples:
@@ -1301,6 +1332,9 @@ def todo_done(todo_id: tuple[str, ...]) -> None:
         t = find_todo(_todo)
         if not t:
             console.print(f"[red]Todo not found: {_todo}[/red]")
+            console.print(
+                "[dim]Hint: Run 'nb index' to refresh the todo index, or use 'nb todo' to list todos.[/dim]"
+            )
             raise SystemExit(1)
 
         if t.completed:
@@ -1312,12 +1346,24 @@ def todo_done(todo_id: tuple[str, ...]) -> None:
             if toggle_todo_in_file(t.source.path, t.line_number):
                 update_todo_completion(t.id, True)
                 console.print(f"[green]Completed:[/green] {t.content}")
+
+                # Auto-complete child todos
+                children_completed = _complete_todo_with_children(t)
+                if children_completed > 0:
+                    console.print(
+                        f"[dim]  Also completed {children_completed} subtask(s)[/dim]"
+                    )
             else:
                 console.print("[red]Failed to update todo in source file.[/red]")
+                console.print(
+                    "[dim]Hint: The todo may have been edited or moved. Run 'nb index' to refresh.[/dim]"
+                )
                 raise SystemExit(1)
         except PermissionError as e:
             console.print(f"[red]{e}[/red]")
-            console.print("[dim]Use 'nb link' to enable sync for this file.[/dim]")
+            console.print(
+                "[dim]Hint: Use 'nb link' to enable sync for external files.[/dim]"
+            )
             raise SystemExit(1)
 
 
@@ -1336,6 +1382,9 @@ def todo_undone(todo_id: tuple[str, ...]) -> None:
         t = find_todo(_todo)
         if not t:
             console.print(f"[red]Todo not found: {_todo}[/red]")
+            console.print(
+                "[dim]Hint: Run 'nb index' to refresh the todo index, or use 'nb todo' to list todos.[/dim]"
+            )
             raise SystemExit(1)
 
         if not t.completed:
@@ -1349,10 +1398,15 @@ def todo_undone(todo_id: tuple[str, ...]) -> None:
                 console.print(f"[green]Reopened:[/green] {t.content}")
             else:
                 console.print("[red]Failed to update todo in source file.[/red]")
+                console.print(
+                    "[dim]Hint: The todo may have been edited or moved. Run 'nb index' to refresh.[/dim]"
+                )
                 raise SystemExit(1)
         except PermissionError as e:
             console.print(f"[red]{e}[/red]")
-            console.print("[dim]Use 'nb link' to enable sync for this file.[/dim]")
+            console.print(
+                "[dim]Hint: Use 'nb link' to enable sync for external files.[/dim]"
+            )
             raise SystemExit(1)
 
 
@@ -1375,6 +1429,9 @@ def todo_start(todo_id: tuple[str, ...]) -> None:
         t = find_todo(_todo)
         if not t:
             console.print(f"[red]Todo not found: {_todo}[/red]")
+            console.print(
+                "[dim]Hint: Run 'nb index' to refresh the todo index, or use 'nb todo' to list todos.[/dim]"
+            )
             raise SystemExit(1)
 
         if t.completed:
@@ -1396,10 +1453,15 @@ def todo_start(todo_id: tuple[str, ...]) -> None:
                 console.print(f"[yellow]Started:[/yellow] {t.content}")
             else:
                 console.print("[red]Failed to update todo in source file.[/red]")
+                console.print(
+                    "[dim]Hint: The todo may have been edited or moved. Run 'nb index' to refresh.[/dim]"
+                )
                 raise SystemExit(1)
         except PermissionError as e:
             console.print(f"[red]{e}[/red]")
-            console.print("[dim]Use 'nb link' to enable sync for this file.[/dim]")
+            console.print(
+                "[dim]Hint: Use 'nb link' to enable sync for external files.[/dim]"
+            )
             raise SystemExit(1)
 
 
@@ -1421,6 +1483,9 @@ def todo_pause(todo_id: tuple[str, ...]) -> None:
         t = find_todo(_todo)
         if not t:
             console.print(f"[red]Todo not found: {_todo}[/red]")
+            console.print(
+                "[dim]Hint: Run 'nb index' to refresh the todo index, or use 'nb todo' to list todos.[/dim]"
+            )
             raise SystemExit(1)
 
         if t.completed:
@@ -1442,10 +1507,15 @@ def todo_pause(todo_id: tuple[str, ...]) -> None:
                 console.print(f"[dim]Paused:[/dim] {t.content}")
             else:
                 console.print("[red]Failed to update todo in source file.[/red]")
+                console.print(
+                    "[dim]Hint: The todo may have been edited or moved. Run 'nb index' to refresh.[/dim]"
+                )
                 raise SystemExit(1)
         except PermissionError as e:
             console.print(f"[red]{e}[/red]")
-            console.print("[dim]Use 'nb link' to enable sync for this file.[/dim]")
+            console.print(
+                "[dim]Hint: Use 'nb link' to enable sync for external files.[/dim]"
+            )
             raise SystemExit(1)
 
 

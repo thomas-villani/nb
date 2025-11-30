@@ -59,6 +59,8 @@ class EmbeddingsConfig:
     model: str = "nomic-embed-text"
     base_url: str | None = None  # For custom Ollama endpoint
     api_key: str | None = None  # For OpenAI
+    chunk_size: int = 500  # Max tokens per chunk
+    chunking_method: str = "paragraphs"  # sentences, tokens, paragraphs, sections
 
 
 @dataclass
@@ -219,6 +221,8 @@ notebooks:
 embeddings:
   provider: ollama    # "ollama" or "openai"
   model: nomic-embed-text
+  chunk_size: 500     # Max tokens per chunk (smaller = more precise search)
+  chunking_method: paragraphs  # sentences, tokens, paragraphs, sections
   # base_url: http://localhost:11434  # Optional: custom Ollama endpoint
   # api_key: null  # Required for OpenAI
 
@@ -293,6 +297,8 @@ def _parse_embeddings(data: dict[str, Any] | None) -> EmbeddingsConfig:
         model=data.get("model", "nomic-embed-text"),
         base_url=data.get("base_url"),
         api_key=data.get("api_key"),
+        chunk_size=data.get("chunk_size", 500),
+        chunking_method=data.get("chunking_method", "paragraphs"),
     )
 
 
@@ -362,6 +368,8 @@ def save_config(config: Config) -> None:
     embeddings_data = {
         "provider": config.embeddings.provider,
         "model": config.embeddings.model,
+        "chunk_size": config.embeddings.chunk_size,
+        "chunking_method": config.embeddings.chunking_method,
     }
     if config.embeddings.base_url:
         embeddings_data["base_url"] = config.embeddings.base_url
@@ -550,6 +558,8 @@ CONFIGURABLE_SETTINGS = {
     "embeddings.model": "Embeddings model name (e.g., nomic-embed-text)",
     "embeddings.base_url": "Custom embeddings API endpoint URL",
     "embeddings.api_key": "API key for embeddings provider (OpenAI)",
+    "embeddings.chunk_size": "Max tokens per chunk (e.g., 500)",
+    "embeddings.chunking_method": "Chunking method (sentences, tokens, paragraphs, sections)",
 }
 
 # Notebook-specific settings (accessed via notebook.<name>.<setting>)
@@ -749,6 +759,18 @@ def set_config_value(key: str, value: str) -> bool:
         attr = parts[1]
         if attr in ("provider", "model", "base_url", "api_key"):
             setattr(config.embeddings, attr, value if value else None)
+        elif attr == "chunk_size":
+            try:
+                config.embeddings.chunk_size = int(value)
+            except ValueError:
+                raise ValueError(f"chunk_size must be an integer, got '{value}'")
+        elif attr == "chunking_method":
+            valid_methods = ("sentences", "tokens", "paragraphs", "sections")
+            if value not in valid_methods:
+                raise ValueError(
+                    f"chunking_method must be one of: {', '.join(valid_methods)}"
+                )
+            config.embeddings.chunking_method = value
         else:
             return False
     elif parts[0] == "notebook" and len(parts) == 3:

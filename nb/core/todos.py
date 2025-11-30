@@ -452,7 +452,7 @@ def add_todo_to_inbox(text: str, notes_root: Path | None = None) -> Todo:
         alias=None,
     )
 
-    return Todo(
+    todo = Todo(
         id=make_todo_id(inbox_path, clean_content),
         content=clean_content,
         raw_content=text,
@@ -469,6 +469,13 @@ def add_todo_to_inbox(text: str, notes_root: Path | None = None) -> Todo:
         attachments=[],
         section=None,
     )
+
+    # Insert into database immediately
+    from nb.index.todos_repo import upsert_todos_batch
+
+    upsert_todos_batch([todo])
+
+    return todo
 
 
 def get_inbox_path(notes_root: Path | None = None) -> Path:
@@ -669,19 +676,33 @@ def add_todo_to_note(
     # Create and return Todo object
     clean_content = clean_todo_content(text)
 
-    # Determine notebook from path
-    from nb.core.notebooks import get_notebook_for_file
+    # Check if this is a linked note (external file)
+    from nb.core.links import find_linked_note_for_path
 
-    notebook = get_notebook_for_file(full_path)
+    linked = find_linked_note_for_path(full_path)
 
-    source = TodoSource(
-        type="note",
-        path=full_path,
-        external=False,
-        alias=None,
-    )
+    if linked:
+        # This is a linked note - set up as external
+        source = TodoSource(
+            type="linked",
+            path=full_path,
+            external=True,
+            alias=linked.alias,
+        )
+        notebook = linked.notebook or f"@{linked.alias}"
+    else:
+        # Regular note
+        from nb.core.notebooks import get_notebook_for_file
 
-    return Todo(
+        notebook = get_notebook_for_file(full_path)
+        source = TodoSource(
+            type="note",
+            path=full_path,
+            external=False,
+            alias=None,
+        )
+
+    todo = Todo(
         id=make_todo_id(full_path, clean_content),
         content=clean_content,
         raw_content=text,
@@ -698,6 +719,13 @@ def add_todo_to_note(
         attachments=[],
         section=section,
     )
+
+    # Insert into database immediately
+    from nb.index.todos_repo import upsert_todos_batch
+
+    upsert_todos_batch([todo])
+
+    return todo
 
 
 def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
@@ -740,7 +768,7 @@ def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
         alias=None,
     )
 
-    return Todo(
+    todo = Todo(
         id=make_todo_id(note_path, clean_content),
         content=clean_content,
         raw_content=text,
@@ -757,3 +785,10 @@ def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
         attachments=[],
         section=None,
     )
+
+    # Insert into database immediately
+    from nb.index.todos_repo import upsert_todos_batch
+
+    upsert_todos_batch([todo])
+
+    return todo

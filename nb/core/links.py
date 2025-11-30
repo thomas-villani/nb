@@ -404,6 +404,40 @@ def get_linked_note_by_notebook(notebook: str) -> LinkedNoteConfig | None:
     return None
 
 
+def find_linked_note_for_path(file_path: Path) -> LinkedNoteConfig | None:
+    """Find the linked note config that contains the given file path.
+
+    This checks if the file is a linked note itself (single file link) or
+    is within a linked note directory.
+
+    Args:
+        file_path: Path to the file to check.
+
+    Returns:
+        The LinkedNoteConfig if found, or None if the file is not a linked note.
+
+    """
+    file_path = file_path.resolve()
+
+    for ln in list_linked_notes():
+        ln_path = ln.path.resolve()
+
+        if ln_path.is_file():
+            # Single file link - check exact match
+            if file_path == ln_path:
+                return ln
+        else:
+            # Directory link - check if file is within the directory
+            try:
+                file_path.relative_to(ln_path)
+                return ln
+            except ValueError:
+                # Not within this directory
+                continue
+
+    return None
+
+
 def get_linked_note_in_notebook(notebook: str, alias: str) -> LinkedNoteConfig | None:
     """Get a linked note by notebook and alias.
 

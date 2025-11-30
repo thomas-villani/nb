@@ -2,17 +2,182 @@
 
 from __future__ import annotations
 
+import sys
+from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Iterator
 
 from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 
 from nb.config import get_config, init_config
 
 if TYPE_CHECKING:
     from nb.models import Todo
 
+# Main console for stdout (user-facing output)
 console = Console(highlight=False)
+
+# Stderr console for progress indicators (doesn't interfere with piped output)
+stderr_console = Console(file=sys.stderr, highlight=False)
+
+
+@contextmanager
+def spinner(description: str) -> Iterator[Callable[[str], None]]:
+    """Context manager for a spinner with status updates.
+
+    Usage:
+        with spinner("Indexing notes") as update:
+            for item in items:
+                update(f"Processing {item}")
+                process(item)
+
+    Args:
+        description: Initial description to show next to spinner.
+
+    Yields:
+        A function to update the status text.
+    """
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=stderr_console,
+        transient=True,
+    ) as progress:
+        task = progress.add_task(description, total=None)
+
+        def update(new_description: str) -> None:
+            progress.update(task, description=new_description)
+
+        yield update
+
+
+@contextmanager
+def progress_bar(
+    description: str,
+    total: int,
+    show_count: bool = True,
+) -> Iterator[Callable[[int], None]]:
+    """Context manager for a progress bar.
+
+    Usage:
+        with progress_bar("Indexing", total=100) as advance:
+            for item in items:
+                process(item)
+                advance()  # or advance(5) to advance by 5
+
+    Args:
+        description: Description to show.
+        total: Total number of items.
+        show_count: Whether to show M/N count.
+
+    Yields:
+        A function to advance progress (default by 1).
+    """
+    columns = [
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=30),
+        TaskProgressColumn(),
+    ]
+    if show_count:
+        columns.append(MofNCompleteColumn())
+    columns.append(TimeElapsedColumn())
+
+    with Progress(
+        *columns,
+        console=stderr_console,
+        transient=True,
+    ) as progress:
+        task = progress.add_task(description, total=total)
+
+        def advance(n: int = 1) -> None:
+            progress.advance(task, n)
+
+        yield advance
+
+
+class MultiStageProgress:
+    """Progress indicator for multi-stage operations.
+
+    Usage:
+        with MultiStageProgress() as mp:
+            with mp.stage("Scanning files"):
+                scan_files()
+
+            with mp.stage("Indexing", total=100) as advance:
+                for item in items:
+                    index(item)
+                    advance()
+
+            with mp.stage("Syncing"):
+                sync()
+    """
+
+    def __init__(self) -> None:
+        from rich.progress import TaskID
+
+        self._progress: Progress | None = None
+        self._current_task: TaskID | None = None
+
+    def __enter__(self) -> "MultiStageProgress":
+        self._progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(bar_width=30),
+            TaskProgressColumn(),
+            MofNCompleteColumn(),
+            TimeElapsedColumn(),
+            console=stderr_console,
+            transient=True,
+        )
+        self._progress.start()
+        return self
+
+    def __exit__(self, *args) -> None:
+        if self._progress:
+            self._progress.stop()
+
+    @contextmanager
+    def stage(
+        self, description: str, total: int | None = None
+    ) -> Iterator[Callable[[int], None]]:
+        """Start a new stage in the multi-stage operation.
+
+        Args:
+            description: Stage description.
+            total: If provided, shows a progress bar. Otherwise shows spinner.
+
+        Yields:
+            Function to advance progress (if total provided).
+        """
+        if not self._progress:
+            raise RuntimeError("MultiStageProgress must be used as context manager")
+
+        # Remove previous task if any
+        if self._current_task is not None:
+            self._progress.remove_task(self._current_task)
+
+        self._current_task = self._progress.add_task(description, total=total)
+
+        def advance(n: int = 1) -> None:
+            if self._current_task is not None:
+                self._progress.advance(self._current_task, n)
+
+        try:
+            yield advance
+        finally:
+            # Mark complete if it had a total
+            if total is not None and self._current_task is not None:
+                self._progress.update(self._current_task, completed=total)
 
 
 def print_note(path: Path) -> None:
