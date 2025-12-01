@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -75,12 +76,26 @@ def open_in_editor(
     if editor is None:
         editor = get_editor()
 
-    # Build command
-    cmd = [editor]
+    # Parse editor string to handle multi-word commands like "code -n" or "vim -u ~/.vimrc"
+    # Use shlex.split for proper shell-style parsing (handles quotes, escapes, etc.)
+    try:
+        editor_parts = shlex.split(editor)
+    except ValueError:
+        # If parsing fails, fall back to treating it as a single command
+        editor_parts = [editor]
 
-    # Add line number if supported
-    if line is not None and editor_supports_line_number(editor):
-        editor_name = Path(editor).stem.lower()
+    if not editor_parts:
+        editor_parts = [editor]
+
+    # The base command is the first part (e.g., "code" from "code -n")
+    base_cmd = editor_parts[0]
+
+    # Build command starting with parsed parts
+    cmd = editor_parts[:]
+
+    # Add line number if supported (check base command, not full string)
+    if line is not None and editor_supports_line_number(base_cmd):
+        editor_name = Path(base_cmd).stem.lower()
         if editor_name == "code":
             # VS Code uses --goto file:line syntax
             cmd.append("--goto")

@@ -357,6 +357,7 @@ def rebuild_db(db: Database) -> None:
         "note_tags",
         "note_links",
         "note_views",
+        "note_aliases",
         "attachments",
         "todos",
         "notes",

@@ -485,12 +485,12 @@ def _index_note_thread_safe(
     else:
         source_type = "note"
 
-    # Delete existing todos for this file
-    delete_todos_for_source(full_path)
+    # Delete existing todos for this file (use thread-local db for thread safety)
+    delete_todos_for_source(full_path, db=db)
 
-    # Extract and index new todos (batch for performance)
+    # Extract and index new todos (batch for performance, use thread-local db)
     todos = extract_todos(full_path, source_type=source_type, notes_root=notes_root)
-    upsert_todos_batch(todos)
+    upsert_todos_batch(todos, db=db)
 
 
 def rebuild_search_index(

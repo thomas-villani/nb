@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from nb.index.db import get_db
 from nb.models import Priority, Todo, TodoSource, TodoStatus
 from nb.utils.hashing import normalize_path
+
+if TYPE_CHECKING:
+    from nb.index.db import Database
 
 
 def _row_to_todo(row) -> Todo:
@@ -57,7 +61,7 @@ def _load_todo_tags(todo_id: str) -> list[str]:
     return [row["tag"] for row in rows]
 
 
-def upsert_todo(todo: Todo, commit: bool = True) -> None:
+def upsert_todo(todo: Todo, commit: bool = True, db: "Database | None" = None) -> None:
     """Insert or update a todo in the database.
 
     Preserves created_date for existing todos.
@@ -66,8 +70,11 @@ def upsert_todo(todo: Todo, commit: bool = True) -> None:
     Args:
         todo: The Todo to upsert.
         commit: If True, commit immediately. Set False for batch operations.
+        db: Optional database instance (uses global get_db() if not provided).
+            Pass a thread-local db when called from parallel indexing.
     """
-    db = get_db()
+    if db is None:
+        db = get_db()
 
     # Check if todo already exists to preserve created_date and completed_date
     existing = db.fetchone(
@@ -138,18 +145,24 @@ def upsert_todo(todo: Todo, commit: bool = True) -> None:
         db.commit()
 
 
-def upsert_todos_batch(todos: list[Todo]) -> None:
+def upsert_todos_batch(todos: list[Todo], db: "Database | None" = None) -> None:
     """Insert or update multiple todos in a single transaction.
 
     This is much faster than calling upsert_todo repeatedly for large batches.
+
+    Args:
+        todos: List of todos to upsert.
+        db: Optional database instance (uses global get_db() if not provided).
+            Pass a thread-local db when called from parallel indexing.
     """
     if not todos:
         return
 
-    db = get_db()
+    if db is None:
+        db = get_db()
 
     for todo in todos:
-        upsert_todo(todo, commit=False)
+        upsert_todo(todo, commit=False, db=db)
 
     db.commit()
 
@@ -174,13 +187,19 @@ def delete_todo(todo_id: str) -> None:
     db.commit()
 
 
-def delete_todos_for_source(source_path: Path) -> None:
+def delete_todos_for_source(source_path: Path, db: "Database | None" = None) -> None:
     """Delete all todos from a specific source file.
 
     Handles both normalized (forward slashes) and legacy (backslashes) paths
     for backward compatibility with existing data.
+
+    Args:
+        source_path: Path to the source file.
+        db: Optional database instance (uses global get_db() if not provided).
+            Pass a thread-local db when called from parallel indexing.
     """
-    db = get_db()
+    if db is None:
+        db = get_db()
     normalized = normalize_path(source_path)
     # Also try the original str() representation for legacy data
     legacy = str(source_path)

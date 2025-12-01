@@ -116,7 +116,6 @@ def link_add(
             recursive=not no_recursive,
             todo_exclude=todo_exclude,
             sync=sync,
-            save_to_config=False,
         )
         note_count = index_single_linked_note(linked.alias)
 

@@ -72,19 +72,14 @@ class TodoViewConfig:
 
     name: str
     filters: dict[str, Any] = field(default_factory=dict)
-    # Filter keys supported:
+    # Filter keys currently supported by the CLI:
     # - notebooks: list[str] - filter to specific notebooks
     # - notes: list[str] - filter to specific note paths
-    # - exclude_notebooks: list[str] - exclude notebooks
+    # - tag: str - filter by a single tag (note: singular, not 'tags')
     # - priority: int - filter by priority (1, 2, 3)
-    # - tags: list[str] - filter by tags
-    # - exclude_tags: list[str] - exclude tags
-    # - due_today: bool - show only due today
-    # - due_week: bool - show only due this week
-    # - overdue: bool - show only overdue
+    # - exclude_tags: list[str] - exclude todos with these tags
     # - hide_later: bool - hide "DUE LATER" section
     # - hide_no_date: bool - hide "NO DUE DATE" section
-    # - focus: bool - shorthand for hide_later + hide_no_date
     # - include_completed: bool - include completed todos
 
 
@@ -336,7 +331,11 @@ def load_config(config_path: Path | None = None) -> Config:
         data = {}
 
     # Parse configuration with defaults
-    notes_root = expand_path(data.get("notes_root", DEFAULT_NOTES_ROOT))
+    # If notes_root not in config file, respect NB_NOTES_ROOT env var via get_default_notes_root()
+    if "notes_root" in data:
+        notes_root = expand_path(data["notes_root"])
+    else:
+        notes_root = get_default_notes_root()
 
     # Get editor: prefer $EDITOR environment variable
     editor = os.environ.get("EDITOR") or data.get("editor", DEFAULT_EDITOR)
@@ -442,8 +441,15 @@ def init_config(notes_root: Path | None = None) -> Config:
 
     # Write default config if it doesn't exist
     if not config_path.exists():
+        # Parse default config and update notes_root to the actual path
+        # This ensures NB_NOTES_ROOT is respected in the generated config
+        default_data = yaml.safe_load(DEFAULT_CONFIG_YAML)
+        default_data["notes_root"] = str(notes_root)
         with open(config_path, "w", encoding="utf-8") as f:
-            f.write(DEFAULT_CONFIG_YAML)
+            # Write header comment
+            f.write("# nb configuration\n")
+            f.write("# See: https://github.com/user/nb-cli\n\n")
+            yaml.safe_dump(default_data, f, default_flow_style=False, sort_keys=False)
 
     # Load and ensure directories
     config = load_config(config_path)

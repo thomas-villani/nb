@@ -32,6 +32,8 @@ dev = [
     "black",
     "ruff",
     "mypy",
+    "types-pyyaml>=6.0.12.20250915",
+    "types-python-dateutil>=2.9.0.20251115",
 ]
 
 [tool.pytest.ini_options]

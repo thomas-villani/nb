@@ -87,6 +87,7 @@ todo_exclude: true
 - [x] Must reindex file after 'nb todo add --note'
 - [x] Add --note and --notebook filter to grep command
 - [x] Need progress / spinners for long-running tasks (syncing and reindexing and search)
+- [ ] Review autocomplete and improve
 
 
 ### Phase 5: Advanced TUI

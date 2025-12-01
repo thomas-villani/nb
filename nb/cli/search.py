@@ -8,6 +8,7 @@ import click
 
 from nb.cli.utils import console
 from nb.config import get_config
+from nb.utils.hashing import normalize_path
 
 
 def register_search_commands(cli: click.Group) -> None:
@@ -530,7 +531,8 @@ def stream_notes(
             db = get_db()
             for path, viewed_at in unique_views:
                 # Look up note info from database
-                rel_path = str(path.relative_to(config.notes_root))
+                # Use normalize_path for consistent path format (forward slashes) on all platforms
+                rel_path = normalize_path(path.relative_to(config.notes_root))
                 row = db.fetchone(
                     "SELECT title, date, notebook FROM notes WHERE path = ?",
                     (rel_path,),
@@ -570,7 +572,8 @@ def stream_notes(
             db = get_db()
             for path, mtime in mod_data:
                 # Look up note info from database
-                rel_path = str(path.relative_to(config.notes_root))
+                # Use normalize_path for consistent path format (forward slashes) on all platforms
+                rel_path = normalize_path(path.relative_to(config.notes_root))
                 row = db.fetchone(
                     "SELECT title, date, notebook FROM notes WHERE path = ?",
                     (rel_path,),
