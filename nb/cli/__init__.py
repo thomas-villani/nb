@@ -23,6 +23,7 @@ from nb.cli.tags import register_tags_commands
 from nb.cli.templates import register_template_commands
 from nb.cli.todos import register_todo_commands
 from nb.cli.utils import ensure_setup
+from nb.cli.web import register_web_commands
 
 
 class AliasedGroup(click.Group):
@@ -109,6 +110,7 @@ register_template_commands(cli)
 register_completion_commands(cli)
 register_stats_commands(cli)
 register_tags_commands(cli)
+register_web_commands(cli)
 
 
 def main() -> None:

@@ -82,12 +82,14 @@ todo_exclude: true
     Shows same file multiple times (should condense to one line with "+4" or something) 
 - [x] Make `nb history` not group by notebook by default, instead have the notebook source colored in the same line as the history line. Allow grouping with a `--group` flag
 - [x] If parent todo completed, auto complete child todos
-- [ ] What else should be configurable?
+- [^] What else should be configurable?
 
 - [x] Must reindex file after 'nb todo add --note'
 - [x] Add --note and --notebook filter to grep command
 - [x] Need progress / spinners for long-running tasks (syncing and reindexing and search)
 - [ ] Review autocomplete and improve
+- [ ] Add a command to delete a todo or a note
+- [ ] Be able to define date format of note titles, and display, prefer day of week included in most cases
 
 
 ### Phase 5: Advanced TUI
@@ -112,6 +114,7 @@ todo_exclude: true
   - [x] Remove `save_to_config` branches in links.py (add/remove functions)
   - [x] Simplify `list_linked_files()` and `list_linked_notes()` to DB-only
 - [ ] Optimize imports and startup speed of cli
+- [ ] Evaluate test suite and add e2e tests on actual CLI (if not existing)
 
 
 ### Phase 6: Future Enhancements

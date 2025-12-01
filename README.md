@@ -17,6 +17,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Linked files** - Index external todo files and note directories
 - **Attachments** - Attach files and URLs to notes and todos
 - **Interactive mode** - Keyboard-driven todo management
+- **Web viewer** - Browse notes in a browser with search and todos
 
 ## Installation
 
@@ -478,6 +479,30 @@ nb index --rebuild    # Drop and recreate database (for schema changes)
 nb index --embeddings # Rebuild search embeddings
 nb index --vectors-only  # Rebuild only vectors (skip file indexing)
 ```
+
+### Web Viewer
+
+Browse notebooks and notes in a browser with a clean reading experience:
+
+```bash
+nb web                    # Start server and open browser
+nb web --port 8080        # Custom port (default: 3000)
+nb web --no-open          # Start server without opening browser
+nb web -c                 # Include completed todos
+```
+
+Features:
+- Browse notebooks and notes with notebook colors from config
+- Create and edit notes directly in the browser
+- Markdown rendering with syntax highlighting for code blocks
+- Full-text search across all notes
+- Todo management: add new todos, toggle completion, view by section
+- Todo sections: Overdue, In Progress, Due Today, Due This Week, Due Later, No Due Date
+- Sort todos by status, notebook, due date, priority, or created date
+- Dark theme, mobile responsive
+- Zero additional dependencies (stdlib HTTP server + CDN for markdown/highlighting)
+
+Press `Ctrl+C` to stop the server.
 
 ### Configuration Commands
 
