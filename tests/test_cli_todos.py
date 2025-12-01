@@ -56,7 +56,7 @@ class TestTodoDone:
             if "Already done" in line:
                 parts = line.split()
                 for part in reversed(parts):
-                    if len(part) == 6:
+                    if len(part) == 6 and all(c in "0123456789abcdef" for c in part):
                         todo_id = part
                         break
                 break
@@ -104,7 +104,7 @@ class TestTodoUndone:
             if "Completed task" in line:
                 parts = line.split()
                 for part in reversed(parts):
-                    if len(part) == 6:
+                    if len(part) == 6 and all(c in "0123456789abcdef" for c in part):
                         todo_id = part
                         break
                 break
@@ -164,7 +164,7 @@ class TestTodoStart:
             if "Already started" in line:
                 parts = line.split()
                 for part in reversed(parts):
-                    if len(part) == 6:
+                    if len(part) == 6 and all(c in "0123456789abcdef" for c in part):
                         todo_id = part
                         break
                 break
@@ -186,7 +186,7 @@ class TestTodoStart:
             if "Done task" in line:
                 parts = line.split()
                 for part in reversed(parts):
-                    if len(part) == 6:
+                    if len(part) == 6 and all(c in "0123456789abcdef" for c in part):
                         todo_id = part
                         break
                 break
@@ -215,7 +215,7 @@ class TestTodoPause:
             if "In progress task" in line:
                 parts = line.split()
                 for part in reversed(parts):
-                    if len(part) == 6:
+                    if len(part) == 6 and all(c in "0123456789abcdef" for c in part):
                         todo_id = part
                         break
                 break
@@ -260,7 +260,7 @@ class TestTodoShow:
             if "Detailed task" in line:
                 parts = line.split()
                 for part in reversed(parts):
-                    if len(part) == 6:
+                    if len(part) == 6 and all(c in "0123456789abcdef" for c in part):
                         todo_id = part
                         break
                 break

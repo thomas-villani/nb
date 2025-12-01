@@ -77,22 +77,27 @@ def record_group() -> None:
 )
 @click.option(
     "--delete-audio",
+    "-x",
     is_flag=True,
     help="Delete WAV file after successful transcription",
 )
 @click.option(
-    "--mic-only", is_flag=True, help="Record microphone only (no system audio)"
+    "--mic-only", "-mo", is_flag=True, help="Record microphone only (no system audio)"
 )
 @click.option(
-    "--system-only", is_flag=True, help="Record system audio only (no microphone)"
+    "--system-only",
+    "-so",
+    is_flag=True,
+    help="Record system audio only (no microphone)",
 )
 @click.option(
     "--dictate",
+    "-d",
     is_flag=True,
     help="Dictation mode: mic-only with optimized transcription",
 )
-@click.option("--mic", type=int, help="Microphone device index")
-@click.option("--loopback", type=int, help="System audio (loopback) device index")
+@click.option("--mic", "-m", type=int, help="Microphone device index")
+@click.option("--loopback", "-l", type=int, help="System audio (loopback) device index")
 def record_start(
     name: str,
     notebook: str | None,

@@ -402,10 +402,7 @@ def open_date(
     """
     from rich.prompt import Confirm
 
-    from nb.core.notebooks import (
-        ensure_notebook_note,
-        is_notebook_date_based,
-    )
+    from nb.core.notebooks import ensure_notebook_note, is_notebook_date_based
     from nb.core.notes import create_note
     from nb.utils.dates import parse_fuzzy_date
 
