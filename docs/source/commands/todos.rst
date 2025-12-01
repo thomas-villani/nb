@@ -227,6 +227,85 @@ Open the source file at the todo's line.
 
    nb todo edit abc123
 
+nb todo due
+-----------
+
+Set or clear the due date for a todo.
+
+**Usage:** ``nb todo due ID... DATE_EXPR``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``ID``
+     - Todo ID or ID prefix (can specify multiple)
+   * - ``DATE_EXPR``
+     - Date expression or "none"/"clear" to remove due date
+
+**Date expressions:**
+
+- Weekday names: ``friday``, ``monday`` (means the **next** occurrence)
+- Relative: ``tomorrow``, ``next week``, ``next monday``
+- Natural language: ``dec 25``, ``december 25 2025``
+- ISO format: ``2025-12-15``
+- Clear keywords: ``none``, ``clear``, ``remove``
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb todo due abc123 friday       # Set due to next Friday
+   nb todo due abc123 tomorrow     # Set due to tomorrow
+   nb todo due abc123 "dec 25"     # Set due to specific date
+   nb todo due abc123 none         # Remove due date
+   nb todo due abc def friday      # Set multiple todos at once
+
+nb todo all-done
+----------------
+
+Mark all todos in a note as completed.
+
+**Usage:** ``nb todo all-done NOTE_REF [OPTIONS]``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``NOTE_REF``
+     - Note name, path (notebook/note), or alias
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-n, --notebook``
+     - Notebook to search in
+   * - ``-f, --force``
+     - Skip confirmation prompt
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb todo all-done friday             # Friday's daily note
+   nb todo all-done myproject -n work  # work/myproject.md
+   nb todo all-done work/myproject     # Same as above
+   nb todo all-done myalias            # By note alias
+   nb todo all-done friday -f          # Skip confirmation
+
 Interactive mode
 ----------------
 

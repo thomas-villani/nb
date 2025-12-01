@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
@@ -242,6 +243,169 @@ def get_all_notes(
         )
         tags = [t["tag"] for t in tag_rows]
         result.append((notes_root / row["path"], row["title"], row["notebook"], tags))
+
+    return result
+
+
+def get_notebook_notes_with_metadata(
+    notebook: str, notes_root: Path | None = None
+) -> list[tuple[Path, str | None, list[str], bool, str | None]]:
+    """Get notes from a specific notebook with title, tags, and linked status.
+
+    Args:
+        notebook: Name of the notebook (can include @ prefix for linked notebooks)
+        notes_root: Override notes root directory
+
+    Returns:
+        List of (path, title, tags, is_linked, alias) tuples, ordered by mtime descending.
+
+    """
+    from nb.core.links import list_linked_notes
+    from nb.index.db import get_db
+
+    config = get_config()
+    if notes_root is None:
+        notes_root = config.notes_root
+
+    db = get_db()
+
+    # Query notes for this notebook with metadata
+    rows = db.fetchall(
+        """SELECT path, title, external FROM notes
+           WHERE notebook = ?
+           ORDER BY mtime DESC""",
+        (notebook,),
+    )
+
+    # Build a map of paths to aliases for linked notes
+    path_to_alias: dict[str, str] = {}
+    for ln in list_linked_notes():
+        ln_notebook = ln.notebook or f"@{ln.alias}"
+        if ln_notebook == notebook:
+            if ln.path.is_file():
+                path_to_alias[str(ln.path.resolve())] = ln.alias
+            else:
+                path_to_alias[f"dir:{ln.path.resolve()}"] = ln.alias
+
+    result = []
+    for row in rows:
+        note_path_str = row["path"]
+        note_path = Path(note_path_str)
+        is_external = bool(row["external"])
+
+        # Resolve to absolute path
+        if not note_path.is_absolute():
+            abs_path = notes_root / note_path
+        else:
+            abs_path = note_path
+
+        # Get tags for this note
+        tag_rows = db.fetchall(
+            "SELECT tag FROM note_tags WHERE note_path = ?",
+            (note_path_str,),
+        )
+        tags = [t["tag"] for t in tag_rows]
+
+        # Find alias for linked notes
+        alias = None
+        if is_external:
+            resolved = str(abs_path.resolve())
+            if resolved in path_to_alias:
+                alias = path_to_alias[resolved]
+            else:
+                # Check if under a linked directory
+                for key, val in path_to_alias.items():
+                    if key.startswith("dir:"):
+                        dir_path = key[4:]
+                        if resolved.startswith(dir_path):
+                            alias = val
+                            break
+
+        result.append((abs_path, row["title"], tags, is_external, alias))
+
+    return result
+
+
+@dataclass
+class NoteDetails:
+    """Extended details for a note."""
+
+    todo_count: int = 0
+    mtime: float | None = None
+    note_date: str | None = None
+    todo_exclude: bool = False
+
+
+def get_note_details_batch(
+    paths: list[Path], notes_root: Path | None = None
+) -> dict[Path, NoteDetails]:
+    """Get extended details for multiple notes.
+
+    Args:
+        paths: List of note paths (absolute)
+        notes_root: Override notes root directory
+
+    Returns:
+        Dict mapping path to NoteDetails. Paths not in database are omitted.
+
+    """
+    from nb.index.db import get_db
+
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    db = get_db()
+    result: dict[Path, NoteDetails] = {}
+
+    if not paths:
+        return result
+
+    # Convert to relative paths for database lookup
+    rel_paths = []
+    path_map: dict[str, Path] = {}  # rel_path -> abs_path
+    for p in paths:
+        try:
+            rel = p.relative_to(notes_root)
+            rel_str = str(rel)
+            rel_paths.append(rel_str)
+            path_map[rel_str] = p
+        except ValueError:
+            continue
+
+    if not rel_paths:
+        return result
+
+    # Query note details
+    placeholders = ",".join("?" * len(rel_paths))
+    note_rows = db.fetchall(
+        f"""SELECT path, mtime, date, todo_exclude
+            FROM notes WHERE path IN ({placeholders})""",
+        tuple(rel_paths),
+    )
+
+    # Query todo counts
+    todo_counts = db.fetchall(
+        f"""SELECT source_path, COUNT(*) as count
+            FROM todos
+            WHERE source_path IN ({placeholders}) AND completed = 0
+            GROUP BY source_path""",
+        tuple(rel_paths),
+    )
+
+    # Build todo count map
+    todo_count_map = {row["source_path"]: row["count"] for row in todo_counts}
+
+    # Build result
+    for row in note_rows:
+        rel_path = row["path"]
+        if rel_path in path_map:
+            abs_path = path_map[rel_path]
+            result[abs_path] = NoteDetails(
+                todo_count=todo_count_map.get(rel_path, 0),
+                mtime=row["mtime"],
+                note_date=row["date"],
+                todo_exclude=bool(row["todo_exclude"]),
+            )
 
     return result
 

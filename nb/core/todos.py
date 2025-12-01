@@ -935,6 +935,72 @@ def update_todo_due_date(
     return actual_line
 
 
+def remove_todo_due_date(
+    path: Path,
+    line_number: int,
+    check_linked_sync: bool = True,
+    expected_content: str | None = None,
+) -> int | None:
+    """Remove @due() from a todo line.
+
+    Args:
+        path: Path to the file
+        line_number: 1-based line number of the todo (may be stale)
+        check_linked_sync: Whether to check if linked file allows sync
+        expected_content: If provided, verifies/finds the todo by content.
+            This handles cases where line numbers become stale due to file edits.
+
+    Returns:
+        The actual line number where the todo was updated, or None if failed.
+
+    Raises:
+        PermissionError: If the file is a linked file with sync disabled.
+
+    """
+    if not path.exists():
+        return None
+
+    # Check if we're allowed to modify this file
+    if check_linked_sync and not can_toggle_linked_file(path):
+        raise PermissionError(f"Cannot modify linked file (sync disabled): {path.name}")
+
+    content = path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+
+    # Find the actual line number (may differ from stored if file was edited)
+    if expected_content:
+        actual_line = find_todo_line(lines, line_number, expected_content)
+        if actual_line is None:
+            return None
+    else:
+        # Fall back to trusting the line number (legacy behavior)
+        if line_number < 1 or line_number > len(lines):
+            return None
+        actual_line = line_number
+
+    line = lines[actual_line - 1]
+    match = TODO_PATTERN.match(line)
+
+    if not match:
+        return None
+
+    if not DUE_PATTERN.search(line):
+        # No @due() to remove
+        return actual_line
+
+    # Remove @due() and any extra whitespace
+    new_line = DUE_PATTERN.sub("", line)
+    # Clean up any double spaces left behind
+    new_line = re.sub(r"  +", " ", new_line)
+    new_line = new_line.rstrip()
+
+    lines[actual_line - 1] = new_line
+
+    # Write back
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return actual_line
+
+
 def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
     """Add a new todo to a daily note.
 

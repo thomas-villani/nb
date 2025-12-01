@@ -350,6 +350,7 @@ def index_cmd(
         count_linked_notes,
         count_notes_for_search_rebuild,
         index_all_notes,
+        remove_deleted_notes,
         scan_linked_notes,
     )
     from nb.index.todos_repo import get_todo_stats
@@ -443,6 +444,11 @@ def index_cmd(
             synced = sync_search_index(notebook=notebook)
         if synced:
             console.print(f"[dim]Synced {synced} notes to search index.[/dim]")
+
+    # Clean up notes and todos for files that no longer exist
+    removed = remove_deleted_notes(notebook=notebook)
+    if removed:
+        console.print(f"[dim]Removed {removed} deleted notes.[/dim]")
 
     stats = get_todo_stats()
     console.print(f"Todos: {stats['open']} open, {stats['completed']} completed")

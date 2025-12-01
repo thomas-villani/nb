@@ -105,6 +105,91 @@ def parse_fuzzy_date(text: str) -> date | None:
     return None
 
 
+# Keywords that indicate clearing/removing a due date
+CLEAR_DATE_KEYWORDS = {"none", "clear", "remove"}
+
+
+def parse_fuzzy_date_future(text: str) -> date | None:
+    """Parse a fuzzy date expression with weekday names defaulting to NEXT occurrence.
+
+    Unlike parse_fuzzy_date(), bare weekday names like "friday" return
+    the NEXT Friday (future), not the most recent. This is more intuitive
+    for setting due dates.
+
+    Returns None if parsing fails or if text is a clear keyword ("none", "clear", "remove").
+    Use is_clear_date_keyword() to check if the user wants to clear a due date.
+
+    Supports the same formats as parse_fuzzy_date():
+    - Named dates: "today", "yesterday", "tomorrow"
+    - Weekday names: "friday" (next occurrence), "next friday", "last monday"
+    - Relative: "next week", "last week"
+    - Natural language: "nov 20", "november 20 2025"
+    - ISO format: "2025-11-20"
+    """
+    if not text:
+        return None
+
+    text = text.strip().lower()
+
+    # Check if user wants to clear the due date
+    if text in CLEAR_DATE_KEYWORDS:
+        return None
+
+    # Check named dates first
+    if text in NAMED_DATES:
+        return NAMED_DATES[text]()
+
+    # Handle "next week" / "last week"
+    if text == "next week":
+        return date.today() + timedelta(weeks=1)
+    if text == "last week":
+        return date.today() - timedelta(weeks=1)
+
+    # Handle weekday names (with optional "next" or "last" prefix)
+    next_match = re.match(r"^next\s+(\w+)$", text)
+    last_match = re.match(r"^last\s+(\w+)$", text)
+
+    if next_match:
+        weekday_name = next_match.group(1)
+        if weekday_name in WEEKDAYS:
+            weekday = WEEKDAYS[weekday_name]
+            return date.today() + relativedelta(weekday=weekday(+1))
+
+    if last_match:
+        weekday_name = last_match.group(1)
+        if weekday_name in WEEKDAYS:
+            weekday = WEEKDAYS[weekday_name]
+            return date.today() + relativedelta(weekday=weekday(-1))
+
+    # Plain weekday name - means NEXT occurrence (future-oriented for due dates)
+    if text in WEEKDAYS:
+        weekday = WEEKDAYS[text]
+        today = date.today()
+        today_weekday = today.weekday()
+        target_weekday = weekday.weekday
+
+        if today_weekday == target_weekday:
+            # Today is that weekday - return today (it's still the "next" occurrence)
+            return today
+        else:
+            # Return the next future occurrence
+            return today + relativedelta(weekday=weekday(+1))
+
+    # Try dateutil parser for everything else
+    try:
+        parsed = dateutil_parser.parse(text, fuzzy=True, dayfirst=False)
+        return parsed.date()
+    except (ValueError, TypeError):
+        pass
+
+    return None
+
+
+def is_clear_date_keyword(text: str) -> bool:
+    """Check if the text is a keyword that means 'clear/remove the due date'."""
+    return text.strip().lower() in CLEAR_DATE_KEYWORDS
+
+
 def parse_date_from_filename(filename: str) -> date | None:
     """Extract date from YYYY-MM-DD pattern in filename.
 

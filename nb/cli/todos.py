@@ -1573,6 +1573,97 @@ def todo_pause(todo_id: tuple[str, ...]) -> None:
             raise SystemExit(1) from None
 
 
+@todo.command("due")
+@click.argument("todo_id", nargs=-1)
+@click.argument("date_expr")
+def todo_due(todo_id: tuple[str, ...], date_expr: str) -> None:
+    """Set or clear the due date for a todo.
+
+    DATE_EXPR can be:
+    - A date: "2025-12-15", "dec 15", "tomorrow", "friday"
+    - "none" or "clear" to remove the due date
+
+    Note: "friday" means the NEXT Friday (future), not the most recent.
+
+    \b
+    Examples:
+      nb todo due abc123 friday       # Set due to next Friday
+      nb todo due abc123 tomorrow
+      nb todo due abc123 "dec 25"
+      nb todo due abc123 2025-12-15
+      nb todo due abc123 none         # Remove due date
+      nb todo due abc def friday      # Multiple IDs
+    """
+    from nb.core.todos import remove_todo_due_date, update_todo_due_date
+    from nb.index.todos_repo import update_todo_due_date_db
+    from nb.utils.dates import is_clear_date_keyword, parse_fuzzy_date_future
+
+    # Check if we should clear the due date
+    is_clear = is_clear_date_keyword(date_expr)
+
+    if not is_clear:
+        new_date = parse_fuzzy_date_future(date_expr)
+        if not new_date:
+            console.print(f"[red]Could not parse date: {date_expr}[/red]")
+            console.print(
+                "[dim]Try: tomorrow, friday, next monday, dec 15, 2025-12-15, or 'none' to clear[/dim]"
+            )
+            raise SystemExit(1)
+    else:
+        new_date = None
+
+    for _todo in todo_id:
+        t = find_todo(_todo)
+        if not t:
+            console.print(f"[red]Todo not found: {_todo}[/red]")
+            console.print(
+                "[dim]Hint: Run 'nb index' to refresh the todo index, or use 'nb todo' to list todos.[/dim]"
+            )
+            raise SystemExit(1)
+
+        try:
+            if is_clear:
+                # Remove due date from file
+                actual_line = remove_todo_due_date(
+                    t.source.path,
+                    t.line_number,
+                    expected_content=t.content,
+                )
+            else:
+                # Update due date in file
+                assert new_date is not None  # Guaranteed by is_clear check above
+                actual_line = update_todo_due_date(
+                    t.source.path,
+                    t.line_number,
+                    new_date,
+                    expected_content=t.content,
+                )
+
+            if actual_line is not None:
+                # Update database
+                update_todo_due_date_db(t.id, new_date)
+
+                if is_clear:
+                    console.print(f"[green]Cleared due date:[/green] {t.content}")
+                else:
+                    assert new_date is not None
+                    console.print(
+                        f"[green]Due {new_date.strftime('%b %d')}:[/green] {t.content}"
+                    )
+            else:
+                console.print("[red]Failed to update todo in source file.[/red]")
+                console.print(
+                    "[dim]Hint: The todo may have been edited or moved. Run 'nb index' to refresh.[/dim]"
+                )
+                raise SystemExit(1)
+        except PermissionError as e:
+            console.print(f"[red]{e}[/red]")
+            console.print(
+                "[dim]Hint: Use 'nb link' to enable sync for external files.[/dim]"
+            )
+            raise SystemExit(1) from None
+
+
 @todo.command("show")
 @click.argument("todo_id")
 def todo_show(todo_id: str) -> None:
@@ -1883,4 +1974,103 @@ def todo_review(
         notebooks=notebooks_filter,
         notes=notes_filter,
         exclude_notebooks=all_excluded_notebooks,
+    )
+
+
+@todo.command("all-done")
+@click.argument("note_ref")
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook to search in",
+    shell_complete=complete_notebook,
+)
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation")
+def todo_all_done(note_ref: str, notebook: str | None, force: bool) -> None:
+    """Mark all todos in a note as completed.
+
+    NOTE_REF can be:
+    - A note name: "myproject", "friday"
+    - A notebook/note path: "work/myproject", "daily/friday"
+    - A note alias (from 'nb alias')
+
+    \b
+    Examples:
+      nb todo all-done friday                 # Friday's daily note
+      nb todo all-done myproject -n work      # work/myproject.md
+      nb todo all-done work/myproject         # Same as above
+      nb todo all-done myalias                # By alias
+      nb todo all-done friday -f              # Skip confirmation
+    """
+    from rich.prompt import Confirm
+
+    from nb.cli.utils import resolve_note_ref
+    from nb.utils.fuzzy import UserCancelled
+    from nb.utils.hashing import normalize_path
+
+    # Handle notebook/note format in note_ref
+    if "/" in note_ref and not notebook:
+        parts = note_ref.split("/", 1)
+        notebook = parts[0]
+        note_ref = parts[1]
+
+    # Resolve the note
+    try:
+        note_path = resolve_note_ref(note_ref, notebook=notebook, ensure_exists=True)
+    except UserCancelled:
+        console.print("[dim]Cancelled.[/dim]")
+        raise SystemExit(1) from None
+
+    if not note_path:
+        console.print(f"[red]Note not found: {note_ref}[/red]")
+        raise SystemExit(1)
+
+    # Query incomplete todos for this note
+    normalized_path = normalize_path(note_path)
+    todos = query_todos(
+        completed=False,
+        notes=[normalized_path],
+        parent_only=False,  # Include subtasks
+        exclude_note_excluded=False,  # Don't exclude - user explicitly asked
+    )
+
+    if not todos:
+        console.print(f"[dim]No incomplete todos in {note_path.name}[/dim]")
+        return
+
+    # Show confirmation unless --force
+    if not force:
+        console.print(f"\n[bold]Mark all todos as done in:[/bold] {note_path.name}")
+        console.print(f"[dim]Found {len(todos)} incomplete todo(s)[/dim]")
+
+        for t in todos[:5]:
+            console.print(
+                f"  [dim]o[/dim] {t.content[:50]}{'...' if len(t.content) > 50 else ''}"
+            )
+        if len(todos) > 5:
+            console.print(f"  [dim]... and {len(todos) - 5} more[/dim]")
+
+        if not Confirm.ask("Mark all as completed?", default=True):
+            console.print("[dim]Cancelled.[/dim]")
+            return
+
+    # Mark each todo as complete
+    completed_count = 0
+    for t in todos:
+        try:
+            actual_line = set_todo_status_in_file(
+                t.source.path,
+                t.line_number,
+                TodoStatus.COMPLETED,
+                expected_content=t.content,
+            )
+            if actual_line is not None:
+                update_todo_status(t.id, TodoStatus.COMPLETED)
+                completed_count += 1
+        except PermissionError:
+            # Skip linked files without sync, but don't fail entirely
+            pass
+
+    console.print(
+        f"[green]Completed {completed_count} todo(s)[/green] in {note_path.name}"
     )

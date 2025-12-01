@@ -380,3 +380,75 @@ class TestRemoveDeletedNotes:
         removed = remove_deleted_notes(notes_root)
 
         assert removed == 0
+
+    def test_removes_todos_when_note_deleted(self, db_fixture, create_note):
+        """Todos should be deleted when their source note is removed."""
+        notes_root = db_fixture.notes_root
+
+        note1 = create_note("projects", "note1.md", "# Note 1\n- [ ] Todo from note1\n")
+        create_note("projects", "note2.md", "# Note 2\n- [ ] Todo from note2\n")
+
+        # Index both
+        index_all_notes(notes_root, index_vectors=False)
+
+        db = get_db()
+        assert len(db.fetchall("SELECT * FROM notes")) == 2
+        assert len(db.fetchall("SELECT * FROM todos")) == 2
+
+        # Delete one file
+        note1.unlink()
+
+        # Clean up
+        removed = remove_deleted_notes(notes_root)
+
+        assert removed == 1
+        # Note should be gone
+        notes = db.fetchall("SELECT * FROM notes")
+        assert len(notes) == 1
+        # Todos from deleted note should be gone too
+        todos = db.fetchall("SELECT * FROM todos")
+        assert len(todos) == 1
+        assert "Todo from note2" in todos[0]["content"]
+
+    def test_removes_deleted_notes_by_notebook(self, db_fixture, create_note):
+        """When filtering by notebook, only that notebook's deleted notes are removed."""
+        notes_root = db_fixture.notes_root
+
+        note1 = create_note("projects", "note1.md", "# Note 1\n- [ ] Project todo\n")
+        note2 = create_note("work", "note2.md", "# Note 2\n- [ ] Work todo\n")
+
+        # Index both
+        index_all_notes(notes_root, index_vectors=False)
+
+        db = get_db()
+        assert len(db.fetchall("SELECT * FROM notes")) == 2
+        assert len(db.fetchall("SELECT * FROM todos")) == 2
+
+        # Delete both files
+        note1.unlink()
+        note2.unlink()
+
+        # Clean up only projects notebook
+        removed = remove_deleted_notes(notes_root, notebook="projects")
+
+        assert removed == 1
+        # projects note should be gone, work note still exists in DB (even though file deleted)
+        notes = db.fetchall("SELECT * FROM notes")
+        assert len(notes) == 1
+        assert "work" in notes[0]["path"]
+        # Only project todo should be removed
+        todos = db.fetchall("SELECT * FROM todos")
+        assert len(todos) == 1
+        assert "Work todo" in todos[0]["content"]
+
+    def test_notebook_filter_invalid_notebook(self, db_fixture, create_note):
+        """Invalid notebook name should return 0 without errors."""
+        notes_root = db_fixture.notes_root
+
+        create_note("projects", "note1.md", "# Note 1\n")
+        index_all_notes(notes_root, index_vectors=False)
+
+        # Try to clean up non-existent notebook
+        removed = remove_deleted_notes(notes_root, notebook="nonexistent")
+
+        assert removed == 0

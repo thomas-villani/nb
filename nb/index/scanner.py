@@ -880,28 +880,71 @@ def index_linked_file(path: Path, alias: str | None = None) -> int:
     return len(todos)
 
 
-def remove_deleted_notes(notes_root: Path | None = None) -> int:
+def remove_deleted_notes(
+    notes_root: Path | None = None, notebook: str | None = None
+) -> int:
     """Remove notes from the database that no longer exist on disk.
 
-    Also removes them from the localvectordb search index.
+    Also removes associated todos and entries from the localvectordb search index.
+
+    Args:
+        notes_root: Root path for notes. Defaults to config.notes_root.
+        notebook: Optional notebook name to limit cleanup to. If provided, only
+            notes within that notebook's directory are checked.
 
     Returns the number of notes removed.
     """
+    config = get_config()
     if notes_root is None:
-        notes_root = get_config().notes_root
+        notes_root = config.notes_root
 
     db = get_db()
-    # Only check internal notes (external=0 or NULL)
-    rows = db.fetchall(
-        "SELECT path, external FROM notes WHERE external IS NULL OR external = 0"
-    )
+
+    # Build query to select internal notes, optionally filtered by notebook
+    if notebook:
+        notebook_config = config.get_notebook(notebook)
+        if notebook_config:
+            if notebook_config.path:
+                # External notebook - external=1 in db, path is absolute
+                rows = db.fetchall(
+                    "SELECT path, external FROM notes WHERE external = 1 AND source_alias = ?",
+                    (notebook,),
+                )
+                # For external notebooks, path is absolute
+                check_root = Path()  # Use path as-is
+            else:
+                # Internal notebook - filter by path prefix
+                notebook_prefix = f"{notebook}/"
+                rows = db.fetchall(
+                    "SELECT path, external FROM notes WHERE (external IS NULL OR external = 0) "
+                    "AND (path LIKE ? OR path LIKE ?)",
+                    (f"{notebook_prefix}%", f"{notebook}\\%"),
+                )
+                check_root = notes_root
+        else:
+            # Invalid notebook name, nothing to remove
+            return 0
+    else:
+        # Only check internal notes (external=0 or NULL)
+        rows = db.fetchall(
+            "SELECT path, external FROM notes WHERE external IS NULL OR external = 0"
+        )
+        check_root = notes_root
 
     removed = 0
     removed_paths = []
 
     for row in rows:
-        full_path = notes_root / row["path"]
+        if notebook and notebook_config and notebook_config.path:
+            # External notebook: path is absolute
+            full_path = Path(row["path"])
+        else:
+            full_path = check_root / row["path"]
+
         if not full_path.exists():
+            # Delete todos for this note first
+            delete_todos_for_source(full_path)
+            # Then delete the note
             db.execute("DELETE FROM notes WHERE path = ?", (row["path"],))
             removed_paths.append(row["path"])
             removed += 1

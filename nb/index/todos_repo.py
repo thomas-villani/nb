@@ -261,6 +261,21 @@ def update_todo_status(todo_id: str, status: TodoStatus) -> None:
     db.commit()
 
 
+def update_todo_due_date_db(todo_id: str, new_date: date | None) -> None:
+    """Update a todo's due date in the database.
+
+    Args:
+        todo_id: The todo ID to update.
+        new_date: The new due date, or None to clear the due date.
+    """
+    db = get_db()
+    db.execute(
+        "UPDATE todos SET due_date = ? WHERE id = ?",
+        (new_date.isoformat() if new_date else None, todo_id),
+    )
+    db.commit()
+
+
 def query_todos(
     completed: bool | None = None,
     status: TodoStatus | None = None,

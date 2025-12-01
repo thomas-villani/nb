@@ -77,6 +77,8 @@ nb open "last friday"     # Fuzzy date parsing
 nb open myalias           # Open note by alias (created with nb alias)
 nb open friday -n work    # Open Friday's note in work notebook
 nb open myproject -n ideas  # Open ideas/myproject.md
+nb open newfile -n ideas  # Prompts to create if doesn't exist
+nb open newfile --no-prompt  # Fail if note doesn't exist (no prompt)
 
 nb show                   # Show today's note in console
 nb show friday            # Show Friday's daily note
@@ -130,6 +132,7 @@ nb list --month            # List this month's daily notes
 nb list -n work            # List notes in work notebook
 nb list -n work --week     # List this week's notes in work notebook
 nb list -f                 # Show full paths to notes
+nb list -d                 # Show details (todo count, mtime, date, excluded status)
 
 nb stream                  # Browse all notes interactively
 nb stream -n daily         # Browse daily notes
@@ -318,6 +321,18 @@ nb todo start abc123    # Mark as in-progress ([ ] -> [^])
 nb todo pause abc123    # Pause in-progress todo ([^] -> [ ])
 nb todo show abc123     # Show todo details
 nb todo edit abc123     # Open source file at todo line
+
+# Change due dates
+nb todo due abc123 friday      # Set due to next Friday
+nb todo due abc123 tomorrow    # Set due to tomorrow
+nb todo due abc123 "dec 25"    # Set due to specific date
+nb todo due abc123 none        # Remove due date
+nb todo due abc def friday     # Set multiple todos at once
+
+# Bulk completion
+nb todo all-done friday        # Mark all todos in Friday's daily note complete
+nb todo all-done work/project  # Mark all in work/project.md
+nb todo all-done friday -f     # Skip confirmation
 
 # Saved views
 nb todo -n work -t urgent --create-view work-urgent  # Save current filters as a view
@@ -647,6 +662,7 @@ Use `nb record devices` to find device indices for your system. WASAPI devices t
 
 ```bash
 nb config                       # Open config file in editor
+nb config edit                  # Same as above (explicit subcommand)
 nb config get editor            # Get a setting value
 nb config set editor code       # Set a setting value
 nb config list                  # List all configurable settings

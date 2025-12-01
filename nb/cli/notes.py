@@ -366,8 +366,15 @@ def history_cmd(
     help="Notebook to open the note from",
     shell_complete=complete_notebook,
 )
+@click.option(
+    "--no-prompt",
+    is_flag=True,
+    help="Don't prompt to create if note doesn't exist",
+)
 @click.pass_context
-def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
+def open_date(
+    ctx: click.Context, note_ref: str, notebook: str | None, no_prompt: bool
+) -> None:
     """Open a note by date or name.
 
     NOTE_REF can be:
@@ -377,6 +384,9 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
     - A note alias (created with 'nb alias')
     - A linked note alias (when used with -n for the linked note's notebook)
     - A path to a note file
+
+    If the note doesn't exist, you'll be prompted to create it.
+    Use --no-prompt to disable this behavior.
 
     \b
     Examples:
@@ -390,7 +400,17 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
     Both notebook and note names support fuzzy matching - if no exact match
     is found, similar options will be suggested interactively.
     """
+    from rich.prompt import Confirm
+
+    from nb.core.notebooks import (
+        ensure_notebook_note,
+        is_notebook_date_based,
+    )
+    from nb.core.notes import create_note
+    from nb.utils.dates import parse_fuzzy_date
+
     show = ctx.obj and ctx.obj.get("show")
+    config = get_config()
 
     try:
         path = resolve_note_ref(note_ref, notebook=notebook, create_if_date_based=True)
@@ -398,11 +418,76 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
         console.print("[dim]Cancelled.[/dim]")
         raise SystemExit(1) from None
 
-    if not path:
+    if path:
+        open_or_show_note(path, show=show)
+        return
+
+    # Note doesn't exist - try to resolve the path without requiring existence
+    # Use interactive=False to avoid duplicate "not found" messages from fuzzy matching
+    try:
+        potential_path = resolve_note_ref(
+            note_ref,
+            notebook=notebook,
+            ensure_exists=False,
+            create_if_date_based=False,
+            interactive=False,
+        )
+    except UserCancelled:
+        console.print("[dim]Cancelled.[/dim]")
+        raise SystemExit(1) from None
+
+    if not potential_path:
         console.print(f"[red]Could not resolve note: {note_ref}[/red]")
         raise SystemExit(1)
 
-    open_or_show_note(path, show=show)
+    # We have a potential path but the file doesn't exist
+    if no_prompt:
+        console.print(f"[red]Note not found: {note_ref}[/red]")
+        raise SystemExit(1)
+
+    # Prompt to create
+    display_name = potential_path.name
+    if Confirm.ask(f"Note '{display_name}' doesn't exist. Create it?", default=True):
+        # Determine how to create the note
+        # Parse notebook from resolved path or use provided notebook
+        resolved_notebook = notebook
+        if not resolved_notebook:
+            try:
+                rel = potential_path.relative_to(config.notes_root)
+                if len(rel.parts) > 1:
+                    resolved_notebook = rel.parts[0]
+            except ValueError:
+                pass
+
+        # Create the note
+        if resolved_notebook and is_notebook_date_based(resolved_notebook):
+            # Date-based: use ensure_notebook_note
+            parsed_date = parse_fuzzy_date(note_ref)
+            if parsed_date:
+                path = ensure_notebook_note(resolved_notebook, dt=parsed_date)
+            else:
+                # If date parsing failed, just create a blank note
+                path = create_note(potential_path.relative_to(config.notes_root))
+        else:
+            # Non-date-based: create with standard function
+            try:
+                rel_path = potential_path.relative_to(config.notes_root)
+            except ValueError:
+                # External path - can't create
+                console.print(
+                    f"[red]Cannot create note outside notes root: {potential_path}[/red]"
+                )
+                raise SystemExit(1) from None
+            path = create_note(rel_path)
+
+        if path and path.exists():
+            console.print(f"[green]Created:[/green] {display_name}")
+            open_or_show_note(path, show=show)
+        else:
+            console.print("[red]Failed to create note.[/red]")
+            raise SystemExit(1)
+    else:
+        console.print("[dim]Cancelled.[/dim]")
 
 
 @click.command("show")
@@ -679,21 +764,83 @@ def add_to_note(
 @click.option("--week", is_flag=True, help="Show this week's notes")
 @click.option("--month", is_flag=True, help="Show this month's notes")
 @click.option("--full", "-f", is_flag=True, help="Show full path to notes")
+@click.option(
+    "--details", "-d", is_flag=True, help="Show extra details (todo count, mtime, etc.)"
+)
 def list_notes_cmd(
-    notebook: str | None, all_notes: bool, week: bool, month: bool, full: bool
+    notebook: str | None,
+    all_notes: bool,
+    week: bool,
+    month: bool,
+    full: bool,
+    details: bool,
 ) -> None:
     """List notes.
 
     By default, shows the 3 most recent notes from each notebook.
     Use --all to list all notes, or --notebook to filter by a specific notebook.
     Use --week or --month to filter by date (defaults to daily notebook if no --notebook given).
+
+    With --details/-d, shows extra information:
+    - Todo count (incomplete todos in the note)
+    - Last modified time
+    - Note date (from frontmatter)
+    - Excluded status (if note is excluded from nb todo)
     """
-    from nb.core.notebooks import get_notebook_notes_with_linked
     from nb.core.notes import (
+        NoteDetails,
         get_all_notes,
         get_latest_notes_per_notebook,
+        get_note_details_batch,
+        get_notebook_notes_with_metadata,
         list_notebook_notes_by_date,
     )
+
+    def format_details_str(d: NoteDetails | None) -> str:
+        """Format note details as a string for display."""
+        if d is None:
+            return ""
+
+        parts = []
+
+        # Todo count
+        if d.todo_count > 0:
+            parts.append(
+                f"[cyan]{d.todo_count} todo{'s' if d.todo_count != 1 else ''}[/cyan]"
+            )
+
+        # Note date
+        if d.note_date:
+            parts.append(f"[dim]{d.note_date}[/dim]")
+
+        # Mtime (relative)
+        if d.mtime:
+            from datetime import datetime, timedelta
+
+            now = datetime.now()
+            mtime_dt = datetime.fromtimestamp(d.mtime)
+            diff = now - mtime_dt
+
+            if diff < timedelta(minutes=1):
+                mtime_str = "just now"
+            elif diff < timedelta(hours=1):
+                mins = int(diff.total_seconds() / 60)
+                mtime_str = f"{mins}m ago"
+            elif diff < timedelta(days=1):
+                hours = int(diff.total_seconds() / 3600)
+                mtime_str = f"{hours}h ago"
+            elif diff < timedelta(days=7):
+                days = diff.days
+                mtime_str = f"{days}d ago"
+            else:
+                mtime_str = mtime_dt.strftime("%b %d")
+            parts.append(f"[dim]mod: {mtime_str}[/dim]")
+
+        # Excluded status
+        if d.todo_exclude:
+            parts.append("[red]excluded[/red]")
+
+        return "  ".join(parts)
 
     if week or month:
         # Get date range
@@ -719,27 +866,68 @@ def list_notes_cmd(
                 console.print("[dim]No daily notes found.[/dim]")
                 return
 
+        # Get details if requested
+        details_map = get_note_details_batch(notes) if details else {}
+
         for note_path in notes:
-            console.print(str(note_path) if full else note_path.stem)
+            base = str(note_path) if full else note_path.stem
+            if details:
+                d = details_map.get(note_path)
+                details_str = format_details_str(d)
+                console.print(f"{base}  {details_str}" if details_str else base)
+            else:
+                console.print(base)
     elif notebook:
-        notes = get_notebook_notes_with_linked(notebook)
+        # Get notes with metadata (title, tags, linked status)
+        notes = get_notebook_notes_with_metadata(notebook)
 
         if not notes:
             console.print(f"[dim]No notes in {notebook}.[/dim]")
             return
 
-        for note_path, is_linked, alias in notes:
+        # Get extra details if requested
+        if details:
+            note_paths = [note_path for note_path, _, _, _, _ in notes]
+            details_map = get_note_details_batch(note_paths)
+        else:
+            details_map = {}
+
+        for note_path, title, tags, is_linked, alias in notes:
+            # Build display name (title or stem)
+            display = title if title else note_path.stem
+
+            # Build tags string
+            tags_str = " ".join(f"[yellow]#{t}[/yellow]" for t in tags) if tags else ""
+
+            # Build base output
             if is_linked:
                 if alias:
-                    console.print(
-                        f"[cyan]{alias}[/cyan] [dim]({note_path if full else note_path.stem})[/dim]"
-                    )
+                    linked_info = f"[cyan]{alias}[/cyan] [dim](linked)[/dim]"
                 else:
-                    console.print(
-                        f"[cyan]{note_path if full else note_path.stem}[/cyan] [dim](linked)[/dim]"
-                    )
+                    linked_info = "[dim](linked)[/dim]"
+                base_parts = [f"  {display}"]
+                if tags_str:
+                    base_parts.append(tags_str)
+                base_parts.append(
+                    f"[dim]({note_path if full else note_path.stem})[/dim]"
+                )
+                base_parts.append(linked_info)
             else:
-                console.print(str(note_path) if full else note_path.stem)
+                base_parts = [f"  {display}"]
+                if tags_str:
+                    base_parts.append(tags_str)
+                base_parts.append(
+                    f"[dim]({note_path if full else note_path.stem})[/dim]"
+                )
+
+            base = " ".join(base_parts)
+
+            if details:
+                d = details_map.get(note_path)
+                details_str = format_details_str(d)
+                console.print(f"{base}  {details_str}" if details_str else base)
+            else:
+                console.print(base)
     elif all_notes:
         # List all notes in all notebooks (one line each)
         notes = get_all_notes()
@@ -747,6 +935,13 @@ def list_notes_cmd(
         if not notes:
             console.print("[dim]No notes found.[/dim]")
             return
+
+        # Get details if requested
+        if details:
+            note_paths = [note_path for note_path, _, _, _ in notes]
+            details_map = get_note_details_batch(note_paths)
+        else:
+            details_map = {}
 
         current_notebook = None
         for note_path, title, nb_name, tags in notes:
@@ -757,14 +952,19 @@ def list_notes_cmd(
                 current_notebook = nb_name
             display = title if title else note_path.stem
             tags_str = " ".join(f"[yellow]#{t}[/yellow]" for t in tags) if tags else ""
+
+            base_parts = [f"  {display}"]
             if tags_str:
-                console.print(
-                    f"  {display} {tags_str} [dim]({note_path if full else note_path.stem})[/dim]"
-                )
+                base_parts.append(tags_str)
+            base_parts.append(f"[dim]({note_path if full else note_path.stem})[/dim]")
+            base = " ".join(base_parts)
+
+            if details:
+                d = details_map.get(note_path)
+                details_str = format_details_str(d)
+                console.print(f"{base}  {details_str}" if details_str else base)
             else:
-                console.print(
-                    f"  {display} [dim]({note_path if full else note_path.stem})[/dim]"
-                )
+                console.print(base)
     else:
         # Default: List latest 3 notes from each notebook
         notes_by_notebook = get_latest_notes_per_notebook(limit=3)
@@ -772,6 +972,15 @@ def list_notes_cmd(
         if not notes_by_notebook:
             console.print("[dim]No notes found.[/dim]")
             return
+
+        # Get details if requested
+        if details:
+            all_paths = []
+            for nb_notes in notes_by_notebook.values():
+                all_paths.extend(note_path for note_path, _, _ in nb_notes)
+            details_map = get_note_details_batch(all_paths)
+        else:
+            details_map = {}
 
         for nb_name in sorted(notes_by_notebook.keys()):
             notes = notes_by_notebook[nb_name]
@@ -783,14 +992,21 @@ def list_notes_cmd(
                 tags_str = (
                     " ".join(f"[yellow]#{t}[/yellow]" for t in tags) if tags else ""
                 )
+
+                base_parts = [f"  {display}"]
                 if tags_str:
-                    console.print(
-                        f"  {display} {tags_str} [dim]({note_path if full else note_path.stem})[/dim]"
-                    )
+                    base_parts.append(tags_str)
+                base_parts.append(
+                    f"[dim]({note_path if full else note_path.stem})[/dim]"
+                )
+                base = " ".join(base_parts)
+
+                if details:
+                    d = details_map.get(note_path)
+                    details_str = format_details_str(d)
+                    console.print(f"{base}  {details_str}" if details_str else base)
                 else:
-                    console.print(
-                        f"  {display} [dim]({note_path if full else note_path.stem})[/dim]"
-                    )
+                    console.print(base)
 
 
 @click.command("alias")

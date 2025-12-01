@@ -104,6 +104,10 @@ Open a note by date or name.
      - Print note to console instead of opening editor
    * - ``-n, --notebook NAME``
      - Search within specified notebook
+   * - ``--no-prompt``
+     - Don't prompt to create if note doesn't exist
+
+If the note doesn't exist, you'll be prompted to create it (unless ``--no-prompt`` is specified).
 
 **Examples:**
 
@@ -114,6 +118,8 @@ Open a note by date or name.
    nb open myproject          # Open by name
    nb open friday -n work     # Date in specific notebook
    nb open myalias            # Open by alias
+   nb open newfile -n ideas   # Prompts to create if missing
+   nb open newfile --no-prompt  # Fail if not found
 
 nb show
 -------
@@ -357,6 +363,15 @@ List notes across notebooks.
      - Filter by notebook
    * - ``-f, --full``
      - Show full paths
+   * - ``-d, --details``
+     - Show extra details (todo count, mtime, excluded status)
+
+By default, shows title and tags. With ``--details``, also shows:
+
+- Todo count (incomplete todos in the note)
+- Last modified time (relative, e.g., "2h ago")
+- Note date (from frontmatter)
+- Excluded status (if note is excluded from ``nb todo``)
 
 **Examples:**
 
@@ -367,6 +382,8 @@ List notes across notebooks.
    nb list --week             # This week's daily notes
    nb list -n work            # Specific notebook
    nb list -f                 # Show full paths
+   nb list -d                 # Show extra details
+   nb list -n work -d         # Notebook with details
 
 nb stream
 ---------

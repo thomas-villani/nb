@@ -140,6 +140,22 @@ def config_list() -> None:
         console.print()
 
 
+@config_cmd.command("edit")
+def config_edit() -> None:
+    """Open the config file in your editor.
+
+    Same as running 'nb config' without a subcommand.
+    """
+    config = get_config()
+
+    # Ensure config exists
+    if not config.config_path.exists():
+        init_config(config.notes_root)
+
+    console.print(f"[dim]Opening {config.config_path}...[/dim]")
+    open_in_editor(config.config_path, editor=config.editor)
+
+
 @config_cmd.command("exclude")
 @click.argument("target")
 def config_exclude(target: str) -> None:
