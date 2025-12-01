@@ -232,8 +232,9 @@ def render_view(state: TodoViewState) -> Panel:
     header.append("Todos", style="bold")
     if state.filter_tag:
         header.append(f" #{state.filter_tag}", style="cyan")
-    if state.filter_notebook:
-        header.append(f" @{state.filter_notebook}", style="magenta")
+    if state.filter_notebooks:
+        nb_str = " ".join(f"@{nb}" for nb in state.filter_notebooks)
+        header.append(f" {nb_str}", style="magenta")
     if state.show_completed:
         header.append(" (showing completed)", style="dim")
     header.append(f" [{len(state.todos)} items]", style="dim")

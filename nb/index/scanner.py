@@ -86,13 +86,13 @@ def get_file_hash(path: Path) -> str:
 def needs_reindex(path: Path, notes_root: Path | None = None) -> bool:
     """Check if a file needs to be reindexed.
 
-    Uses a two-tier check for performance:
-    1. Fast path: Compare file mtime (no file read required)
-    2. Slow path: Compare content hash (only if mtime changed)
+    Compares the file's content hash against the stored hash in the database.
+    This approach was chosen over mtime-based checking due to occasional
+    mtime inconsistencies on some platforms (particularly Windows).
 
     Returns True if:
     - File is not in the database
-    - File's mtime changed AND content hash changed
+    - File's content hash differs from the stored hash
     """
     if notes_root is None:
         notes_root = get_config().notes_root

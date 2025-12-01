@@ -87,7 +87,7 @@ todo_exclude: true
 - [x] Must reindex file after 'nb todo add --note'
 - [x] Add --note and --notebook filter to grep command
 - [x] Need progress / spinners for long-running tasks (syncing and reindexing and search)
-- [ ] Review autocomplete and improve #improvement
+- [x] Review autocomplete and improve #improvement
 - [x] Add a command to delete a todo or a note
 - [x] Be able to define date format of note titles, and display, prefer day of week included in most cases
 - [x] Interactive todo review function

@@ -544,7 +544,11 @@ def stream_notes(
             for path, viewed_at in unique_views:
                 # Look up note info from database
                 # Use normalize_path for consistent path format (forward slashes) on all platforms
-                rel_path = normalize_path(path.relative_to(config.notes_root))
+                try:
+                    rel_path = normalize_path(path.relative_to(config.notes_root))
+                except ValueError:
+                    # External note: use the stored path as-is
+                    rel_path = normalize_path(path)
                 row = db.fetchone(
                     "SELECT title, date, notebook FROM notes WHERE path = ?",
                     (rel_path,),
@@ -585,7 +589,11 @@ def stream_notes(
             for path, mtime in mod_data:
                 # Look up note info from database
                 # Use normalize_path for consistent path format (forward slashes) on all platforms
-                rel_path = normalize_path(path.relative_to(config.notes_root))
+                try:
+                    rel_path = normalize_path(path.relative_to(config.notes_root))
+                except ValueError:
+                    # External note: use the stored path as-is
+                    rel_path = normalize_path(path)
                 row = db.fetchone(
                     "SELECT title, date, notebook FROM notes WHERE path = ?",
                     (rel_path,),

@@ -79,6 +79,38 @@ def get_color_hex(color: str | None) -> str | None:
     return COLOR_MAP.get(color.lower())
 
 
+def _safe_note_path(notes_root: Path, rel: str) -> Path | None:
+    """Validate and resolve a note path, ensuring it stays within notes_root.
+
+    For internal notes (relative paths), ensures the resolved path doesn't
+    escape notes_root via path traversal (e.g., "../../etc/passwd").
+
+    For linked/external notes (absolute paths), returns the path as-is since
+    they are intentionally outside notes_root.
+
+    Args:
+        notes_root: The notes root directory.
+        rel: The relative or absolute path string from the request.
+
+    Returns:
+        Resolved Path if valid, None if path traversal detected.
+    """
+    path = Path(rel)
+
+    # Absolute paths are allowed for linked/external notes
+    if path.is_absolute():
+        return path
+
+    # For relative paths, resolve and check containment
+    resolved = (notes_root / rel).resolve()
+    try:
+        resolved.relative_to(notes_root.resolve())
+    except ValueError:
+        # Path escapes notes_root - path traversal attempt
+        return None
+    return resolved
+
+
 TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -949,12 +981,11 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({"error": "Missing path"})
                 return
 
-            # Handle both absolute paths (linked notes) and relative paths
-            note_path = Path(note_path_str)
-            if note_path.is_absolute():
-                full_path = note_path
-            else:
-                full_path = config.notes_root / note_path_str
+            # Validate path to prevent path traversal attacks
+            full_path = _safe_note_path(config.notes_root, note_path_str)
+            if not full_path:
+                self.send_json({"error": "Invalid path"}, 400)
+                return
 
             if not full_path.exists():
                 self.send_json({"error": "Not found"})
@@ -1096,7 +1127,17 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({"error": "Path required"}, 400)
                 return
 
-            full_path = config.notes_root / note_path
+            # For write operations, only allow relative paths within notes_root
+            # (don't allow writing to absolute paths or path traversal)
+            if Path(note_path).is_absolute():
+                self.send_json({"error": "Cannot write to absolute paths"}, 400)
+                return
+
+            full_path = _safe_note_path(config.notes_root, note_path)
+            if not full_path:
+                self.send_json({"error": "Invalid path"}, 400)
+                return
+
             if is_create and full_path.exists():
                 self.send_json({"error": "File already exists"}, 400)
                 return
