@@ -5,12 +5,15 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["nb"]
 
+[tool.hatch.build.targets.sdist.force-include]
+"docs/build/html" = "docs/build/html"
+
 [tool.hatch.build.targets.wheel.force-include]
-"docs/build/html/" = "nb/_docs/"
+"docs/build/html" = "nb/_docs/"
 
 [project]
 name = "nb-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -70,7 +73,7 @@ localvectordb = { path = "wheels/localvectordb-1.0.0-py3-none-any.whl" }
 
 
 [tool.bumpversion]
-current_version = "0.1.0"
+current_version = "0.2.0"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
 serialize = ["{major}.{minor}.{patch}"]
 commit = true
