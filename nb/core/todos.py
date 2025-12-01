@@ -70,12 +70,12 @@ def parse_tags(content: str) -> list[str]:
 
 
 def extract_todos(
-        path: Path,
-        source_type: str = "note",
-        external: bool = False,
-        alias: str | None = None,
-        notes_root: Path | None = None,
-        notebook: str | None = None,
+    path: Path,
+    source_type: str = "note",
+    external: bool = False,
+    alias: str | None = None,
+    notes_root: Path | None = None,
+    notebook: str | None = None,
 ) -> list[Todo]:
     """Extract all todos from a markdown file.
 
@@ -300,9 +300,9 @@ def can_toggle_linked_file(path: Path) -> bool:
 
 
 def toggle_todo_in_file(
-        path: Path,
-        line_number: int,
-        check_linked_sync: bool = True,
+    path: Path,
+    line_number: int,
+    check_linked_sync: bool = True,
 ) -> bool:
     """Toggle a todo's completion status in its source file.
 
@@ -360,10 +360,10 @@ def toggle_todo_in_file(
 
 
 def set_todo_status_in_file(
-        path: Path,
-        line_number: int,
-        new_status: TodoStatus,
-        check_linked_sync: bool = True,
+    path: Path,
+    line_number: int,
+    new_status: TodoStatus,
+    check_linked_sync: bool = True,
 ) -> bool:
     """Set a todo's status to a specific state in its source file.
 
@@ -486,8 +486,8 @@ def get_inbox_path(notes_root: Path | None = None) -> Path:
 
 
 def find_matching_sections(
-        note_path: Path,
-        section_query: str,
+    note_path: Path,
+    section_query: str,
 ) -> list[tuple[int, str]]:
     """Find sections in a note that match the given query.
 
@@ -544,10 +544,10 @@ def find_matching_sections(
 
 
 def add_todo_to_note(
-        text: str,
-        note_path: Path,
-        section: str | None = None,
-        notes_root: Path | None = None,
+    text: str,
+    note_path: Path,
+    section: str | None = None,
+    notes_root: Path | None = None,
 ) -> Todo:
     """Add a todo to a specific note, optionally under a section heading.
 
@@ -643,8 +643,8 @@ def add_todo_to_note(
                 insert_idx = next_heading_idx
                 # Insert before the next heading
                 while (
-                        insert_idx > section_line_idx + 1
-                        and not lines[insert_idx - 1].strip()
+                    insert_idx > section_line_idx + 1
+                    and not lines[insert_idx - 1].strip()
                 ):
                     insert_idx -= 1
             else:

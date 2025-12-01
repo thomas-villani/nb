@@ -101,9 +101,9 @@ def read_template(name: str, notes_root: Path | None = None) -> str | None:
 
 
 def create_template(
-        name: str,
-        content: str,
-        notes_root: Path | None = None,
+    name: str,
+    content: str,
+    notes_root: Path | None = None,
 ) -> Path:
     """Create a new template file.
 
@@ -146,10 +146,10 @@ def remove_template(name: str, notes_root: Path | None = None) -> bool:
 
 
 def render_template(
-        content: str,
-        title: str | None = None,
-        notebook: str | None = None,
-        dt: date | None = None,
+    content: str,
+    title: str | None = None,
+    notebook: str | None = None,
+    dt: date | None = None,
 ) -> str:
     """Render template variables.
 

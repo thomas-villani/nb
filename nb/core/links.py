@@ -58,9 +58,9 @@ def get_linked_file(alias: str) -> LinkedTodoConfig | None:
 
 
 def add_linked_file(
-        path: Path,
-        alias: str | None = None,
-        sync: bool = True,
+    path: Path,
+    alias: str | None = None,
+    sync: bool = True,
 ) -> LinkedTodoConfig:
     """Add a new linked external todo file.
 
@@ -230,12 +230,12 @@ def get_linked_note(alias: str) -> LinkedNoteConfig | None:
 
 
 def add_linked_note(
-        path: Path,
-        alias: str | None = None,
-        notebook: str | None = None,
-        recursive: bool = True,
-        todo_exclude: bool = False,
-        sync: bool = True,
+    path: Path,
+    alias: str | None = None,
+    notebook: str | None = None,
+    recursive: bool = True,
+    todo_exclude: bool = False,
+    sync: bool = True,
 ) -> LinkedNoteConfig:
     """Add a new linked external note file or directory.
 

@@ -131,7 +131,7 @@ def last_note(show: bool, notebook: str | None, viewed: bool) -> None:
 )
 @click.option("--group", "-g", is_flag=True, help="Group entries by notebook")
 def history_cmd(
-        limit: int, offset: int, notebook: str | None, full_path: bool, group: bool
+    limit: int, offset: int, notebook: str | None, full_path: bool, group: bool
 ) -> None:
     """Show recently viewed notes.
 
@@ -239,12 +239,12 @@ def history_cmd(
         # Group by notebook (old behavior)
         views_by_notebook: dict[str, list] = defaultdict(list)
         for (
-                path,
-                rel_path,
-                timestamps,
-                view_count,
-                linked_alias,
-                nb_name,
+            path,
+            rel_path,
+            timestamps,
+            view_count,
+            linked_alias,
+            nb_name,
         ) in resolved_views:
             views_by_notebook[nb_name].append(
                 (path, rel_path, timestamps, view_count, linked_alias)
@@ -300,12 +300,12 @@ def history_cmd(
     else:
         # Interleaved display (new default) - sorted by most recent first
         for (
-                path,
-                rel_path,
-                timestamps,
-                view_count,
-                linked_alias,
-                nb_name,
+            path,
+            rel_path,
+            timestamps,
+            view_count,
+            linked_alias,
+            nb_name,
         ) in resolved_views:
             # Format the timestamp (use most recent)
             time_str = timestamps[0].strftime("%Y-%m-%d %H:%M")
@@ -431,10 +431,10 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
 @click.option("--title", "-t", help="Title for the note")
 @click.option("--template", "-T", "template_name", help="Template to use for the note")
 def new_note(
-        path: str | None,
-        notebook: str | None,
-        title: str | None,
-        template_name: str | None,
+    path: str | None,
+    notebook: str | None,
+    title: str | None,
+    template_name: str | None,
 ) -> None:
     """Create a new note.
 
@@ -627,7 +627,7 @@ def add_to_note(text: str, target_note: str | None, notebook: str | None) -> Non
 @click.option("--month", is_flag=True, help="Show this month's notes")
 @click.option("--full", "-f", is_flag=True, help="Show full path to notes")
 def list_notes_cmd(
-        notebook: str | None, all_notes: bool, week: bool, month: bool, full: bool
+    notebook: str | None, all_notes: bool, week: bool, month: bool, full: bool
 ) -> None:
     """List notes.
 

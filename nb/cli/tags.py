@@ -36,11 +36,11 @@ def register_tags_commands(cli: click.Group) -> None:
     help="Only count open (non-completed) todos",
 )
 def tags_cmd(
-        sources: bool,
-        sort: str,
-        notebooks: tuple[str, ...],
-        limit: int | None,
-        open_todos: bool,
+    sources: bool,
+    sort: str,
+    notebooks: tuple[str, ...],
+    limit: int | None,
+    open_todos: bool,
 ) -> None:
     """List all tags with usage counts.
 

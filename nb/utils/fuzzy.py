@@ -12,10 +12,10 @@ class UserCancelled(Exception):
 
 
 def get_fuzzy_matches(
-        query: str,
-        candidates: list[str],
-        n: int = 5,
-        cutoff: float = 0.6,
+    query: str,
+    candidates: list[str],
+    n: int = 5,
+    cutoff: float = 0.6,
 ) -> list[str]:
     """Find candidates that fuzzy-match the query.
 
@@ -50,9 +50,9 @@ def get_fuzzy_matches(
 
 
 def prompt_fuzzy_selection(
-        query: str,
-        candidates: list[str],
-        item_type: str = "item",
+    query: str,
+    candidates: list[str],
+    item_type: str = "item",
 ) -> str | None:
     """Interactively prompt user to select from fuzzy matches.
 
@@ -96,10 +96,10 @@ def prompt_fuzzy_selection(
 
 
 def prompt_fuzzy_selection_with_context(
-        query: str,
-        candidates: list[str],
-        context_map: dict[str, str],
-        item_type: str = "item",
+    query: str,
+    candidates: list[str],
+    context_map: dict[str, str],
+    item_type: str = "item",
 ) -> str | None:
     """Interactively prompt user to select from fuzzy matches with context display.
 
@@ -151,10 +151,10 @@ def prompt_fuzzy_selection_with_context(
 
 
 def resolve_with_fuzzy(
-        query: str,
-        candidates: list[str],
-        item_type: str = "item",
-        interactive: bool = True,
+    query: str,
+    candidates: list[str],
+    item_type: str = "item",
+    interactive: bool = True,
 ) -> str | None:
     """Resolve a query to a candidate, with fuzzy matching fallback.
 

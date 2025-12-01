@@ -89,10 +89,10 @@ def notebooks_list(verbose: bool) -> None:
     "--todo-exclude", "-x", is_flag=True, help="Exclude from nb todo by default"
 )
 def notebooks_create(
-        name: str,
-        from_path: str | None,
-        date_based: bool,
-        todo_exclude: bool,
+    name: str,
+    from_path: str | None,
+    date_based: bool,
+    todo_exclude: bool,
 ) -> None:
     """Create a new notebook.
 

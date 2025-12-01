@@ -62,7 +62,7 @@ def editor_supports_line_number(editor: str) -> bool:
 
 
 def open_in_editor(
-        path: Path, line: int | None = None, editor: str | None = None
+    path: Path, line: int | None = None, editor: str | None = None
 ) -> None:
     """Open a file in the configured editor.
 

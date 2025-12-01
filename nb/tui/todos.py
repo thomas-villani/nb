@@ -300,10 +300,10 @@ def get_key() -> str:
 
 
 def run_interactive_todos(
-        show_completed: bool = False,
-        tag: str | None = None,
-        notebooks: list[str] | None = None,
-        exclude_notebooks: list[str] | None = None,
+    show_completed: bool = False,
+    tag: str | None = None,
+    notebooks: list[str] | None = None,
+    exclude_notebooks: list[str] | None = None,
 ) -> None:
     """Run the interactive todo viewer.
 
@@ -406,7 +406,7 @@ def run_interactive_todos(
                             new_status = TodoStatus.IN_PROGRESS
                             action = "Started"
                         if set_todo_status_in_file(
-                                todo.source.path, todo.line_number, new_status
+                            todo.source.path, todo.line_number, new_status
                         ):
                             update_todo_status(todo.id, new_status)
                             state.message = f"{action}: {todo.content[:40]}"

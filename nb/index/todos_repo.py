@@ -243,24 +243,24 @@ def update_todo_status(todo_id: str, status: TodoStatus) -> None:
 
 
 def query_todos(
-        completed: bool | None = None,
-        status: TodoStatus | None = None,
-        include_in_progress: bool = True,
-        due_start: date | None = None,
-        due_end: date | None = None,
-        created_start: date | None = None,
-        created_end: date | None = None,
-        overdue: bool = False,
-        priority: int | None = None,
-        notebooks: list[str] | None = None,
-        notes: list[str] | None = None,
-        sections: list[str] | None = None,
-        exclude_notebooks: list[str] | None = None,
-        tag: str | None = None,
-        exclude_tags: list[str] | None = None,
-        source_path: Path | None = None,
-        parent_only: bool = True,
-        exclude_note_excluded: bool = True,
+    completed: bool | None = None,
+    status: TodoStatus | None = None,
+    include_in_progress: bool = True,
+    due_start: date | None = None,
+    due_end: date | None = None,
+    created_start: date | None = None,
+    created_end: date | None = None,
+    overdue: bool = False,
+    priority: int | None = None,
+    notebooks: list[str] | None = None,
+    notes: list[str] | None = None,
+    sections: list[str] | None = None,
+    exclude_notebooks: list[str] | None = None,
+    tag: str | None = None,
+    exclude_tags: list[str] | None = None,
+    source_path: Path | None = None,
+    parent_only: bool = True,
+    exclude_note_excluded: bool = True,
 ) -> list[Todo]:
     """Query todos with filters.
 
@@ -302,8 +302,21 @@ def query_todos(
         params.append(tag.lower())
 
     # Join with notes if filtering by note-level todo_exclude
+    # Strategy:
+    # - For linked todos (source_alias set): match via source_alias (unambiguous)
+    # - For internal todos (no source_alias): match via path suffix
+    # This avoids false matches where linked todo paths accidentally match internal note paths
     if exclude_note_excluded:
-        joins.append("LEFT JOIN notes n ON t.source_path = n.path")
+        joins.append(
+            """LEFT JOIN notes n ON (
+                (t.source_alias IS NOT NULL AND n.source_alias = t.source_alias)
+                OR (t.source_alias IS NULL AND (
+                    t.source_path = n.path
+                    OR (n.path NOT LIKE '_:/%' AND n.path NOT LIKE '/%'
+                        AND t.source_path LIKE '%/' || n.path)
+                ))
+            )"""
+        )
         conditions.append("(n.todo_exclude IS NULL OR n.todo_exclude = 0)")
 
     # Add joins to SQL
@@ -366,8 +379,8 @@ def query_todos(
         for note_path in notes:
             # Check if this looks like a full/absolute path (contains drive letter or starts with /)
             is_full_path = (
-                                   len(note_path) > 2 and note_path[1] == ":"  # Windows: C:/...
-                           ) or note_path.startswith(
+                len(note_path) > 2 and note_path[1] == ":"  # Windows: C:/...
+            ) or note_path.startswith(
                 "/"
             )  # Unix: /home/...
 
@@ -454,19 +467,19 @@ def get_todo_children(parent_id: str) -> list[Todo]:
 
 
 def get_sorted_todos(
-        completed: bool | None = False,
-        tag: str | None = None,
-        exclude_tags: list[str] | None = None,
-        notebooks: list[str] | None = None,
-        notes: list[str] | None = None,
-        sections: list[str] | None = None,
-        exclude_notebooks: list[str] | None = None,
-        priority: int | None = None,
-        due_start: date | None = None,
-        due_end: date | None = None,
-        created_start: date | None = None,
-        created_end: date | None = None,
-        exclude_note_excluded: bool = True,
+    completed: bool | None = False,
+    tag: str | None = None,
+    exclude_tags: list[str] | None = None,
+    notebooks: list[str] | None = None,
+    notes: list[str] | None = None,
+    sections: list[str] | None = None,
+    exclude_notebooks: list[str] | None = None,
+    priority: int | None = None,
+    due_start: date | None = None,
+    due_end: date | None = None,
+    created_start: date | None = None,
+    created_end: date | None = None,
+    exclude_note_excluded: bool = True,
 ) -> list[Todo]:
     """Get todos sorted by the default sorting order.
 
@@ -557,15 +570,15 @@ def get_todo_stats() -> dict[str, int]:
         "completed": completed["count"] if completed else 0,
         "in_progress": in_progress["count"] if in_progress else 0,
         "open": (total["count"] if total else 0)
-                - (completed["count"] if completed else 0),
+        - (completed["count"] if completed else 0),
         "overdue": overdue["count"] if overdue else 0,
         "due_today": due_today["count"] if due_today else 0,
     }
 
 
 def get_extended_todo_stats(
-        notebooks: list[str] | None = None,
-        exclude_notebooks: list[str] | None = None,
+    notebooks: list[str] | None = None,
+    exclude_notebooks: list[str] | None = None,
 ) -> dict:
     """Get extended todo statistics for dashboard.
 
@@ -691,9 +704,9 @@ def get_extended_todo_stats(
 
 
 def get_todo_activity(
-        days: int = 30,
-        notebooks: list[str] | None = None,
-        exclude_notebooks: list[str] | None = None,
+    days: int = 30,
+    notebooks: list[str] | None = None,
+    exclude_notebooks: list[str] | None = None,
 ) -> dict:
     """Get todo creation/completion activity over time.
 
@@ -752,10 +765,10 @@ def get_todo_activity(
 
 
 def get_tag_stats(
-        include_sources: bool = False,
-        notebooks: list[str] | None = None,
-        exclude_notebooks: list[str] | None = None,
-        completed: bool | None = None,
+    include_sources: bool = False,
+    notebooks: list[str] | None = None,
+    exclude_notebooks: list[str] | None = None,
+    completed: bool | None = None,
 ) -> list[dict]:
     """Get tag usage statistics.
 

@@ -55,7 +55,7 @@ def scan_notes(notes_root: Path | None = None) -> list[Path]:
         for md_file in notes_root.rglob("*.md"):
             # Skip hidden directories and .nb
             if any(
-                    part.startswith(".") for part in md_file.relative_to(notes_root).parts
+                part.startswith(".") for part in md_file.relative_to(notes_root).parts
             ):
                 continue
             notes.append(md_file)
@@ -103,10 +103,10 @@ def needs_reindex(path: Path, notes_root: Path | None = None) -> bool:
         relative = path
 
     # Get current file mtime
-    try:
-        current_mtime = path.stat().st_mtime
-    except OSError:
-        return True  # File doesn't exist or can't be read
+    # try:
+    #     _current_mtime = path.stat().st_mtime
+    # except OSError:
+    #     return True  # File doesn't exist or can't be read
 
     db = get_db()
     row = db.fetchone(
@@ -117,19 +117,22 @@ def needs_reindex(path: Path, notes_root: Path | None = None) -> bool:
     if not row:
         return True  # New file
 
-    # Fast path: mtime unchanged means file unchanged
-    if row["mtime"] is not None and row["mtime"] == current_mtime:
-        return False
-
-    # Slow path: mtime changed, verify with content hash
+    # Fast path: mtime unchanged AND hash matches means file unchanged
+    # Note: We can't trust mtime alone due to potential race conditions
+    # where mtime was captured but old content was read during indexing.
+    # Always verify with content hash for correctness.
     current_hash = get_file_hash(path)
-    return row["content_hash"] != current_hash
+    if row["content_hash"] == current_hash:
+        return False  # Content unchanged, no reindex needed
+
+    # Content changed (hash mismatch), needs reindex
+    return True
 
 
 def index_note(
-        path: Path,
-        notes_root: Path | None = None,
-        index_vectors: bool = True,
+    path: Path,
+    notes_root: Path | None = None,
+    index_vectors: bool = True,
 ) -> None:
     """Index a single note file.
 
@@ -248,9 +251,9 @@ def index_note(
 
 
 def count_files_to_index(
-        notes_root: Path | None = None,
-        force: bool = False,
-        notebook: str | None = None,
+    notes_root: Path | None = None,
+    force: bool = False,
+    notebook: str | None = None,
 ) -> int:
     """Count the number of files that need to be indexed.
 
@@ -292,12 +295,12 @@ def count_files_to_index(
 
 
 def index_all_notes(
-        notes_root: Path | None = None,
-        force: bool = False,
-        index_vectors: bool = True,
-        max_workers: int = 4,
-        notebook: str | None = None,
-        on_progress: "Callable[[int], None] | None" = None,
+    notes_root: Path | None = None,
+    force: bool = False,
+    index_vectors: bool = True,
+    max_workers: int = 4,
+    notebook: str | None = None,
+    on_progress: "Callable[[int], None] | None" = None,
 ) -> int:
     """Index all notes in the notes root.
 
@@ -381,9 +384,9 @@ def index_all_notes(
 
 
 def _index_note_thread_safe(
-        path: Path,
-        notes_root: Path,
-        index_vectors: bool = True,
+    path: Path,
+    notes_root: Path,
+    index_vectors: bool = True,
 ) -> None:
     """Thread-safe wrapper for index_note.
 
@@ -491,10 +494,10 @@ def _index_note_thread_safe(
 
 
 def rebuild_search_index(
-        notes_root: Path | None = None,
-        notebook: str | None = None,
-        on_progress: "Callable[[int], None] | None" = None,
-        batch_size: int = 25,
+    notes_root: Path | None = None,
+    notebook: str | None = None,
+    on_progress: "Callable[[int], None] | None" = None,
+    batch_size: int = 25,
 ) -> int:
     """Rebuild the localvectordb search index from scratch.
 
@@ -647,9 +650,9 @@ def count_notes_for_search_rebuild(notebook: str | None = None) -> int:
 
 
 def sync_search_index(
-        notebook: str | None = None,
-        on_progress: "Callable[[int], None] | None" = None,
-        batch_size: int = 25,
+    notebook: str | None = None,
+    on_progress: "Callable[[int], None] | None" = None,
+    batch_size: int = 25,
 ) -> int:
     """Sync notes from SQLite to VectorDB that are missing from VectorDB.
 
@@ -924,12 +927,12 @@ def remove_deleted_notes(notes_root: Path | None = None) -> int:
 
 
 def index_linked_note(
-        path: Path,
-        notebook: str,
-        alias: str,
-        notes_root: Path | None = None,
-        index_vectors: bool = True,
-        todo_exclude: bool = False,
+    path: Path,
+    notebook: str,
+    alias: str,
+    notes_root: Path | None = None,
+    index_vectors: bool = True,
+    todo_exclude: bool = False,
 ) -> None:
     """Index a single linked (external) note file.
 
@@ -1064,8 +1067,8 @@ def index_linked_note(
 
 
 def scan_linked_notes(
-        notebook_filter: str | None = None,
-        on_progress: "Callable[[int], None] | None" = None,
+    notebook_filter: str | None = None,
+    on_progress: "Callable[[int], None] | None" = None,
 ) -> int:
     """Scan all linked external note files/directories and index them.
 

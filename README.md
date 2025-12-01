@@ -34,7 +34,7 @@ pip install -e .
 
 ### Requirements
 
-- Python 3.11+
+- Python 3.13+
 - [Ollama](https://ollama.ai/) (for semantic search, optional)
 
 ## Quick Start
@@ -89,10 +89,12 @@ nb last -n work           # Last modified note in work notebook
 nb last --viewed          # Open last viewed note (instead of modified)
 nb last --viewed -n work  # Last viewed note in work notebook
 
-nb history                # Show last 10 viewed notes (grouped by notebook)
+nb history                # Show last 10 viewed notes
 nb history -l 50          # Show last 50 viewed notes
+nb history -o 10          # Skip first 10, show next 10
 nb history -n work        # Filter by notebook
 nb history -f             # Show full paths instead of filenames
+nb history -g             # Group entries by notebook
 ```
 
 Date-based notebooks organize notes by work week:
@@ -124,6 +126,9 @@ nb stream                  # Browse all notes interactively
 nb stream -n daily         # Browse daily notes
 nb stream -w "last week"   # Browse last week's notes
 nb stream -n daily -w "last 2 weeks"  # Daily notes from last 2 weeks
+nb stream --recent         # Browse recently viewed notes
+nb stream --recently-modified  # Browse recently modified notes
+nb stream --recent -l 20   # Last 20 viewed notes
 ```
 
 ### Note Templates
@@ -364,6 +369,8 @@ nb search "query" --limit 5              # Limit number of results
 
 nb grep "pattern"       # Regex search
 nb grep "TODO.*urgent" -C 5  # With context lines
+nb grep "config" -n work     # Filter by notebook
+nb grep "setup" --note myproject  # Filter by specific note
 ```
 
 ### Statistics
@@ -469,6 +476,7 @@ nb index --force      # Force full reindex
 nb index -n daily     # Only reindex a specific notebook
 nb index --rebuild    # Drop and recreate database (for schema changes)
 nb index --embeddings # Rebuild search embeddings
+nb index --vectors-only  # Rebuild only vectors (skip file indexing)
 ```
 
 ### Configuration Commands

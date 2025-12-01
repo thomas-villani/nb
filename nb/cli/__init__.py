@@ -62,7 +62,7 @@ class AliasedGroup(click.Group):
         return None
 
     def resolve_command(
-            self, ctx: click.Context, args: list[str]
+        self, ctx: click.Context, args: list[str]
     ) -> tuple[str | None, click.Command | None, list[str]]:
         # Handle special aliases that inject arguments
         if args:
