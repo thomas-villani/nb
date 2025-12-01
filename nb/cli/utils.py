@@ -650,6 +650,21 @@ def resolve_note_ref(
 
         # Handle date-based vs non-date-based notebooks
         if is_notebook_date_based(notebook):
+            # First, try to find an exact file match (e.g., for transcript files)
+            # This handles cases like "2025-12-01_bizdev-weekly" which shouldn't
+            # be parsed as just the date "2025-12-01"
+            nb_path = config.get_notebook_path(notebook)
+            if nb_path:
+                # Search for exact filename match in the notebook
+                exact_matches = list(nb_path.rglob(f"{note_ref}.md"))
+                if not exact_matches:
+                    # Try without .md extension in case note_ref already has it
+                    if note_ref.endswith(".md"):
+                        exact_matches = list(nb_path.rglob(note_ref))
+                if exact_matches:
+                    return exact_matches[0]
+
+            # Fall back to date parsing
             parsed = parse_fuzzy_date(note_ref)
             if parsed:
                 if create_if_date_based:
@@ -690,6 +705,14 @@ def resolve_note_ref(
     note_path = ensure_note_path(note_ref, notes_root=config.notes_root)
     if note_path.exists():
         return note_path
+
+    # Search for exact filename match anywhere in notes_root
+    # This handles cases like "2025-12-01_bizdev-weekly" which is nested in week folders
+    exact_matches = list(config.notes_root.rglob(f"{note_ref}.md"))
+    if not exact_matches and note_ref.endswith(".md"):
+        exact_matches = list(config.notes_root.rglob(note_ref))
+    if exact_matches:
+        return exact_matches[0]
 
     # Try to parse as a date (for daily notes)
     parsed = parse_fuzzy_date(note_ref)

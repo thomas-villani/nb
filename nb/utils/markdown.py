@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import frontmatter
+import yaml.scanner
 
 from nb.config import get_config
 from nb.utils.dates import parse_date_from_filename
@@ -28,8 +29,13 @@ def parse_note_file(path: Path) -> tuple[dict[str, Any], str]:
     Returns a tuple of (frontmatter_dict, body_content).
     If no frontmatter exists, returns empty dict and full content.
     """
-    with path.open(encoding="utf-8") as f:
-        post = frontmatter.load(f)
+    try:
+        with path.open(encoding="utf-8") as f:
+            post = frontmatter.load(f)
+    except yaml.scanner.ScannerError as e:
+        print(f"Error parsing yaml in {path}: {e!r}")
+        raise e
+
     return dict(post.metadata), post.content
 
 

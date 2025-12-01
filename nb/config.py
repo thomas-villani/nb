@@ -82,6 +82,17 @@ class TodoConfig:
 
 
 @dataclass
+class RecorderConfig:
+    """Configuration for audio recording."""
+
+    mic_device: int | None = None  # Microphone device index (-1 or None for default)
+    loopback_device: int | None = None  # System audio device index
+    sample_rate: int = 16000  # Sample rate in Hz (16000 recommended for speech)
+    auto_delete_audio: bool = False  # Delete WAV file after successful transcription
+    transcribe_timeout: int = 600  # Deepgram API timeout in seconds (default 10 min)
+
+
+@dataclass
 class TodoViewConfig:
     """Configuration for a saved todo view.
 
@@ -119,6 +130,7 @@ class Config:
     embeddings: EmbeddingsConfig = field(default_factory=EmbeddingsConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
     todo: TodoConfig = field(default_factory=TodoConfig)
+    recorder: RecorderConfig = field(default_factory=RecorderConfig)
     date_format: str = "%Y-%m-%d"
     time_format: str = "%H:%M"
     daily_title_format: str = "%A, %B %d, %Y"  # e.g., "Friday, November 28, 2025"
@@ -368,6 +380,19 @@ def _parse_todo_config(data: dict[str, Any] | None) -> TodoConfig:
     )
 
 
+def _parse_recorder_config(data: dict[str, Any] | None) -> RecorderConfig:
+    """Parse recorder configuration."""
+    if data is None:
+        return RecorderConfig()
+    return RecorderConfig(
+        mic_device=data.get("mic_device"),
+        loopback_device=data.get("loopback_device"),
+        sample_rate=data.get("sample_rate", 16000),
+        auto_delete_audio=data.get("auto_delete_audio", False),
+        transcribe_timeout=data.get("transcribe_timeout", 600),
+    )
+
+
 def load_config(config_path: Path | None = None) -> Config:
     """Load configuration from YAML file.
 
@@ -407,6 +432,7 @@ def load_config(config_path: Path | None = None) -> Config:
     embeddings = _parse_embeddings(data.get("embeddings"))
     search = _parse_search(data.get("search"))
     todo_config = _parse_todo_config(data.get("todo"))
+    recorder_config = _parse_recorder_config(data.get("recorder"))
     date_format = data.get("date_format", "%Y-%m-%d")
     time_format = data.get("time_format", "%H:%M")
     daily_title_format = data.get("daily_title_format", "%A, %B %d, %Y")
@@ -420,6 +446,7 @@ def load_config(config_path: Path | None = None) -> Config:
         embeddings=embeddings,
         search=search,
         todo=todo_config,
+        recorder=recorder_config,
         date_format=date_format,
         time_format=time_format,
         daily_title_format=daily_title_format,
@@ -474,8 +501,21 @@ def save_config(config: Config) -> None:
         "auto_complete_children": config.todo.auto_complete_children,
     }
 
+    # Build recorder config dict (only include non-default values)
+    recorder_data: dict[str, Any] = {}
+    if config.recorder.mic_device is not None:
+        recorder_data["mic_device"] = config.recorder.mic_device
+    if config.recorder.loopback_device is not None:
+        recorder_data["loopback_device"] = config.recorder.loopback_device
+    if config.recorder.sample_rate != 16000:
+        recorder_data["sample_rate"] = config.recorder.sample_rate
+    if config.recorder.auto_delete_audio:
+        recorder_data["auto_delete_audio"] = config.recorder.auto_delete_audio
+    if config.recorder.transcribe_timeout != 600:
+        recorder_data["transcribe_timeout"] = config.recorder.transcribe_timeout
+
     # Note: linked_todos and linked_notes are stored in the database, not config
-    data = {
+    data: dict[str, Any] = {
         "notes_root": str(config.notes_root),
         "editor": config.editor,
         "notebooks": notebooks_data,
@@ -490,6 +530,10 @@ def save_config(config: Config) -> None:
         "daily_title_format": config.daily_title_format,
         "week_start_day": config.week_start_day,
     }
+
+    # Only include recorder config if there are non-default settings
+    if recorder_data:
+        data["recorder"] = recorder_data
 
     config.config_path.parent.mkdir(parents=True, exist_ok=True)
     with config.config_path.open("w", encoding="utf-8") as f:

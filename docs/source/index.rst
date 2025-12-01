@@ -25,6 +25,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
    commands/notes
    commands/todos
    commands/search
+   commands/recording
    commands/management
 
 .. toctree::

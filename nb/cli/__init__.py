@@ -23,11 +23,13 @@ from nb.cli.config_cmd import register_config_commands
 from nb.cli.links import register_link_commands
 from nb.cli.notebooks import register_notebook_commands
 from nb.cli.notes import register_note_commands, today
+from nb.cli.record import register_record_commands
 from nb.cli.search import register_search_commands
 from nb.cli.stats import register_stats_commands
 from nb.cli.tags import register_tags_commands
 from nb.cli.templates import register_template_commands
 from nb.cli.todos import register_todo_commands
+from nb.cli.transcribe import register_transcribe_commands
 from nb.cli.utils import ensure_setup
 from nb.cli.web import register_web_commands
 
@@ -43,6 +45,7 @@ class AliasedGroup(click.Group):
         "s": "search",
         "nbs": "notebooks",
         "td": "todo",
+        "rec": "record",
     }
 
     # Special aliases that need argument injection
@@ -110,29 +113,34 @@ def cli(ctx: click.Context, show: bool, notebook: str | None) -> None:
 
 
 @cli.command("help")
-@click.option("--plain", "-p", is_flag=True, help="Print in plaintext")
 @click.pass_context
-def help_cmd(ctx, plain: bool):
-    """Displays readme.md in rich formatting to stdout"""
+def help_cmd(ctx):
+    """Open documentation in web browser."""
+    import webbrowser
+
     from rich.console import Console
-    from rich.markdown import Markdown
 
     console = Console()
-    readme_file = Path(__file__).parent.parent.parent / "readme.md2"
-    if readme_file.exists():
-        content = readme_file.read_text(encoding="utf-8")
-        if not plain:
-            content = Markdown(content)
-    else:
-        content = "Error! readme.md file not found."
-        if not plain:
-            content = f"[bright_red]{content}[/bright_red]"
 
-    if plain:
-        print(content)
+    # Look for docs in package (installed) then dev location
+    package_docs = Path(__file__).parent.parent / "_docs" / "index.html"
+    dev_docs = (
+        Path(__file__).parent.parent.parent / "docs" / "build" / "html" / "index.html"
+    )
+
+    if package_docs.exists():
+        docs_path = package_docs
+    elif dev_docs.exists():
+        docs_path = dev_docs
     else:
-        console.print(content)
-    return
+        console.print("[red]Documentation not found.[/red]")
+        console.print("[dim]Build docs with: cd docs && make html[/dim]")
+        raise SystemExit(1)
+
+    # Open in browser
+    url = docs_path.as_uri()
+    console.print("[green]Opening documentation...[/green]")
+    webbrowser.open(url)
 
 
 # Register all command groups
@@ -148,6 +156,8 @@ register_completion_commands(cli)
 register_stats_commands(cli)
 register_tags_commands(cli)
 register_web_commands(cli)
+register_record_commands(cli)
+register_transcribe_commands(cli)
 
 
 def main() -> None:

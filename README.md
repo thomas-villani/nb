@@ -18,6 +18,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Attachments** - Attach files and URLs to notes and todos
 - **Interactive mode** - Keyboard-driven todo management
 - **Web viewer** - Browse notes in a browser with search and todos
+- **Meeting recording** - Record audio and transcribe with speaker diarization (optional)
 
 ## Installation
 
@@ -517,6 +518,131 @@ Features:
 
 Press `Ctrl+C` to stop the server.
 
+### Meeting Recording
+
+Record meetings and automatically transcribe them with speaker diarization.
+
+**Requires optional dependencies:**
+
+```bash
+uv sync --extra recorder
+```
+
+**Also requires:**
+- WASAPI-capable audio devices (Windows)
+- Deepgram API key (set `DEEPGRAM_API_KEY` environment variable)
+
+#### Commands
+
+```bash
+# Recording
+nb record start                     # Start recording (Ctrl+C to stop)
+nb record start --name standup      # Name the recording
+nb record start -n work             # Save transcript to 'work' notebook
+nb record start --audio-only        # Record without auto-transcription
+nb record start --mic-only          # Record microphone only (no system audio)
+nb record start --system-only       # Record system audio only (no microphone)
+nb record start --dictate           # Dictation mode: mic-only, optimized transcription
+nb record start --delete-audio      # Delete WAV file after transcription
+nb record devices                   # List available audio devices
+nb record start --mic 1 --loopback 3  # Use specific devices
+
+# Transcribing existing audio files
+nb transcribe ~/Downloads/meeting.wav           # Transcribe any audio file
+nb transcribe meeting.mp3 --name client-call    # With custom name
+nb transcribe recording.wav -n work             # Save to specific notebook
+nb transcribe meeting.wav --speakers "0:Me,1:Client"  # Name speakers
+nb transcribe meeting.wav --copy                # Copy file to .nb/recordings/
+
+# Managing recordings
+nb record list                      # List all recordings
+nb record list --status pending     # Show only untranscribed recordings
+nb record transcribe 2025-12-01_standup  # Re-transcribe a recording
+nb record transcribe --all               # Transcribe all pending
+nb record purge                     # Delete transcribed WAV files
+nb record purge --older-than 30     # Delete recordings older than 30 days
+nb record purge --all               # Delete all WAV files (including pending)
+nb record purge --dry-run           # Preview what would be deleted
+```
+
+#### Recording Flow
+
+1. **Record**: `nb record start --name meeting-name`
+   - Audio is captured from microphone and/or system audio (configurable)
+   - Saved as WAV: stereo when both sources (left=mic, right=system), mono otherwise
+   - Use `--mic-only` or `--system-only` to capture from a single source
+   - Press Ctrl+C to stop
+
+2. **Transcribe**: Automatically runs after recording (unless `--audio-only`)
+   - Uploads to Deepgram for transcription with speaker diarization
+   - Saves structured JSON to `.nb/recordings/`
+   - Saves human-readable Markdown to your notebook
+
+3. **Result**: Transcript note is indexed by nb
+   - Appears in searches
+   - Todos extracted (if transcript contains checkboxes)
+   - Tags from frontmatter
+
+#### Output Files
+
+| File | Location | Description |
+|------|----------|-------------|
+| `{date}_{time}_{name}.wav` | `.nb/recordings/` | Raw audio file |
+| `{date}_{time}_{name}.json` | `.nb/recordings/` | Structured transcript data |
+| `{date}_{time}_{name}.md` | `{notebook}/...` | Human-readable transcript |
+
+Example: `2025-12-01_1430_standup.wav` for a recording started at 2:30 PM.
+
+#### Transcript Format
+
+The Markdown transcript includes:
+- YAML frontmatter with date, tags, and duration
+- Meeting metadata (date, duration)
+- Speaker-attributed utterances with timestamps
+
+```markdown
+---
+date: 2025-12-01
+tags: [meeting, transcript]
+duration: 30:45
+---
+
+# Meeting: Standup
+
+**Date:** 2025-12-01 09:00
+**Duration:** 30:45
+
+---
+
+**Speaker 0** [0:00]: Good morning everyone, let's start the standup.
+
+**Speaker 1** [0:05]: Sure. Yesterday I worked on the API integration...
+```
+
+Use `--speakers "0:Alice,1:Bob"` during transcription to replace generic speaker labels with names.
+
+#### Dictation Mode
+
+Use `--dictate` for voice notes and dictation:
+- Records mic only (no system audio)
+- Optimized transcription for single-speaker dictation
+- Spoken phrases like "new todo item:" are converted to `- [ ]` checkboxes
+- Tagged as `voice-note`, `dictation` instead of `meeting`, `transcript`
+
+#### Recorder Configuration
+
+Configure default device settings in `config.yaml`:
+
+```yaml
+recorder:
+  mic_device: 1              # Microphone device index (null for default)
+  loopback_device: 3         # System audio device index (null for default)
+  sample_rate: 48000         # Sample rate in Hz (48000 for WASAPI, 16000 for MME)
+  auto_delete_audio: false   # Automatically delete WAV after transcription
+```
+
+Use `nb record devices` to find device indices for your system. WASAPI devices typically require 48000 Hz sample rate.
+
 ### Configuration Commands
 
 ```bash
@@ -611,6 +737,13 @@ todo_views:
       notebooks: [daily]
       hide_later: true
       hide_no_date: true
+
+# Recording settings (optional feature)
+recorder:
+  mic_device: null        # Device index or null for default
+  loopback_device: null   # Device index or null for default
+  sample_rate: 48000      # 48000 for WASAPI devices, 16000 for MME
+  auto_delete_audio: false
 ```
 
 ### Notebook Options
@@ -811,6 +944,7 @@ Reviewed the roadmap and assigned initial tasks.
 | `td` | `todo` |
 | `ta` | `todo add` (supports `--today`, `--note`/`-N`) |
 | `nbs` | `notebooks` |
+| `rec` | `record` |
 | `nbt` | Standalone command equivalent to `nb todo` |
 
 The `nbt` command is a separate executable that works exactly like `nb todo`:

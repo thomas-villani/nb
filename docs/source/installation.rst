@@ -58,3 +58,40 @@ Alternatively, use OpenAI embeddings:
 
    nb config set embeddings.provider openai
    nb config set embeddings.api_key sk-your-key-here
+
+Setting up meeting recording
+----------------------------
+
+Meeting recording is an optional feature that requires additional dependencies:
+
+.. code-block:: bash
+
+   # Install recorder dependencies
+   uv sync --extra recorder
+
+   # Or with pip
+   pip install -e ".[recorder]"
+
+**Requirements:**
+
+- Windows with WASAPI-capable audio devices
+- Deepgram API key for transcription
+
+Set up your Deepgram API key:
+
+.. code-block:: bash
+
+   # Set environment variable
+   export DEEPGRAM_API_KEY=your-api-key-here
+
+   # Or on Windows (PowerShell)
+   $env:DEEPGRAM_API_KEY = "your-api-key-here"
+
+Get a Deepgram API key at https://console.deepgram.com/
+
+Test recording is available:
+
+.. code-block:: bash
+
+   nb record devices   # Should list audio devices
+   nb record --help    # Show recording commands
