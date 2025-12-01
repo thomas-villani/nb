@@ -6,7 +6,12 @@ from datetime import date, timedelta
 
 import click
 
-from nb.cli.utils import console, find_todo, get_notebook_display_info
+from nb.cli.utils import (
+    console,
+    find_todo,
+    get_notebook_display_info,
+    get_stdin_content,
+)
 from nb.config import TodoViewConfig, get_config, save_config
 from nb.core.todos import (
     add_todo_to_daily_note,
@@ -1174,7 +1179,7 @@ def _print_todo(
 
 
 @todo.command("add")
-@click.argument("text")
+@click.argument("text", required=False)
 @click.option(
     "--today",
     "add_today",
@@ -1187,9 +1192,10 @@ def _print_todo(
     "target_note",
     help="Add to specific note (path or path::section)",
 )
-def todo_add(text: str, add_today: bool, target_note: str | None) -> None:
+def todo_add(text: str | None, add_today: bool, target_note: str | None) -> None:
     """Add a new todo to the inbox (or today's note with --today).
 
+    Accepts todo text as an argument or from stdin (piped input).
     TEXT can include inline metadata:
 
     \b
@@ -1205,7 +1211,22 @@ def todo_add(text: str, add_today: bool, target_note: str | None) -> None:
       nb todo add --today "Call dentist"
       nb todo add --note work/project "Document API"
       nb todo add --note work/project::Tasks "New task"
+
+    \b
+    Piping examples:
+      echo "Review PR" | nb todo add               # Pipe to inbox
+      pbpaste | nb todo add --today                # Pipe clipboard to daily note
+      echo "Task @due(friday)" | nb todo add       # Pipe with metadata
     """
+    # Check stdin first, then use argument
+    content = get_stdin_content() or text
+
+    if not content:
+        console.print("[red]No todo text provided.[/red]")
+        console.print(
+            '[dim]Usage: nb todo add "text" or echo "text" | nb todo add[/dim]'
+        )
+        raise SystemExit(1)
     from nb.core.todos import add_todo_to_note
 
     if target_note:
@@ -1269,7 +1290,7 @@ def todo_add(text: str, add_today: bool, target_note: str | None) -> None:
                     section = matches[int(choice) - 1][1]
 
         try:
-            t = add_todo_to_note(text, resolved_path, section=section)
+            t = add_todo_to_note(content, resolved_path, section=section)
             if t.section:
                 # Use t.section which has the actual matched section name
                 console.print(
@@ -1283,10 +1304,10 @@ def todo_add(text: str, add_today: bool, target_note: str | None) -> None:
             console.print(f"[red]{e}[/red]")
             raise SystemExit(1)
     elif add_today:
-        t = add_todo_to_daily_note(text)
+        t = add_todo_to_daily_note(content)
         console.print(f"[green]Added to today's note:[/green] {t.content}")
     else:
-        t = add_todo_to_inbox(text)
+        t = add_todo_to_inbox(content)
         console.print(f"[green]Added to inbox:[/green] {t.content}")
     console.print(f"[dim]ID: {t.id[:6]}[/dim]")
 

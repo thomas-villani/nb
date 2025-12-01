@@ -29,6 +29,51 @@ console = Console(highlight=False)
 # Stderr console for progress indicators (doesn't interfere with piped output)
 stderr_console = Console(file=sys.stderr, highlight=False)
 
+# Maximum stdin size (1MB) to prevent accidental huge input
+MAX_STDIN_SIZE = 1024 * 1024
+
+
+def get_stdin_content() -> str | None:
+    """Read content from stdin if available (non-blocking check).
+
+    Returns:
+        Content from stdin stripped of leading/trailing whitespace,
+        or None if stdin is a TTY (interactive terminal) or empty.
+
+    Raises:
+        SystemExit: If stdin contains binary data or exceeds size limit.
+    """
+    # If stdin is a TTY, user is typing interactively - no piped input
+    if sys.stdin.isatty():
+        return None
+
+    try:
+        content = sys.stdin.read()
+    except UnicodeDecodeError:
+        console.print("[red]Error: stdin appears to contain binary data.[/red]")
+        console.print("[dim]Only text content can be piped to nb.[/dim]")
+        raise SystemExit(1)
+
+    if not content:
+        return None
+
+    # Check for binary content (null bytes are a strong indicator)
+    if "\x00" in content:
+        console.print("[red]Error: stdin appears to contain binary data.[/red]")
+        console.print("[dim]Only text content can be piped to nb.[/dim]")
+        raise SystemExit(1)
+
+    # Check size limit
+    if len(content) > MAX_STDIN_SIZE:
+        console.print(
+            f"[red]Error: stdin content exceeds size limit ({MAX_STDIN_SIZE // 1024}KB).[/red]"
+        )
+        console.print("[dim]Consider saving to a file and linking it instead.[/dim]")
+        raise SystemExit(1)
+
+    stripped = content.strip()
+    return stripped if stripped else None
+
 
 @contextmanager
 def spinner(description: str) -> Iterator[Callable[[str], None]]:

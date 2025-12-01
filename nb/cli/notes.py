@@ -10,6 +10,7 @@ import click
 from nb.cli.utils import (
     console,
     get_notebook_display_info,
+    get_stdin_content,
     open_or_show_note,
     print_note,
     resolve_note_ref,
@@ -573,7 +574,7 @@ def edit_note(path: str) -> None:
 
 
 @click.command("add")
-@click.argument("text")
+@click.argument("text", required=False)
 @click.option(
     "--note",
     "-N",
@@ -585,8 +586,12 @@ def edit_note(path: str) -> None:
     "-n",
     help="Notebook to search for note (used with --note)",
 )
-def add_to_note(text: str, target_note: str | None, notebook: str | None) -> None:
-    """Append a line to a note (defaults to today's daily note).
+def add_to_note(
+    text: str | None, target_note: str | None, notebook: str | None
+) -> None:
+    """Append content to a note (defaults to today's daily note).
+
+    Accepts text as an argument or from stdin (piped input).
 
     \b
     Examples:
@@ -595,16 +600,31 @@ def add_to_note(text: str, target_note: str | None, notebook: str | None) -> Non
       nb add "Note text" --note work/myproject     # Notebook/note format
       nb add "Note text" --note myproject -n work  # Note in specific notebook
       nb add "Note text" -N proj                   # Using alias
+
+    \b
+    Piping examples:
+      echo "random thought" | nb add               # Pipe to today's note
+      cat notes.txt | nb add                       # Pipe file content
+      git diff --stat | nb add --note work/log     # Pipe command output
+      pbpaste | nb add                             # Pipe clipboard (macOS)
     """
+    # Check stdin first, then use argument
+    content = get_stdin_content() or text
+
+    if not content:
+        console.print("[red]No content provided.[/red]")
+        console.print('[dim]Usage: nb add "text" or echo "text" | nb add[/dim]')
+        raise SystemExit(1)
+
     if target_note:
         resolved_path = resolve_note_ref(target_note, notebook=notebook)
         if not resolved_path:
             console.print(f"[red]Note not found: {target_note}[/red]")
             raise SystemExit(1)
 
-        # Append the text
+        # Append the content
         with open(resolved_path, "a", encoding="utf-8") as f:
-            f.write(f"\n{text}\n")
+            f.write(f"\n{content}\n")
 
         console.print(f"[green]Added to {resolved_path.name}[/green]")
     else:
@@ -617,9 +637,9 @@ def add_to_note(text: str, target_note: str | None, notebook: str | None) -> Non
         dt = date.today()
         path = ensure_daily_note(dt)
 
-        # Append the text
+        # Append the content
         with open(path, "a", encoding="utf-8") as f:
-            f.write(f"\n{text}\n")
+            f.write(f"\n{content}\n")
 
         console.print(f"[green]Added to {path.name}[/green]")
 

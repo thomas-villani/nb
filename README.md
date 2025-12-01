@@ -115,6 +115,13 @@ nb add "Quick thought"     # Append text to today's note
 nb add "Note" --note myproject       # Append to specific note
 nb add "Note" --note work/myproject  # Notebook/note format
 nb add "Note" -N proj                # Using alias
+
+# Stdin piping support
+echo "random thought" | nb add              # Pipe to today's note
+cat notes.txt | nb add                      # Pipe file content
+git diff --stat | nb add --note work/log    # Pipe command output
+pbpaste | nb add                            # Pipe clipboard (macOS)
+
 nb list                    # List latest 3 notes per notebook (with colors/tags)
 nb list --all              # List all notes in all notebooks
 nb list --week             # List this week's daily notes
@@ -298,6 +305,12 @@ nb todo add "New task"  # Add to inbox (todo.md)
 nb todo add --today "Call dentist"  # Add to today's note
 nb todo add --note work/project "Document API"  # Add to specific note
 nb todo add --note work/project::Tasks "New task"  # Add under specific section
+
+# Stdin piping support
+echo "Review PR" | nb todo add               # Pipe to inbox
+pbpaste | nb todo add --today                # Pipe clipboard to daily note
+echo "Task @due(friday)" | nb todo add       # Pipe with metadata
+
 nb todo done abc123     # Mark complete (by ID prefix)
 nb todo undone abc123   # Mark incomplete
 nb todo start abc123    # Mark as in-progress ([ ] -> [^])

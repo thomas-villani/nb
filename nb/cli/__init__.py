@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 # Ensure stdout handles Unicode when piped (e.g., `nb show today | more`)
 if hasattr(sys.stdout, "reconfigure"):
@@ -96,6 +97,32 @@ def cli(ctx: click.Context, show: bool, notebook: str | None) -> None:
     if ctx.invoked_subcommand is None:
         # Default action: open today's note
         ctx.invoke(today, notebook=notebook)
+
+
+@cli.command("help")
+@click.option("--plain", "-p", is_flag=True, help="Print in plaintext")
+@click.pass_context
+def help_cmd(ctx, plain: bool):
+    """Displays readme.md in rich formatting to stdout"""
+    from rich.console import Console
+    from rich.markdown import Markdown
+
+    console = Console()
+    readme_file = Path(__file__).parent.parent.parent / "readme.md2"
+    if readme_file.exists():
+        content = readme_file.read_text(encoding="utf-8")
+        if not plain:
+            content = Markdown(content)
+    else:
+        content = "Error! readme.md file not found."
+        if not plain:
+            content = f"[bright_red]{content}[/bright_red]"
+
+    if plain:
+        print(content)
+    else:
+        console.print(content)
+    return
 
 
 # Register all command groups
