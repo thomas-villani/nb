@@ -59,7 +59,6 @@ todo_exclude: true
 - [x] Add a way from command line to open with other editor (e.g. nb open <note> --notepad)
 - [x] predefine a list of common emojis to set as icon from config for project
 - [x] Templates for notes - allow to define templates and create from a template with `nb new ... --template <template_name>`
-- [ ] Toml for config instead of yaml #feature
 - [x] Note titles -- how to integrate and use them as a way to open notes too? Or at least display in list? This already seems to be the case.
 - [x] `nb stats` command for overview statistics, especially usage stats and completion stats, some graphs?!
 - [x] `nb tags` command to list all tags with counts, and allow batch replace/rename of tags

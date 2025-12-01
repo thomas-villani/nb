@@ -1164,7 +1164,7 @@ def _print_todo(
     tags_part = f"  [cyan]{tags_str}[/cyan]" if tags_str else ""
 
     # Build line based on visible columns
-    line_parts = [f"{prefix}{checkbox} {content_part}  {source_part}"]
+    line_parts = [f"{prefix}[dim]{short_id}[/dim] {checkbox} {content_part}  {source_part}"]
 
     if show_created:
         created_part = f"[dim]{created_str:>6}[/dim]" if created_str else " " * 6
@@ -1174,7 +1174,7 @@ def _print_todo(
         due_part = f"[{due_color}]{due_str:>6}[/{due_color}]" if due_str else " " * 6
         line_parts.append(f"  {due_part}")
 
-    line_parts.append(f"  {priority_part}  [dim]{short_id}[/dim]{tags_part}")
+    line_parts.append(f"  {priority_part}{tags_part}")
 
     console.print("".join(line_parts))
 
