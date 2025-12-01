@@ -7,19 +7,9 @@ from datetime import date, timedelta
 import click
 
 from nb.cli.completion import complete_notebook, complete_tag, complete_view
-from nb.cli.utils import (
-    console,
-    find_todo,
-    get_notebook_display_info,
-    get_stdin_content,
-)
+from nb.cli.utils import console, find_todo, get_notebook_display_info, get_stdin_content
 from nb.config import TodoViewConfig, get_config, save_config
-from nb.core.todos import (
-    add_todo_to_daily_note,
-    add_todo_to_inbox,
-    set_todo_status_in_file,
-    toggle_todo_in_file,
-)
+from nb.core.todos import add_todo_to_daily_note, add_todo_to_inbox, set_todo_status_in_file, toggle_todo_in_file
 from nb.index.scanner import index_all_notes
 from nb.index.todos_repo import (
     get_sorted_todos,
@@ -240,7 +230,7 @@ def todo(
                     resolved = resolve_notebook(nb_name)
                 except UserCancelled:
                     console.print("[dim]Cancelled.[/dim]")
-                    raise SystemExit(1)
+                    raise SystemExit(1) from None
                 if resolved:
                     effective_notebooks.append(resolved)
                 else:
@@ -279,7 +269,7 @@ def todo(
                 )
             except UserCancelled:
                 console.print("[dim]Cancelled.[/dim]")
-                raise SystemExit(1)
+                raise SystemExit(1) from None
             if resolved_path:
                 effective_notes.append(resolved_path)
             elif section:
@@ -1164,7 +1154,9 @@ def _print_todo(
     tags_part = f"  [cyan]{tags_str}[/cyan]" if tags_str else ""
 
     # Build line based on visible columns
-    line_parts = [f"{prefix}[dim]{short_id}[/dim] {checkbox} {content_part}  {source_part}"]
+    line_parts = [
+        f"{prefix}[dim]{short_id}[/dim] {checkbox} {content_part}  {source_part}"
+    ]
 
     if show_created:
         created_part = f"[dim]{created_str:>6}[/dim]" if created_str else " " * 6
@@ -1256,7 +1248,7 @@ def todo_add(text: str | None, add_today: bool, target_note: str | None) -> None
             resolved_path = resolve_note_ref(note_ref, ensure_exists=True)
         except UserCancelled:
             console.print("[dim]Cancelled.[/dim]")
-            raise SystemExit(1)
+            raise SystemExit(1) from None
 
         if not resolved_path:
             console.print(f"[red]Note not found: {note_ref}[/red]")
@@ -1264,8 +1256,9 @@ def todo_add(text: str | None, add_today: bool, target_note: str | None) -> None
 
         # If section specified, check for ambiguous matches
         if section:
-            from nb.core.todos import find_matching_sections
             from rich.prompt import Prompt
+
+            from nb.core.todos import find_matching_sections
 
             matches = find_matching_sections(resolved_path, section)
 
@@ -1308,7 +1301,7 @@ def todo_add(text: str | None, add_today: bool, target_note: str | None) -> None
                 )
         except FileNotFoundError as e:
             console.print(f"[red]{e}[/red]")
-            raise SystemExit(1)
+            raise SystemExit(1) from None
     elif add_today:
         t = add_todo_to_daily_note(content)
         console.print(f"[green]Added to today's note:[/green] {t.content}")
@@ -1397,7 +1390,7 @@ def todo_done(todo_id: tuple[str, ...]) -> None:
             console.print(
                 "[dim]Hint: Use 'nb link' to enable sync for external files.[/dim]"
             )
-            raise SystemExit(1)
+            raise SystemExit(1) from None
 
 
 @todo.command("undone")
@@ -1440,7 +1433,7 @@ def todo_undone(todo_id: tuple[str, ...]) -> None:
             console.print(
                 "[dim]Hint: Use 'nb link' to enable sync for external files.[/dim]"
             )
-            raise SystemExit(1)
+            raise SystemExit(1) from None
 
 
 @todo.command("start")
@@ -1495,7 +1488,7 @@ def todo_start(todo_id: tuple[str, ...]) -> None:
             console.print(
                 "[dim]Hint: Use 'nb link' to enable sync for external files.[/dim]"
             )
-            raise SystemExit(1)
+            raise SystemExit(1) from None
 
 
 @todo.command("pause")
@@ -1549,7 +1542,7 @@ def todo_pause(todo_id: tuple[str, ...]) -> None:
             console.print(
                 "[dim]Hint: Use 'nb link' to enable sync for external files.[/dim]"
             )
-            raise SystemExit(1)
+            raise SystemExit(1) from None
 
 
 @todo.command("show")
@@ -1818,7 +1811,7 @@ def todo_review(
                 resolved = resolve_notebook(nb_name)
             except UserCancelled:
                 console.print("[dim]Cancelled.[/dim]")
-                raise SystemExit(1)
+                raise SystemExit(1) from None
             if resolved:
                 effective_notebooks.append(resolved)
             else:
@@ -1833,7 +1826,7 @@ def todo_review(
             resolved_path, _ = resolve_note_for_todo_filter(note_ref)
         except UserCancelled:
             console.print("[dim]Cancelled.[/dim]")
-            raise SystemExit(1)
+            raise SystemExit(1) from None
         if resolved_path:
             effective_notes.append(resolved_path)
         else:

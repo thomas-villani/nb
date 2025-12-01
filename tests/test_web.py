@@ -14,7 +14,7 @@ from click.testing import CliRunner
 from nb import config as config_module
 from nb.cli import cli
 from nb.config import Config, EmbeddingsConfig, NotebookConfig
-from nb.web import NBHandler, TEMPLATE
+from nb.web import TEMPLATE, NBHandler
 
 
 @pytest.fixture
@@ -394,6 +394,7 @@ class TestNBHandlerPOST:
     def test_toggle_todo(self, mock_web_config: Config):
         """Test POST /api/todos/<id>/toggle."""
         from datetime import date
+
         from nb.models import Todo, TodoSource, TodoStatus
 
         # Create a test note with a todo

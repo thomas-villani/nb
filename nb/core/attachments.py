@@ -196,7 +196,7 @@ def attach_to_note(
     if attachment.title and attachment.title != Path(attachment.path).name:
         attach_line = f'\n@attach: {attachment.path} "{attachment.title}"'
 
-    with open(note_path, "a", encoding="utf-8") as f:
+    with note_path.open("a", encoding="utf-8") as f:
         f.write(attach_line + "\n")
 
     return attachment

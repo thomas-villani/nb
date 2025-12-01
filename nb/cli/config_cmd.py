@@ -121,7 +121,7 @@ def config_set(key: str, value: str) -> None:
             raise SystemExit(1)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
 
 @config_cmd.command("list")
@@ -253,7 +253,7 @@ def _set_note_todo_exclude(path: Path, exclude: bool) -> None:
     """
     import frontmatter
 
-    with open(path, encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         post = frontmatter.load(f)
 
     if exclude:
@@ -262,5 +262,5 @@ def _set_note_todo_exclude(path: Path, exclude: bool) -> None:
         # Remove the key if it exists (False is the default)
         post.metadata.pop("todo_exclude", None)
 
-    with open(path, "w", encoding="utf-8") as f:
+    with path.open("w", encoding="utf-8") as f:
         f.write(frontmatter.dumps(post))

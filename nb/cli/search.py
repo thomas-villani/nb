@@ -162,7 +162,7 @@ def search_cmd(
             console.print(
                 "[dim]Hint: Run 'nb index --embeddings' to rebuild the search index.[/dim]"
             )
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
     if not results:
         console.print("[dim]No results found.[/dim]")
@@ -259,7 +259,7 @@ def grep_cmd(
                 raise SystemExit(1)
         except UserCancelled:
             console.print("[dim]Cancelled.[/dim]")
-            raise SystemExit(1)
+            raise SystemExit(1) from None
 
     try:
         results = grep_notes(
@@ -272,7 +272,7 @@ def grep_cmd(
         )
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
     if not results:
         console.print("[dim]No matches found.[/dim]")
@@ -541,7 +541,7 @@ def stream_notes(
             # Convert to Note objects
             notes = []
             db = get_db()
-            for path, viewed_at in unique_views:
+            for path, _viewed_at in unique_views:
                 # Look up note info from database
                 # Use normalize_path for consistent path format (forward slashes) on all platforms
                 try:
@@ -586,7 +586,7 @@ def stream_notes(
             # Convert to Note objects
             notes = []
             db = get_db()
-            for path, mtime in mod_data:
+            for path, _mtime in mod_data:
                 # Look up note info from database
                 # Use normalize_path for consistent path format (forward slashes) on all platforms
                 try:

@@ -10,7 +10,6 @@ from pathlib import Path
 from nb.config import LinkedNoteConfig, LinkedTodoConfig
 from nb.index.db import get_db
 
-
 # =============================================================================
 # Linked Todo Files
 # =============================================================================

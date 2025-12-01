@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 # Current schema version
 SCHEMA_VERSION = 12
@@ -376,8 +377,9 @@ def rebuild_db(db: Database) -> None:
 
     # Clear localvectordb to prevent ghost search results
     try:
-        from nb.config import get_config
         import shutil
+
+        from nb.config import get_config
 
         config = get_config()
         vectors_path = config.vectors_path

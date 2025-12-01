@@ -6,7 +6,6 @@ import pytest
 
 from nb.index import scanner as scanner_module
 from nb.index.db import get_db, reset_db
-from nb.utils.hashing import normalize_path
 from nb.index.scanner import (
     get_file_hash,
     index_all_notes,
@@ -16,6 +15,7 @@ from nb.index.scanner import (
     remove_deleted_notes,
     scan_notes,
 )
+from nb.utils.hashing import normalize_path
 
 
 @pytest.fixture

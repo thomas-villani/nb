@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Generator
 from datetime import date
 from pathlib import Path
-from typing import Callable, Generator
 
 import pytest
 from click.testing import CliRunner
@@ -27,7 +27,7 @@ def temp_notes_root(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def temp_config(temp_notes_root: Path) -> Generator[Config, None, None]:
+def temp_config(temp_notes_root: Path) -> Generator[Config]:
     """Create a temporary configuration for testing."""
     cfg = Config(
         notes_root=temp_notes_root,
@@ -157,7 +157,7 @@ def cli_runner() -> CliRunner:
 
 
 @pytest.fixture
-def cli_config(tmp_path: Path) -> Generator[Config, None, None]:
+def cli_config(tmp_path: Path) -> Generator[Config]:
     """Create an isolated config specifically for CLI tests.
 
     Uses 'echo' as editor to avoid actually opening files.

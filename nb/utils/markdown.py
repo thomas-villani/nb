@@ -28,7 +28,7 @@ def parse_note_file(path: Path) -> tuple[dict[str, Any], str]:
     Returns a tuple of (frontmatter_dict, body_content).
     If no frontmatter exists, returns empty dict and full content.
     """
-    with open(path, encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         post = frontmatter.load(f)
     return dict(post.metadata), post.content
 

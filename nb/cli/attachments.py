@@ -58,7 +58,7 @@ def attach_file(
             return
         except FileNotFoundError as e:
             console.print(f"[red]{e}[/red]")
-            raise SystemExit(1)
+            raise SystemExit(1) from None
 
     if not note_path:
         raise SystemExit(1)
@@ -69,7 +69,7 @@ def attach_file(
         console.print(f"[dim]To: {note_path.name}[/dim]")
     except FileNotFoundError as e:
         console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
 
 @attach.command("url")
@@ -104,7 +104,7 @@ def attach_url(url: str, target: str | None, title: str | None) -> None:
             return
         except Exception as e:
             console.print(f"[red]{e}[/red]")
-            raise SystemExit(1)
+            raise SystemExit(1) from None
 
     if not note_path:
         raise SystemExit(1)
@@ -115,7 +115,7 @@ def attach_url(url: str, target: str | None, title: str | None) -> None:
         console.print(f"[dim]To: {note_path.name}[/dim]")
     except Exception as e:
         console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
 
 @attach.command("list")

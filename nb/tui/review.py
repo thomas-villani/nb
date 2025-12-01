@@ -11,17 +11,8 @@ from rich.table import Table
 from rich.text import Text
 
 from nb.config import get_config
-from nb.core.todos import (
-    delete_todo_from_file,
-    toggle_todo_in_file,
-    update_todo_due_date,
-)
-from nb.index.todos_repo import (
-    delete_todo,
-    get_sorted_todos,
-    query_todos,
-    update_todo_completion,
-)
+from nb.core.todos import delete_todo_from_file, toggle_todo_in_file, update_todo_due_date
+from nb.index.todos_repo import delete_todo, get_sorted_todos, query_todos, update_todo_completion
 from nb.models import Todo
 from nb.tui.todos import get_key
 from nb.utils.dates import get_week_range
@@ -160,7 +151,7 @@ def _get_overdue_days(due_date: date | None) -> int | None:
 def render_todo_row(todo: Todo, is_selected: bool, idx: int) -> tuple:
     """Render a single todo row for the table."""
     today = date.today()
-    week_start, week_end = get_week_range()
+    _week_start, week_end = get_week_range()
 
     # Cursor indicator
     cursor = ">" if is_selected else " "
@@ -438,7 +429,7 @@ def run_review(
 
     # Query todos based on scope
     today = date.today()
-    week_start, week_end = get_week_range()
+    _week_start, week_end = get_week_range()
 
     # Don't exclude note-level todo_exclude when filtering by specific notebooks/notes
     exclude_note_excluded = not notebooks and not notes

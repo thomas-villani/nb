@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from datetime import date, timedelta
-from typing import Callable
 
 from dateutil import parser as dateutil_parser
 from dateutil.relativedelta import FR, MO, SA, SU, TH, TU, WE, relativedelta

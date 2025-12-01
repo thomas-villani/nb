@@ -41,7 +41,7 @@ def template(ctx: click.Context) -> None:
 
 def _list_templates() -> None:
     """List all available templates."""
-    from nb.core.templates import list_templates, get_template_path
+    from nb.core.templates import get_template_path, list_templates
 
     templates = list_templates()
 
@@ -70,7 +70,7 @@ def template_new(name: str) -> None:
 
     Creates a template file with a starter structure that you can customize.
     """
-    from nb.core.templates import create_template, DEFAULT_TEMPLATE_CONTENT
+    from nb.core.templates import DEFAULT_TEMPLATE_CONTENT, create_template
     from nb.utils.editor import open_in_editor
 
     try:
@@ -84,14 +84,14 @@ def template_new(name: str) -> None:
     except FileExistsError:
         console.print(f"[red]Template already exists:[/red] {name}")
         console.print(f"[dim]Use 'nb template edit {name}' to modify it.[/dim]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
 
 @template.command("edit")
 @click.argument("name")
 def template_edit(name: str) -> None:
     """Open a template in the editor."""
-    from nb.core.templates import template_exists, get_template_path, list_templates
+    from nb.core.templates import get_template_path, list_templates, template_exists
     from nb.utils.editor import open_in_editor
 
     if not template_exists(name):
@@ -130,7 +130,7 @@ def template_show(name: str) -> None:
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
 def template_remove(name: str, yes: bool) -> None:
     """Delete a template."""
-    from nb.core.templates import template_exists, remove_template
+    from nb.core.templates import remove_template, template_exists
 
     if not template_exists(name):
         console.print(f"[red]Template not found:[/red] {name}")

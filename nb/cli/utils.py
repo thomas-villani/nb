@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Iterator
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.progress import (
@@ -52,7 +53,7 @@ def get_stdin_content() -> str | None:
     except UnicodeDecodeError:
         console.print("[red]Error: stdin appears to contain binary data.[/red]")
         console.print("[dim]Only text content can be piped to nb.[/dim]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
     if not content:
         return None
@@ -173,7 +174,7 @@ class MultiStageProgress:
         self._progress: Progress | None = None
         self._current_task: TaskID | None = None
 
-    def __enter__(self) -> "MultiStageProgress":
+    def __enter__(self) -> MultiStageProgress:
         self._progress = Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -354,11 +355,7 @@ def resolve_note_for_todo_filter(
 
     """
     from nb.core.aliases import get_note_by_alias
-    from nb.core.links import (
-        get_linked_file,
-        get_linked_note,
-        get_linked_note_in_notebook,
-    )
+    from nb.core.links import get_linked_file, get_linked_note, get_linked_note_in_notebook
     from nb.utils.hashing import normalize_path
 
     config = get_config()
@@ -611,11 +608,7 @@ def resolve_note_ref(
     """
     from nb.core.aliases import get_note_by_alias
     from nb.core.links import get_linked_note_in_notebook
-    from nb.core.notebooks import (
-        ensure_notebook_note,
-        get_notebook_note_path,
-        is_notebook_date_based,
-    )
+    from nb.core.notebooks import ensure_notebook_note, get_notebook_note_path, is_notebook_date_based
     from nb.utils.dates import parse_fuzzy_date
 
     config = get_config()
@@ -716,7 +709,7 @@ def resolve_note_ref(
 
 def resolve_attachment_target(
     target: str | None,
-) -> tuple[Path | None, "Todo | None"]:
+) -> tuple[Path | None, Todo | None]:
     """Resolve an attachment target to either a note path or todo.
 
     Args:

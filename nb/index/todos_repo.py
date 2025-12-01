@@ -61,7 +61,7 @@ def _load_todo_tags(todo_id: str) -> list[str]:
     return [row["tag"] for row in rows]
 
 
-def upsert_todo(todo: Todo, commit: bool = True, db: "Database | None" = None) -> None:
+def upsert_todo(todo: Todo, commit: bool = True, db: Database | None = None) -> None:
     """Insert or update a todo in the database.
 
     Preserves created_date for existing todos.
@@ -145,7 +145,7 @@ def upsert_todo(todo: Todo, commit: bool = True, db: "Database | None" = None) -
         db.commit()
 
 
-def upsert_todos_batch(todos: list[Todo], db: "Database | None" = None) -> None:
+def upsert_todos_batch(todos: list[Todo], db: Database | None = None) -> None:
     """Insert or update multiple todos in a single transaction.
 
     This is much faster than calling upsert_todo repeatedly for large batches.
@@ -187,7 +187,7 @@ def delete_todo(todo_id: str) -> None:
     db.commit()
 
 
-def delete_todos_for_source(source_path: Path, db: "Database | None" = None) -> None:
+def delete_todos_for_source(source_path: Path, db: Database | None = None) -> None:
     """Delete all todos from a specific source file.
 
     Handles both normalized (forward slashes) and legacy (backslashes) paths

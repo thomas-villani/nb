@@ -383,7 +383,7 @@ def load_config(config_path: Path | None = None) -> Config:
         config_path = notes_root / ".nb" / "config.yaml"
 
     if config_path.exists():
-        with open(config_path, encoding="utf-8") as f:
+        with config_path.open(encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
     else:
         data = {}
@@ -492,7 +492,7 @@ def save_config(config: Config) -> None:
     }
 
     config.config_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(config.config_path, "w", encoding="utf-8") as f:
+    with config.config_path.open("w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
 
 
@@ -529,7 +529,7 @@ def init_config(notes_root: Path | None = None) -> Config:
         # This ensures NB_NOTES_ROOT is respected in the generated config
         default_data = yaml.safe_load(DEFAULT_CONFIG_YAML)
         default_data["notes_root"] = str(notes_root)
-        with open(config_path, "w", encoding="utf-8") as f:
+        with config_path.open("w", encoding="utf-8") as f:
             # Write header comment
             f.write("# nb configuration\n")
             f.write("# See: https://github.com/user/nb-cli\n\n")
@@ -884,7 +884,9 @@ def set_config_value(key: str, value: str) -> bool:
             try:
                 config.embeddings.chunk_size = int(value)
             except ValueError:
-                raise ValueError(f"chunk_size must be an integer, got '{value}'")
+                raise ValueError(
+                    f"chunk_size must be an integer, got '{value}'"
+                ) from None
         elif attr == "chunking_method":
             valid_methods = ("sentences", "tokens", "paragraphs", "sections")
             if value not in valid_methods:
@@ -905,7 +907,9 @@ def set_config_value(key: str, value: str) -> bool:
                 config.search.vector_weight = weight
             except ValueError as e:
                 if "could not convert" in str(e).lower():
-                    raise ValueError(f"vector_weight must be a number, got '{value}'")
+                    raise ValueError(
+                        f"vector_weight must be a number, got '{value}'"
+                    ) from None
                 raise
         elif attr == "score_threshold":
             try:
@@ -915,7 +919,9 @@ def set_config_value(key: str, value: str) -> bool:
                 config.search.score_threshold = threshold
             except ValueError as e:
                 if "could not convert" in str(e).lower():
-                    raise ValueError(f"score_threshold must be a number, got '{value}'")
+                    raise ValueError(
+                        f"score_threshold must be a number, got '{value}'"
+                    ) from None
                 raise
         elif attr == "recency_decay_days":
             try:
@@ -927,7 +933,7 @@ def set_config_value(key: str, value: str) -> bool:
                 if "invalid literal" in str(e).lower():
                     raise ValueError(
                         f"recency_decay_days must be an integer, got '{value}'"
-                    )
+                    ) from None
                 raise
         else:
             return False

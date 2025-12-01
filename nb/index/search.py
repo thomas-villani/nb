@@ -118,7 +118,7 @@ class NoteSearch:
 
     def index_notes_batch(
         self,
-        notes: list[tuple["Note", str]],
+        notes: list[tuple[Note, str]],
     ) -> int:
         """Add or update multiple notes in the search index in a single batch.
 
@@ -377,7 +377,7 @@ def grep_notes(
     try:
         regex = re.compile(pattern, flags)
     except re.error as e:
-        raise ValueError(f"Invalid regex pattern: {e}")
+        raise ValueError(f"Invalid regex pattern: {e}") from None
 
     # If a specific note path is given, only search that file
     if note_path:

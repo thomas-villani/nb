@@ -252,7 +252,7 @@ def extract_todos(
             stack.pop()
 
         if stack:
-            parent_indent, parent_todo = stack[-1]
+            _parent_indent, parent_todo = stack[-1]
             todo.parent_id = parent_todo.id
             parent_todo.children.append(todo)
 
@@ -442,7 +442,7 @@ def add_todo_to_inbox(text: str, notes_root: Path | None = None) -> Todo:
     line_number = len(lines) + 1
 
     # Append the todo
-    with open(inbox_path, "a", encoding="utf-8") as f:
+    with inbox_path.open("a", encoding="utf-8") as f:
         f.write(f"- [ ] {text}\n")
 
     # Create and return Todo object
@@ -633,7 +633,7 @@ def add_todo_to_note(
 
         # Find the next heading after our matched section
         if section_line_idx is not None:
-            for idx, name in all_sections:
+            for idx, _name in all_sections:
                 if idx > section_line_idx:
                     next_heading_idx = idx
                     break
@@ -876,7 +876,7 @@ def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
     line_number = len(lines) + 1
 
     # Append the todo
-    with open(note_path, "a", encoding="utf-8") as f:
+    with note_path.open("a", encoding="utf-8") as f:
         f.write(f"- [ ] {text}\n")
 
     # Create and return Todo object

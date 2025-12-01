@@ -111,9 +111,9 @@ def open_in_editor(
     try:
         subprocess.run(cmd, check=True)
     except FileNotFoundError:
-        raise RuntimeError(f"Editor not found: {editor}")
+        raise RuntimeError(f"Editor not found: {editor}") from None
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Editor exited with error: {e.returncode}")
+        raise RuntimeError(f"Editor exited with error: {e.returncode}") from None
 
 
 def open_file(path: Path) -> None:

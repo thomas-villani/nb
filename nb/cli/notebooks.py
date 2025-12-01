@@ -142,7 +142,7 @@ def notebooks_create(
 
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
 
 @notebooks_cmd.command("remove")

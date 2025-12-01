@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
 
 from nb.config import get_config
 from nb.core.notes import get_note
@@ -301,7 +301,7 @@ def index_all_notes(
     index_vectors: bool = True,
     max_workers: int = 4,
     notebook: str | None = None,
-    on_progress: "Callable[[int], None] | None" = None,
+    on_progress: Callable[[int], None] | None = None,
 ) -> int:
     """Index all notes in the notes root.
 
@@ -498,7 +498,7 @@ def _index_note_thread_safe(
 def rebuild_search_index(
     notes_root: Path | None = None,
     notebook: str | None = None,
-    on_progress: "Callable[[int], None] | None" = None,
+    on_progress: Callable[[int], None] | None = None,
     batch_size: int = 25,
 ) -> int:
     """Rebuild the localvectordb search index from scratch.
@@ -653,7 +653,7 @@ def count_notes_for_search_rebuild(notebook: str | None = None) -> int:
 
 def sync_search_index(
     notebook: str | None = None,
-    on_progress: "Callable[[int], None] | None" = None,
+    on_progress: Callable[[int], None] | None = None,
     batch_size: int = 25,
 ) -> int:
     """Sync notes from SQLite to VectorDB that are missing from VectorDB.
@@ -1071,7 +1071,7 @@ def index_linked_note(
 
 def scan_linked_notes(
     notebook_filter: str | None = None,
-    on_progress: "Callable[[int], None] | None" = None,
+    on_progress: Callable[[int], None] | None = None,
 ) -> int:
     """Scan all linked external note files/directories and index them.
 

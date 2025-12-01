@@ -17,13 +17,7 @@ from nb.cli.utils import (
     resolve_note_ref,
 )
 from nb.config import get_config
-from nb.core.notes import (
-    create_note,
-    delete_note,
-    ensure_daily_note,
-    list_daily_notes,
-    open_note,
-)
+from nb.core.notes import create_note, delete_note, ensure_daily_note, list_daily_notes, open_note
 from nb.utils.fuzzy import UserCancelled
 
 
@@ -285,7 +279,7 @@ def history_cmd(
             # Sort views by most recent timestamp within each notebook
             nb_views.sort(key=lambda x: x[2][0], reverse=True)
 
-            for abs_path, rel_path, timestamps, view_count, linked_alias in nb_views:
+            for _abs_path, rel_path, timestamps, view_count, linked_alias in nb_views:
                 # Format the timestamp (use most recent)
                 time_str = timestamps[0].strftime(
                     f"{config.date_format} {config.time_format}"
@@ -315,7 +309,7 @@ def history_cmd(
     else:
         # Interleaved display (new default) - sorted by most recent first
         for (
-            path,
+            _path,
             rel_path,
             timestamps,
             view_count,
@@ -396,7 +390,7 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
         path = resolve_note_ref(note_ref, notebook=notebook, create_if_date_based=True)
     except UserCancelled:
         console.print("[dim]Cancelled.[/dim]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
     if not path:
         console.print(f"[red]Could not resolve note: {note_ref}[/red]")
@@ -443,7 +437,7 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
         path = resolve_note_ref(note_ref, notebook=notebook, create_if_date_based=True)
     except UserCancelled:
         console.print("[dim]Cancelled.[/dim]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
     if not path:
         console.print(f"[red]Could not resolve note: {note_ref}[/red]")
@@ -577,7 +571,7 @@ def new_note(
         open_note(full_path)
     except FileExistsError:
         console.print(f"[red]Note already exists:[/red] {note_path}")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
 
 @click.command("edit")
@@ -648,7 +642,7 @@ def add_to_note(
             raise SystemExit(1)
 
         # Append the content
-        with open(resolved_path, "a", encoding="utf-8") as f:
+        with resolved_path.open("a", encoding="utf-8") as f:
             f.write(f"\n{content}\n")
 
         console.print(f"[green]Added to {resolved_path.name}[/green]")
@@ -663,7 +657,7 @@ def add_to_note(
         path = ensure_daily_note(dt)
 
         # Append the content
-        with open(path, "a", encoding="utf-8") as f:
+        with path.open("a", encoding="utf-8") as f:
             f.write(f"\n{content}\n")
 
         console.print(f"[green]Added to {path.name}[/green]")
@@ -689,11 +683,7 @@ def list_notes_cmd(
     Use --week or --month to filter by date (defaults to daily notebook if no --notebook given).
     """
     from nb.core.notebooks import get_notebook_notes_with_linked
-    from nb.core.notes import (
-        get_all_notes,
-        get_latest_notes_per_notebook,
-        list_notebook_notes_by_date,
-    )
+    from nb.core.notes import get_all_notes, get_latest_notes_per_notebook, list_notebook_notes_by_date
 
     if week or month:
         # Get date range
@@ -837,7 +827,7 @@ def alias_note(alias_name: str, note_ref: str, notebook: str | None) -> None:
         console.print(f"[green]Alias created:[/green] {alias_name} -> {resolved.name}")
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
 
 @click.command("unalias")
@@ -914,7 +904,7 @@ def delete_note_cmd(note_ref: str, notebook: str | None, force: bool) -> None:
         path = resolve_note_ref(note_ref, notebook=notebook)
     except UserCancelled:
         console.print("[dim]Cancelled.[/dim]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
     if not path:
         console.print(f"[red]Could not resolve note: {note_ref}[/red]")
@@ -937,7 +927,7 @@ def delete_note_cmd(note_ref: str, notebook: str | None, force: bool) -> None:
         console.print(f"[green]Deleted:[/green] {display_path}")
     except FileNotFoundError:
         console.print(f"[red]Note not found: {display_path}[/red]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None

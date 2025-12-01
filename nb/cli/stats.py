@@ -11,11 +11,7 @@ from rich.table import Table
 
 from nb.cli.completion import complete_notebook
 from nb.cli.utils import console
-from nb.index.todos_repo import (
-    get_extended_todo_stats,
-    get_tag_stats,
-    get_todo_activity,
-)
+from nb.index.todos_repo import get_extended_todo_stats, get_tag_stats, get_todo_activity
 
 
 def register_stats_commands(cli: click.Group) -> None:
@@ -449,7 +445,7 @@ def _fill_daily_values(day_counts: list[tuple[str, int]], days: int) -> list[int
     start = today - timedelta(days=days - 1)
 
     # Create a map of date -> count
-    count_map = {d: c for d, c in day_counts}
+    count_map = dict(day_counts)
 
     # Fill in all days
     result = []

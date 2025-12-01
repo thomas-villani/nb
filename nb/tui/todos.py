@@ -13,11 +13,7 @@ from rich.text import Text
 
 from nb.config import get_config
 from nb.core.todos import set_todo_status_in_file, toggle_todo_in_file
-from nb.index.todos_repo import (
-    get_sorted_todos,
-    update_todo_completion,
-    update_todo_status,
-)
+from nb.index.todos_repo import get_sorted_todos, update_todo_completion, update_todo_status
 from nb.models import Todo, TodoStatus
 from nb.utils.dates import get_week_range
 
@@ -118,7 +114,7 @@ def render_todo_table(state: TodoViewState) -> Table:
     table.add_column("ID", width=6)
 
     today = date.today()
-    week_start, week_end = get_week_range()
+    _week_start, week_end = get_week_range()
 
     for i, todo in enumerate(state.todos):
         is_selected = i == state.cursor

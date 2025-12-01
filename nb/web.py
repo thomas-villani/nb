@@ -5,19 +5,15 @@ from __future__ import annotations
 import http.server
 import json
 import socketserver
+import sqlite3
 import threading
 import webbrowser
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-import sqlite3
-
 from nb.config import get_config
 from nb.core.links import list_linked_notes, scan_linked_note_files
-from nb.core.notebooks import (
-    get_notebook_notes_with_linked,
-    list_notebooks,
-)
+from nb.core.notebooks import get_notebook_notes_with_linked, list_notebooks
 from nb.core.notes import get_note
 
 

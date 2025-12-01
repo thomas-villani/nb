@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 # Ensure stdout handles Unicode when piped (e.g., `nb show today | more`)
 if hasattr(sys.stdout, "reconfigure"):
@@ -13,11 +14,7 @@ import click
 
 from nb import __version__
 from nb.cli.attachments import register_attachment_commands
-from nb.cli.completion import (
-    complete_notebook,
-    handle_powershell_completion,
-    register_completion_commands,
-)
+from nb.cli.completion import complete_notebook, handle_powershell_completion, register_completion_commands
 from nb.cli.config_cmd import register_config_commands
 from nb.cli.links import register_link_commands
 from nb.cli.notebooks import register_notebook_commands
@@ -34,7 +31,7 @@ from nb.cli.web import register_web_commands
 class AliasedGroup(click.Group):
     """Click group that supports command aliases with proper flag passthrough."""
 
-    ALIASES = {
+    ALIASES: ClassVar[dict[str, str]] = {
         "t": "today",
         "y": "yesterday",
         "l": "last",
@@ -45,7 +42,7 @@ class AliasedGroup(click.Group):
     }
 
     # Special aliases that need argument injection
-    SPECIAL_ALIASES = {
+    SPECIAL_ALIASES: ClassVar[dict[str, tuple[str, list[str]]]] = {
         "ss": ("search", ["--semantic"]),  # ss -> search --semantic
         "ta": ("todo", ["add"]),  # ta -> todo add
     }

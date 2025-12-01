@@ -813,7 +813,9 @@ def delete_note(path: Path, notes_root: Path | None = None) -> bool:
     try:
         relative_path = path.relative_to(notes_root)
     except ValueError:
-        raise ValueError(f"Cannot delete linked notes. Use 'nb unlink' instead: {path}")
+        raise ValueError(
+            f"Cannot delete linked notes. Use 'nb unlink' instead: {path}"
+        ) from None
 
     # Also check if it's a linked note in the database
     db = get_db()
