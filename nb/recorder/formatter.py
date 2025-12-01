@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from nb.config import get_config
 from nb.recorder.transcriber import TranscriptResult
 
 
@@ -73,13 +74,18 @@ def to_json(
         recorded_at = datetime.now()
 
     # Build speaker info
+    # Speaker 0 on channel 0 is the microphone (you)
+    config = get_config()
+    mic_label = config.recorder.mic_speaker_label
     speakers: dict[str, dict[str, Any]] = {}
     for speaker_id in result.speaker_ids:
-        label = (
-            speaker_names.get(speaker_id, f"Speaker {speaker_id}")
-            if speaker_names
-            else f"Speaker {speaker_id}"
-        )
+        if speaker_names and speaker_id in speaker_names:
+            label = speaker_names[speaker_id]
+        elif speaker_id == 0:
+            # Channel 0, speaker 0 = microphone
+            label = mic_label
+        else:
+            label = f"Speaker {speaker_id}"
         # Determine channel from utterances
         channel = next(
             (u.channel for u in result.utterances if u.speaker == speaker_id), 0
@@ -197,13 +203,19 @@ def to_markdown(
             (current_speaker, current_start, " ".join(current_texts))
         )
 
+    # Get mic speaker label from config
+    config = get_config()
+    mic_label = config.recorder.mic_speaker_label
+
     # Write utterances
     for speaker_id, start, text in grouped_utterances:
-        label = (
-            speaker_names.get(speaker_id, f"Speaker {speaker_id}")
-            if speaker_names
-            else f"Speaker {speaker_id}"
-        )
+        if speaker_names and speaker_id in speaker_names:
+            label = speaker_names[speaker_id]
+        elif speaker_id == 0:
+            # Channel 0, speaker 0 = microphone
+            label = mic_label
+        else:
+            label = f"Speaker {speaker_id}"
         timestamp = format_timestamp(start)
         lines.append(f"**{label}** {timestamp}: {text}")
         lines.append("")

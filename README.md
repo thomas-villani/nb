@@ -654,9 +654,12 @@ recorder:
   loopback_device: 3         # System audio device index (null for default)
   sample_rate: 48000         # Sample rate in Hz (48000 for WASAPI, 16000 for MME)
   auto_delete_audio: false   # Automatically delete WAV after transcription
+  mic_speaker_label: "You"   # Label for microphone speaker in transcripts
 ```
 
 Use `nb record devices` to find device indices for your system. WASAPI devices typically require 48000 Hz sample rate.
+
+**Speaker labeling**: When recording with both microphone and system audio, speakers are automatically distinguished by channel. Your microphone is labeled with `mic_speaker_label` (default: "You"), while remote participants from system audio are labeled "Speaker 100", "Speaker 101", etc. Override with `--speakers "0:Me,100:Alice,101:Bob"`.
 
 ### Configuration Commands
 
@@ -675,6 +678,7 @@ nb config set embeddings.provider ollama  # Embeddings provider
 nb config set embeddings.model nomic-embed-text  # Embeddings model
 nb config set embeddings.base_url http://localhost:11434  # Custom endpoint
 nb config set embeddings.api_key sk-...  # API key (for OpenAI)
+nb config set recorder.mic_speaker_label "Me"  # Mic speaker label in transcripts
 
 # Notebook-specific settings (notebook.<name>.<setting>):
 nb config set notebook.work.color blue      # Set display color

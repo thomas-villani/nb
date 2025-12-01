@@ -79,6 +79,9 @@ def _parse_deepgram_response(
         duration = response["metadata"].get("duration", 0.0)
 
     # Handle multichannel results
+    # When multichannel + diarize are both enabled, each channel gets independent
+    # speaker IDs starting from 0. We offset channel 1+ speakers to make IDs unique.
+    # Channel 0 (mic) speaker 0 = "You", Channel 1 (system) speakers = 100, 101, etc.
     channels = results.get("channels", [])
     for channel_idx, channel in enumerate(channels):
         alternatives = channel.get("alternatives", [])
@@ -96,7 +99,9 @@ def _parse_deepgram_response(
             current_words: list[dict] = []
 
             for word in words:
-                speaker = word.get("speaker", channel_idx)
+                raw_speaker = word.get("speaker", 0)
+                # Offset speaker IDs by channel to ensure uniqueness
+                speaker = raw_speaker + (channel_idx * 100)
                 if current_speaker is None:
                     current_speaker = speaker
 

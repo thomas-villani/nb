@@ -90,6 +90,7 @@ class RecorderConfig:
     sample_rate: int = 16000  # Sample rate in Hz (16000 recommended for speech)
     auto_delete_audio: bool = False  # Delete WAV file after successful transcription
     transcribe_timeout: int = 600  # Deepgram API timeout in seconds (default 10 min)
+    mic_speaker_label: str = "You"  # Label for microphone speaker in transcripts
 
 
 @dataclass
@@ -390,6 +391,7 @@ def _parse_recorder_config(data: dict[str, Any] | None) -> RecorderConfig:
         sample_rate=data.get("sample_rate", 16000),
         auto_delete_audio=data.get("auto_delete_audio", False),
         transcribe_timeout=data.get("transcribe_timeout", 600),
+        mic_speaker_label=data.get("mic_speaker_label", "You"),
     )
 
 
@@ -513,6 +515,8 @@ def save_config(config: Config) -> None:
         recorder_data["auto_delete_audio"] = config.recorder.auto_delete_audio
     if config.recorder.transcribe_timeout != 600:
         recorder_data["transcribe_timeout"] = config.recorder.transcribe_timeout
+    if config.recorder.mic_speaker_label != "You":
+        recorder_data["mic_speaker_label"] = config.recorder.mic_speaker_label
 
     # Note: linked_todos and linked_notes are stored in the database, not config
     data: dict[str, Any] = {
@@ -702,6 +706,7 @@ CONFIGURABLE_SETTINGS = {
     "todo.default_sort": "Default sort order (source, tag, priority, created)",
     "todo.inbox_file": "Name of inbox file in notes_root (default todo.md)",
     "todo.auto_complete_children": "Complete subtasks when parent done (true/false)",
+    "recorder.mic_speaker_label": "Label for microphone speaker in transcripts (default: You)",
 }
 
 # Notebook-specific settings (accessed via notebook.<name>.<setting>)
@@ -872,6 +877,11 @@ def get_config_value(key: str) -> Any:
         attr = parts[1]
         if hasattr(config.todo, attr):
             return getattr(config.todo, attr)
+    elif parts[0] == "recorder" and len(parts) == 2:
+        # Recorder setting
+        attr = parts[1]
+        if hasattr(config.recorder, attr):
+            return getattr(config.recorder, attr)
     elif parts[0] == "notebook" and len(parts) == 3:
         # Notebook-specific setting: notebook.<name>.<setting>
         nb_name, setting = parts[1], parts[2]
@@ -995,6 +1005,13 @@ def set_config_value(key: str, value: str) -> bool:
             config.todo.inbox_file = value
         elif attr == "auto_complete_children":
             config.todo.auto_complete_children = value.lower() in ("true", "1", "yes")
+        else:
+            return False
+    elif parts[0] == "recorder" and len(parts) == 2:
+        # Recorder setting
+        attr = parts[1]
+        if attr == "mic_speaker_label":
+            config.recorder.mic_speaker_label = value if value else "You"
         else:
             return False
     elif parts[0] == "notebook" and len(parts) == 3:

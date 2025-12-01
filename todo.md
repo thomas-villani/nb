@@ -92,13 +92,13 @@ todo_exclude: true
 - [x] Interactive todo review function
 - [x] Show id in second column in 'nb todo' rather than source. #UX
 - [ ] Capture url and other file attachments as markdown using all2md #feature
-- [ ] Add more details about notes in 'nb list', e.g. todo count, last modified, etc.
+- [x] Add more details about notes in 'nb list', e.g. todo count, last modified, etc.
 - [ ] Allow due dates to have times, and to auto parse @due(today) and other relative dates to fill the date on indexing
 - [x] Update help command to launch real docs
-- [ ] Add command to change due-dates of todos from cli with fuzzy dates allowed
-- [ ] Add command to mark all todos in a note as complete
-- [ ] Add a `nb config edit` command to open the config file with the editor
-- [ ] When trying to open note that doesn't exist, prompt to create it
+- [x] Add command to change due-dates of todos from cli with fuzzy dates allowed
+- [x] Add command to mark all todos in a note as complete
+- [x] Add a `nb config edit` command to open the config file with the editor
+- [x] When trying to open note that doesn't exist, prompt to create it
 
 ### Phase 5: Advanced TUI
 - [ ] Full Wijjit-based todo list view with richer interactions #feature

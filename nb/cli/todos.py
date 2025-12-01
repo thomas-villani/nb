@@ -1579,6 +1579,7 @@ def todo_pause(todo_id: tuple[str, ...]) -> None:
 def todo_due(todo_id: tuple[str, ...], date_expr: str) -> None:
     """Set or clear the due date for a todo.
 
+    \b
     DATE_EXPR can be:
     - A date: "2025-12-15", "dec 15", "tomorrow", "friday"
     - "none" or "clear" to remove the due date
