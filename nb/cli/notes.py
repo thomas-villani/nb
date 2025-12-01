@@ -17,6 +17,7 @@ from nb.cli.utils import (
 from nb.config import get_config
 from nb.core.notes import (
     create_note,
+    delete_note,
     ensure_daily_note,
     list_daily_notes,
     open_note,
@@ -39,6 +40,7 @@ def register_note_commands(cli: click.Group) -> None:
     cli.add_command(alias_note)
     cli.add_command(unalias_note)
     cli.add_command(list_aliases_cmd)
+    cli.add_command(delete_note_cmd)
 
 
 @click.command()
@@ -821,3 +823,64 @@ def list_aliases_cmd() -> None:
     for alias, path, notebook in aliases:
         nb_str = f" [dim]({notebook})[/dim]" if notebook else ""
         console.print(f"  [cyan]{alias}[/cyan] -> {path.name}{nb_str}")
+
+
+@click.command("delete")
+@click.argument("note_ref")
+@click.option("--notebook", "-n", help="Notebook containing the note")
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation")
+def delete_note_cmd(note_ref: str, notebook: str | None, force: bool) -> None:
+    """Delete a note from the filesystem and database.
+
+    NOTE_REF can be a note path, name, alias, or date (for daily notes).
+    Use --notebook/-n to specify which notebook the note is in.
+
+    This will also delete all todos from that note.
+
+    Note: Linked notes cannot be deleted. Use 'nb unlink' to remove them.
+
+    \b
+    Examples:
+      nb delete friday                 # Delete Friday's daily note
+      nb delete myproject -n work      # Delete work/myproject.md
+      nb delete work/myproject         # Delete using notebook/note format
+      nb delete myalias                # Delete note by alias
+      nb delete friday -f              # Skip confirmation
+    """
+    from rich.prompt import Confirm
+
+    from nb.cli.utils import get_display_path
+
+    config = get_config()
+
+    try:
+        path = resolve_note_ref(note_ref, notebook=notebook)
+    except UserCancelled:
+        console.print("[dim]Cancelled.[/dim]")
+        raise SystemExit(1)
+
+    if not path:
+        console.print(f"[red]Could not resolve note: {note_ref}[/red]")
+        raise SystemExit(1)
+
+    # Get display path for user feedback
+    display_path = get_display_path(path)
+
+    # Show confirmation unless --force
+    if not force:
+        console.print(f"\n[bold]Delete note:[/bold] {display_path}")
+
+        if not Confirm.ask("Are you sure?", default=False):
+            console.print("[dim]Cancelled.[/dim]")
+            raise SystemExit(0)
+
+    # Delete the note
+    try:
+        delete_note(path, notes_root=config.notes_root)
+        console.print(f"[green]Deleted:[/green] {display_path}")
+    except FileNotFoundError:
+        console.print(f"[red]Note not found: {display_path}[/red]")
+        raise SystemExit(1)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)

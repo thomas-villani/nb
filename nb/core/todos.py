@@ -732,6 +732,52 @@ def add_todo_to_note(
     return todo
 
 
+def delete_todo_from_file(
+    path: Path,
+    line_number: int,
+    check_linked_sync: bool = True,
+) -> bool:
+    """Delete a todo line from its source file.
+
+    Args:
+        path: Path to the file
+        line_number: 1-based line number of the todo
+        check_linked_sync: Whether to check if linked file allows sync
+
+    Returns:
+        True if successfully deleted, False otherwise.
+
+    Raises:
+        PermissionError: If the file is a linked file with sync disabled.
+
+    """
+    if not path.exists():
+        return False
+
+    # Check if we're allowed to modify this file
+    if check_linked_sync and not can_toggle_linked_file(path):
+        raise PermissionError(f"Cannot modify linked file (sync disabled): {path.name}")
+
+    content = path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+
+    if line_number < 1 or line_number > len(lines):
+        return False
+
+    line = lines[line_number - 1]
+    match = TODO_PATTERN.match(line)
+
+    if not match:
+        return False
+
+    # Remove the line
+    del lines[line_number - 1]
+
+    # Write back
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return True
+
+
 def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
     """Add a new todo to a daily note.
 

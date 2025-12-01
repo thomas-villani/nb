@@ -1595,3 +1595,103 @@ def todo_edit(todo_id: str) -> None:
     config = get_config()
     console.print(f"[dim]Opening {t.source.path.name}:{t.line_number}...[/dim]")
     open_in_editor(t.source.path, line=t.line_number, editor=config.editor)
+
+
+def _delete_todo_with_children(t, force: bool = False) -> int:
+    """Delete a todo and all its children recursively.
+
+    Returns the count of children that were deleted.
+    """
+    from nb.core.todos import delete_todo_from_file
+    from nb.index.todos_repo import delete_todo
+
+    children_deleted = 0
+    children = get_todo_children(t.id)
+
+    # Delete children first (bottom-up to preserve line numbers)
+    for child in reversed(children):
+        children_deleted += _delete_todo_with_children(child, force=True)
+
+    # Delete from source file
+    try:
+        if delete_todo_from_file(t.source.path, t.line_number):
+            delete_todo(t.id)
+            return children_deleted + 1
+    except PermissionError as e:
+        console.print(f"[red]{e}[/red]")
+        console.print(
+            "[dim]Hint: Use 'nb link' to enable sync for external files.[/dim]"
+        )
+
+    return children_deleted
+
+
+@todo.command("delete")
+@click.argument("todo_id", nargs=-1)
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation")
+def todo_delete(todo_id: tuple[str, ...], force: bool) -> None:
+    """Delete a todo from the source file and database.
+
+    TODO_ID can be the full ID or just the first few characters.
+    The 6-character ID shown in 'nb todo' output is usually sufficient.
+
+    If the todo has child todos (subtasks), they will also be deleted.
+
+    \b
+    Examples:
+      nb todo delete abc123
+      nb todo delete abc123 def456   # Multiple IDs
+      nb todo delete abc123 -f       # Skip confirmation
+    """
+    from rich.prompt import Confirm
+
+    if not todo_id:
+        console.print("[yellow]No todo ID provided.[/yellow]")
+        raise SystemExit(1)
+
+    for _todo in todo_id:
+        t = find_todo(_todo)
+        if not t:
+            console.print(f"[red]Todo not found: {_todo}[/red]")
+            console.print(
+                "[dim]Hint: Run 'nb index' to refresh the todo index, or use 'nb todo' to list todos.[/dim]"
+            )
+            continue
+
+        # Check for children
+        children = get_todo_children(t.id)
+        children_count = len(children)
+
+        # Show confirmation unless --force
+        if not force:
+            console.print(f"\n[bold]Delete todo:[/bold] {t.content}")
+            console.print(f"[dim]Source: {t.source.path.name}:{t.line_number}[/dim]")
+            if children_count > 0:
+                console.print(
+                    f"[yellow]This will also delete {children_count} subtask(s).[/yellow]"
+                )
+
+            if not Confirm.ask("Are you sure?", default=False):
+                console.print("[dim]Cancelled.[/dim]")
+                continue
+
+        # Delete the todo and its children
+        try:
+            deleted_count = _delete_todo_with_children(t, force=True)
+            if deleted_count > 0:
+                if children_count > 0:
+                    console.print(
+                        f"[green]Deleted:[/green] {t.content} [dim](+{children_count} subtask(s))[/dim]"
+                    )
+                else:
+                    console.print(f"[green]Deleted:[/green] {t.content}")
+            else:
+                console.print("[red]Failed to delete todo from source file.[/red]")
+                console.print(
+                    "[dim]Hint: The todo may have been edited or moved. Run 'nb index' to refresh.[/dim]"
+                )
+        except PermissionError as e:
+            console.print(f"[red]{e}[/red]")
+            console.print(
+                "[dim]Hint: Use 'nb link' to enable sync for external files.[/dim]"
+            )

@@ -769,3 +769,72 @@ def list_notebook_notes_by_date(
     rows = db.fetchall(query, tuple(params))
 
     return [notes_root / row["path"] for row in rows if row["path"]]
+
+
+def delete_note(path: Path, notes_root: Path | None = None) -> bool:
+    """Delete a note from the filesystem and database.
+
+    Deletes:
+    - The note file from the filesystem
+    - The note record from the database (cascades to note_tags, note_links, note_views)
+    - All todos from this source file
+
+    Does NOT:
+    - Clean up empty parent directories
+    - Delete external/linked notes (raises ValueError)
+
+    Args:
+        path: Absolute path to the note
+        notes_root: Override notes root directory
+
+    Returns:
+        True if successfully deleted.
+
+    Raises:
+        FileNotFoundError: If the note doesn't exist.
+        ValueError: If the note is an external/linked note.
+
+    """
+    from nb.index.db import get_db
+    from nb.index.todos_repo import delete_todos_for_source
+    from nb.utils.hashing import normalize_path
+
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    # Resolve path
+    if not path.is_absolute():
+        path = notes_root / path
+
+    if not path.exists():
+        raise FileNotFoundError(f"Note not found: {path}")
+
+    # Check if this is an external/linked note (outside notes_root)
+    try:
+        relative_path = path.relative_to(notes_root)
+    except ValueError:
+        raise ValueError(f"Cannot delete linked notes. Use 'nb unlink' instead: {path}")
+
+    # Also check if it's a linked note in the database
+    db = get_db()
+    note_row = db.fetchone(
+        "SELECT external FROM notes WHERE path = ?",
+        (normalize_path(relative_path),),
+    )
+    if note_row and note_row["external"]:
+        raise ValueError("Cannot delete linked notes. Use 'nb unlink' instead.")
+
+    # Delete todos from this source file
+    delete_todos_for_source(path)
+
+    # Delete from notes table (cascades to note_tags, note_links, note_views)
+    db.execute(
+        "DELETE FROM notes WHERE path = ?",
+        (normalize_path(relative_path),),
+    )
+    db.commit()
+
+    # Delete the file from filesystem
+    path.unlink()
+
+    return True
