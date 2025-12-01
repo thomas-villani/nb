@@ -79,8 +79,8 @@ def register_todo_commands(cli: click.Group) -> None:
     "--sort-by",
     "-s",
     type=click.Choice(["source", "tag", "priority", "created"]),
-    default="source",
-    help="Sort todos within groups",
+    default=None,
+    help="Sort todos within groups (default from config)",
 )
 @click.option(
     "--all",
@@ -114,7 +114,7 @@ def todo(
     hide_later: bool,
     hide_no_date: bool,
     focus: bool,
-    sort_by: str,
+    sort_by: str | None,
     show_all: bool,
     include_completed: bool,
     interactive: bool,
@@ -202,6 +202,10 @@ def todo(
     """
     if ctx.invoked_subcommand is None:
         config = get_config()
+
+        # Use config default for sort_by if not specified
+        if sort_by is None:
+            sort_by = config.todo.default_sort
 
         # Handle view management commands first
         if list_views:
@@ -1347,12 +1351,14 @@ def todo_done(todo_id: tuple[str, ...]) -> None:
                 update_todo_completion(t.id, True)
                 console.print(f"[green]Completed:[/green] {t.content}")
 
-                # Auto-complete child todos
-                children_completed = _complete_todo_with_children(t)
-                if children_completed > 0:
-                    console.print(
-                        f"[dim]  Also completed {children_completed} subtask(s)[/dim]"
-                    )
+                # Auto-complete child todos (if enabled in config)
+                config = get_config()
+                if config.todo.auto_complete_children:
+                    children_completed = _complete_todo_with_children(t)
+                    if children_completed > 0:
+                        console.print(
+                            f"[dim]  Also completed {children_completed} subtask(s)[/dim]"
+                        )
             else:
                 console.print("[red]Failed to update todo in source file.[/red]")
                 console.print(

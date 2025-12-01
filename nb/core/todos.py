@@ -423,9 +423,12 @@ def add_todo_to_inbox(text: str, notes_root: Path | None = None) -> Todo:
 
     """
     if notes_root is None:
-        notes_root = get_config().notes_root
+        config = get_config()
+        notes_root = config.notes_root
+    else:
+        config = get_config()
 
-    inbox_path = notes_root / "todo.md"
+    inbox_path = notes_root / config.todo.inbox_file
 
     # Create inbox if it doesn't exist
     if not inbox_path.exists():
@@ -480,9 +483,10 @@ def add_todo_to_inbox(text: str, notes_root: Path | None = None) -> Todo:
 
 def get_inbox_path(notes_root: Path | None = None) -> Path:
     """Get the path to the todo inbox file."""
+    config = get_config()
     if notes_root is None:
-        notes_root = get_config().notes_root
-    return notes_root / "todo.md"
+        notes_root = config.notes_root
+    return notes_root / config.todo.inbox_file
 
 
 def find_matching_sections(

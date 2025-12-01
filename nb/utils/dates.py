@@ -160,23 +160,50 @@ def is_date_in_range(dt: date, start: date | None, end: date | None) -> bool:
     return True
 
 
-def get_week_range(dt: date | None = None) -> tuple[date, date]:
-    """Get the start (Monday) and end (Sunday) of the week containing dt."""
-    if dt is None:
-        dt = date.today()
-    start = dt - timedelta(days=dt.weekday())  # Monday
-    end = start + timedelta(days=6)  # Sunday
-    return start, end
+def get_week_range(
+    dt: date | None = None, week_start_day: str | None = None
+) -> tuple[date, date]:
+    """Get the start and end of the week containing dt.
 
+    Args:
+        dt: The date to get the week for (defaults to today).
+        week_start_day: First day of week ("monday" or "sunday").
+                       If None, reads from config.
 
-def get_week_folder_name(dt: date | None = None) -> str:
-    """Get the week folder name for a date (e.g., 'Nov25-Dec01').
-
-    Uses Monday-Sunday week boundaries.
+    Returns:
+        Tuple of (start_date, end_date) for the week.
     """
     if dt is None:
         dt = date.today()
-    start, end = get_week_range(dt)
+
+    # Get week start day from config if not specified
+    if week_start_day is None:
+        from nb.config import get_config
+
+        week_start_day = get_config().week_start_day
+
+    if week_start_day == "sunday":
+        # Sunday = 6, so we need (dt.weekday() + 1) % 7 days back
+        days_since_sunday = (dt.weekday() + 1) % 7
+        start = dt - timedelta(days=days_since_sunday)
+    else:
+        # Monday = 0 (default)
+        start = dt - timedelta(days=dt.weekday())
+
+    end = start + timedelta(days=6)
+    return start, end
+
+
+def get_week_folder_name(
+    dt: date | None = None, week_start_day: str | None = None
+) -> str:
+    """Get the week folder name for a date (e.g., 'Nov25-Dec01').
+
+    Uses configured week start day (Monday or Sunday).
+    """
+    if dt is None:
+        dt = date.today()
+    start, end = get_week_range(dt, week_start_day)
     # Format: Nov25-Dec01
     return f"{start.strftime('%b%d')}-{end.strftime('%b%d')}"
 

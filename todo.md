@@ -89,7 +89,7 @@ todo_exclude: true
 - [x] Need progress / spinners for long-running tasks (syncing and reindexing and search)
 - [ ] Review autocomplete and improve
 - [ ] Add a command to delete a todo or a note
-- [ ] Be able to define date format of note titles, and display, prefer day of week included in most cases
+- [^] Be able to define date format of note titles, and display, prefer day of week included in most cases
 
 
 ### Phase 5: Advanced TUI

@@ -274,7 +274,9 @@ def history_cmd(
 
             for abs_path, rel_path, timestamps, view_count, linked_alias in nb_views:
                 # Format the timestamp (use most recent)
-                time_str = timestamps[0].strftime("%Y-%m-%d %H:%M")
+                time_str = timestamps[0].strftime(
+                    f"{config.date_format} {config.time_format}"
+                )
 
                 # Determine display path
                 if full_path:
@@ -308,7 +310,9 @@ def history_cmd(
             nb_name,
         ) in resolved_views:
             # Format the timestamp (use most recent)
-            time_str = timestamps[0].strftime("%Y-%m-%d %H:%M")
+            time_str = timestamps[0].strftime(
+                f"{config.date_format} {config.time_format}"
+            )
 
             # Determine display path
             if full_path:

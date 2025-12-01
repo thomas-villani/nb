@@ -9,6 +9,7 @@ from typing import Any
 
 import frontmatter
 
+from nb.config import get_config
 from nb.utils.dates import parse_date_from_filename
 
 # Pattern for wiki-style links: [[path|title]] or [[path]]
@@ -167,14 +168,16 @@ def create_note_template(
         content += f"# {title}\n\n"
     else:
         # Default title based on date
-        content += f"# Notes - {dt.strftime('%B %d, %Y')}\n\n"
+        config = get_config()
+        content += f"# Notes - {dt.strftime(config.daily_title_format)}\n\n"
 
     return content
 
 
 def create_daily_note_template(dt: date) -> str:
     """Generate a template for daily notes."""
+    config = get_config()
     meta = {"date": dt.isoformat()}
     content = generate_frontmatter(meta)
-    content += f"# {dt.strftime('%B %d, %Y')}\n\n"
+    content += f"# {dt.strftime(config.daily_title_format)}\n\n"
     return content

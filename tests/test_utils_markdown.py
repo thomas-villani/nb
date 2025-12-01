@@ -330,7 +330,8 @@ class TestCreateNoteTemplate:
     def test_default_title(self):
         result = create_note_template(dt=date(2025, 11, 26))
 
-        assert "# Notes - November 26, 2025" in result
+        # Default format includes day of week from config.daily_title_format
+        assert "# Notes - Wednesday, November 26, 2025" in result
 
 
 class TestCreateDailyNoteTemplate:
@@ -341,4 +342,5 @@ class TestCreateDailyNoteTemplate:
 
         assert "---" in result
         assert "date:" in result
-        assert "# November 26, 2025" in result
+        # Default format includes day of week from config.daily_title_format
+        assert "# Wednesday, November 26, 2025" in result

@@ -64,6 +64,24 @@ class EmbeddingsConfig:
 
 
 @dataclass
+class SearchConfig:
+    """Configuration for search behavior."""
+
+    vector_weight: float = 0.7  # Hybrid search: 0=keyword only, 1=vector only
+    score_threshold: float = 0.4  # Minimum score to show results
+    recency_decay_days: int = 30  # Half-life for recency boost
+
+
+@dataclass
+class TodoConfig:
+    """Configuration for todo behavior."""
+
+    default_sort: str = "source"  # source, tag, priority, created
+    inbox_file: str = "todo.md"  # Name of inbox file in notes_root
+    auto_complete_children: bool = True  # Complete subtasks when parent is done
+
+
+@dataclass
 class TodoViewConfig:
     """Configuration for a saved todo view.
 
@@ -99,8 +117,12 @@ class Config:
     )
     todo_views: list[TodoViewConfig] = field(default_factory=list)
     embeddings: EmbeddingsConfig = field(default_factory=EmbeddingsConfig)
+    search: SearchConfig = field(default_factory=SearchConfig)
+    todo: TodoConfig = field(default_factory=TodoConfig)
     date_format: str = "%Y-%m-%d"
     time_format: str = "%H:%M"
+    daily_title_format: str = "%A, %B %d, %Y"  # e.g., "Friday, November 28, 2025"
+    week_start_day: str = "monday"  # monday or sunday
 
     def get_todo_view(self, name: str) -> TodoViewConfig | None:
         """Get a todo view configuration by name."""
@@ -221,9 +243,23 @@ embeddings:
   # base_url: http://localhost:11434  # Optional: custom Ollama endpoint
   # api_key: null  # Required for OpenAI
 
+# Search behavior
+search:
+  vector_weight: 0.7      # Hybrid search balance (0=keyword only, 1=vector only)
+  score_threshold: 0.4    # Minimum score to show results
+  recency_decay_days: 30  # Half-life in days for recency boost
+
+# Todo behavior
+todo:
+  default_sort: source           # source, tag, priority, created
+  inbox_file: todo.md            # Name of inbox file in notes_root
+  auto_complete_children: true   # Complete subtasks when parent done
+
 # Date/time display formats
 date_format: "%Y-%m-%d"
 time_format: "%H:%M"
+daily_title_format: "%A, %B %d, %Y"  # e.g., "Friday, November 28, 2025"
+week_start_day: monday  # monday or sunday
 """
 
 
@@ -310,6 +346,28 @@ def _parse_todo_views(data: list[dict[str, Any]]) -> list[TodoViewConfig]:
     return result
 
 
+def _parse_search(data: dict[str, Any] | None) -> SearchConfig:
+    """Parse search configuration."""
+    if data is None:
+        return SearchConfig()
+    return SearchConfig(
+        vector_weight=data.get("vector_weight", 0.7),
+        score_threshold=data.get("score_threshold", 0.4),
+        recency_decay_days=data.get("recency_decay_days", 30),
+    )
+
+
+def _parse_todo_config(data: dict[str, Any] | None) -> TodoConfig:
+    """Parse todo configuration."""
+    if data is None:
+        return TodoConfig()
+    return TodoConfig(
+        default_sort=data.get("default_sort", "source"),
+        inbox_file=data.get("inbox_file", "todo.md"),
+        auto_complete_children=data.get("auto_complete_children", True),
+    )
+
+
 def load_config(config_path: Path | None = None) -> Config:
     """Load configuration from YAML file.
 
@@ -347,8 +405,12 @@ def load_config(config_path: Path | None = None) -> Config:
     # Note: linked_todos and linked_notes are stored in the database, not config
     todo_views = _parse_todo_views(data.get("todo_views", []))
     embeddings = _parse_embeddings(data.get("embeddings"))
+    search = _parse_search(data.get("search"))
+    todo_config = _parse_todo_config(data.get("todo"))
     date_format = data.get("date_format", "%Y-%m-%d")
     time_format = data.get("time_format", "%H:%M")
+    daily_title_format = data.get("daily_title_format", "%A, %B %d, %Y")
+    week_start_day = data.get("week_start_day", "monday")
 
     return Config(
         notes_root=notes_root,
@@ -356,8 +418,12 @@ def load_config(config_path: Path | None = None) -> Config:
         notebooks=notebooks,
         todo_views=todo_views,
         embeddings=embeddings,
+        search=search,
+        todo=todo_config,
         date_format=date_format,
         time_format=time_format,
+        daily_title_format=daily_title_format,
+        week_start_day=week_start_day,
     )
 
 
@@ -394,6 +460,20 @@ def save_config(config: Config) -> None:
             nb_dict["template"] = nb.template
         notebooks_data.append(nb_dict)
 
+    # Build search config dict
+    search_data = {
+        "vector_weight": config.search.vector_weight,
+        "score_threshold": config.search.score_threshold,
+        "recency_decay_days": config.search.recency_decay_days,
+    }
+
+    # Build todo config dict
+    todo_data = {
+        "default_sort": config.todo.default_sort,
+        "inbox_file": config.todo.inbox_file,
+        "auto_complete_children": config.todo.auto_complete_children,
+    }
+
     # Note: linked_todos and linked_notes are stored in the database, not config
     data = {
         "notes_root": str(config.notes_root),
@@ -403,8 +483,12 @@ def save_config(config: Config) -> None:
             {"name": view.name, "filters": view.filters} for view in config.todo_views
         ],
         "embeddings": embeddings_data,
+        "search": search_data,
+        "todo": todo_data,
         "date_format": config.date_format,
         "time_format": config.time_format,
+        "daily_title_format": config.daily_title_format,
+        "week_start_day": config.week_start_day,
     }
 
     config.config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -560,12 +644,20 @@ CONFIGURABLE_SETTINGS = {
     "editor": "Text editor command (e.g., code, vim, micro)",
     "date_format": "Date display format (e.g., %Y-%m-%d)",
     "time_format": "Time display format (e.g., %H:%M)",
+    "daily_title_format": "Daily note title format (e.g., %A, %B %d, %Y)",
+    "week_start_day": "First day of week (monday or sunday)",
     "embeddings.provider": "Embeddings provider (ollama or openai)",
     "embeddings.model": "Embeddings model name (e.g., nomic-embed-text)",
     "embeddings.base_url": "Custom embeddings API endpoint URL",
     "embeddings.api_key": "API key for embeddings provider (OpenAI)",
     "embeddings.chunk_size": "Max tokens per chunk (e.g., 500)",
     "embeddings.chunking_method": "Chunking method (sentences, tokens, paragraphs, sections)",
+    "search.vector_weight": "Hybrid search balance: 0=keyword, 1=vector (default 0.7)",
+    "search.score_threshold": "Minimum score to show search results (default 0.4)",
+    "search.recency_decay_days": "Half-life in days for recency boost (default 30)",
+    "todo.default_sort": "Default sort order (source, tag, priority, created)",
+    "todo.inbox_file": "Name of inbox file in notes_root (default todo.md)",
+    "todo.auto_complete_children": "Complete subtasks when parent done (true/false)",
 }
 
 # Notebook-specific settings (accessed via notebook.<name>.<setting>)
@@ -715,6 +807,10 @@ def get_config_value(key: str) -> Any:
             return config.date_format
         elif key == "time_format":
             return config.time_format
+        elif key == "daily_title_format":
+            return config.daily_title_format
+        elif key == "week_start_day":
+            return config.week_start_day
         elif key == "notes_root":
             return str(config.notes_root)
     elif parts[0] == "embeddings" and len(parts) == 2:
@@ -722,6 +818,16 @@ def get_config_value(key: str) -> Any:
         attr = parts[1]
         if hasattr(config.embeddings, attr):
             return getattr(config.embeddings, attr)
+    elif parts[0] == "search" and len(parts) == 2:
+        # Search setting
+        attr = parts[1]
+        if hasattr(config.search, attr):
+            return getattr(config.search, attr)
+    elif parts[0] == "todo" and len(parts) == 2:
+        # Todo setting
+        attr = parts[1]
+        if hasattr(config.todo, attr):
+            return getattr(config.todo, attr)
     elif parts[0] == "notebook" and len(parts) == 3:
         # Notebook-specific setting: notebook.<name>.<setting>
         nb_name, setting = parts[1], parts[2]
@@ -758,6 +864,15 @@ def set_config_value(key: str, value: str) -> bool:
             config.date_format = value
         elif key == "time_format":
             config.time_format = value
+        elif key == "daily_title_format":
+            config.daily_title_format = value
+        elif key == "week_start_day":
+            valid_days = ("monday", "sunday")
+            if value.lower() not in valid_days:
+                raise ValueError(
+                    f"week_start_day must be one of: {', '.join(valid_days)}"
+                )
+            config.week_start_day = value.lower()
         else:
             return False
     elif parts[0] == "embeddings" and len(parts) == 2:
@@ -777,6 +892,59 @@ def set_config_value(key: str, value: str) -> bool:
                     f"chunking_method must be one of: {', '.join(valid_methods)}"
                 )
             config.embeddings.chunking_method = value
+        else:
+            return False
+    elif parts[0] == "search" and len(parts) == 2:
+        # Search setting
+        attr = parts[1]
+        if attr == "vector_weight":
+            try:
+                weight = float(value)
+                if not 0 <= weight <= 1:
+                    raise ValueError("vector_weight must be between 0 and 1")
+                config.search.vector_weight = weight
+            except ValueError as e:
+                if "could not convert" in str(e).lower():
+                    raise ValueError(f"vector_weight must be a number, got '{value}'")
+                raise
+        elif attr == "score_threshold":
+            try:
+                threshold = float(value)
+                if not 0 <= threshold <= 1:
+                    raise ValueError("score_threshold must be between 0 and 1")
+                config.search.score_threshold = threshold
+            except ValueError as e:
+                if "could not convert" in str(e).lower():
+                    raise ValueError(f"score_threshold must be a number, got '{value}'")
+                raise
+        elif attr == "recency_decay_days":
+            try:
+                days = int(value)
+                if days < 1:
+                    raise ValueError("recency_decay_days must be at least 1")
+                config.search.recency_decay_days = days
+            except ValueError as e:
+                if "invalid literal" in str(e).lower():
+                    raise ValueError(
+                        f"recency_decay_days must be an integer, got '{value}'"
+                    )
+                raise
+        else:
+            return False
+    elif parts[0] == "todo" and len(parts) == 2:
+        # Todo setting
+        attr = parts[1]
+        if attr == "default_sort":
+            valid_sorts = ("source", "tag", "priority", "created")
+            if value not in valid_sorts:
+                raise ValueError(
+                    f"default_sort must be one of: {', '.join(valid_sorts)}"
+                )
+            config.todo.default_sort = value
+        elif attr == "inbox_file":
+            config.todo.inbox_file = value
+        elif attr == "auto_complete_children":
+            config.todo.auto_complete_children = value.lower() in ("true", "1", "yes")
         else:
             return False
     elif parts[0] == "notebook" and len(parts) == 3:

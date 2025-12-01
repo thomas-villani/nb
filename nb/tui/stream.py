@@ -11,6 +11,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
 
+from nb.config import get_config
 from nb.models import Note
 
 
@@ -164,11 +165,12 @@ def render_header(state: StreamState) -> Panel:
         return Panel("No notes", style="dim")
 
     # Build header text
+    config = get_config()
     header = Text()
     header.append(note.title or "Untitled", style="bold")
     header.append("  ")
     if note.date:
-        header.append(note.date.strftime("%Y-%m-%d"), style="cyan")
+        header.append(note.date.strftime(config.date_format), style="cyan")
     if note.notebook:
         header.append(f"  [{note.notebook}]", style="magenta")
 

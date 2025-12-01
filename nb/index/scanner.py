@@ -237,7 +237,8 @@ def index_note(
         full_path = notes_root / path
 
     # Determine source type
-    if full_path.name == "todo.md":
+    config = get_config()
+    if full_path.name == config.todo.inbox_file:
         source_type = "inbox"
     else:
         source_type = "note"
@@ -480,7 +481,8 @@ def _index_note_thread_safe(
 
     # Index todos
     # Determine source type
-    if full_path.name == "todo.md":
+    config = get_config()
+    if full_path.name == config.todo.inbox_file:
         source_type = "inbox"
     else:
         source_type = "note"
@@ -795,11 +797,12 @@ def index_todos_from_file(path: Path, notes_root: Path | None = None) -> int:
     if notes_root is None:
         notes_root = get_config().notes_root
 
+    config = get_config()
     if not path.is_absolute():
         path = notes_root / path
 
     # Determine source type
-    if path.name == "todo.md":
+    if path.name == config.todo.inbox_file:
         source_type = "inbox"
     else:
         source_type = "note"

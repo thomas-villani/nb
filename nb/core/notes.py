@@ -549,7 +549,10 @@ def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
         return
 
     # Internal note - determine source type and re-extract todos
-    if rel_path.name == "todo.md" and len(rel_path.parts) == 1:
+    from nb.config import get_config as get_cfg
+
+    cfg = get_cfg()
+    if rel_path.name == cfg.todo.inbox_file and len(rel_path.parts) == 1:
         source_type = "inbox"
     else:
         source_type = "note"

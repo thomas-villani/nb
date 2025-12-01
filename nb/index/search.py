@@ -182,11 +182,11 @@ class NoteSearch:
         search_type: str = "hybrid",
         k: int = 10,
         filters: dict | None = None,
-        vector_weight: float = 0.7,
+        vector_weight: float | None = None,
         date_start: str | None = None,
         date_end: str | None = None,
         recency_boost: float = 0.0,
-        score_threshold: float = 0.4,
+        score_threshold: float | None = None,
     ) -> list[SearchResult]:
         """Search notes using keyword, semantic, or hybrid search.
 
@@ -196,15 +196,22 @@ class NoteSearch:
             k: Maximum number of results to return.
             filters: Optional metadata filters (e.g., {"notebook": "daily"}).
             vector_weight: Weight for vector results in hybrid search (0-1).
+                          If None, uses config.search.vector_weight.
             date_start: Filter to notes on or after this date (ISO format).
             date_end: Filter to notes on or before this date (ISO format).
             recency_boost: Weight (0-1) to boost recent results. 0 = no boost.
-            score_threshold: Minimum score for result to be displayed
+            score_threshold: Minimum score for result to be displayed.
+                            If None, uses config.search.score_threshold.
 
         Returns:
             List of search results sorted by relevance (with optional recency boost).
 
         """
+        # Use config defaults if not specified
+        if vector_weight is None:
+            vector_weight = self.config.search.vector_weight
+        if score_threshold is None:
+            score_threshold = self.config.search.score_threshold
         # Build combined filters
         combined_filters = dict(filters) if filters else {}
 
@@ -259,7 +266,8 @@ class NoteSearch:
         """Apply a recency boost to search results.
 
         Recent documents get a score boost proportional to how recent they are.
-        The boost decays exponentially over time.
+        The boost decays exponentially over time using config.search.recency_decay_days
+        as the half-life.
 
         Args:
             results: List of search results.
@@ -272,6 +280,7 @@ class NoteSearch:
         from datetime import date as date_type
 
         today = date_type.today()
+        decay_days = self.config.search.recency_decay_days
 
         for r in results:
             if r.date:
@@ -280,9 +289,9 @@ class NoteSearch:
                     note_date = date_type.fromisoformat(r.date)
                     age_days = (today - note_date).days
 
-                    # Exponential decay: half-life of ~30 days
-                    # recency_factor is 1.0 for today, ~0.5 for 30 days ago, etc.
-                    recency_factor = 2 ** (-age_days / 30)
+                    # Exponential decay with configurable half-life
+                    # recency_factor is 1.0 for today, ~0.5 for decay_days ago, etc.
+                    recency_factor = 2 ** (-age_days / decay_days)
 
                     # Combine relevance score with recency
                     # Final score = (1-weight)*relevance + weight*recency

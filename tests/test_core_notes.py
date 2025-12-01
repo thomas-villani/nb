@@ -54,7 +54,8 @@ class TestEnsureDailyNote:
 
         assert path.exists()
         content = path.read_text()
-        assert "# November 26, 2025" in content
+        # Default format includes day of week from config.daily_title_format
+        assert "# Wednesday, November 26, 2025" in content
         assert "date:" in content
 
     def test_returns_existing_note(self, mock_config, create_note):

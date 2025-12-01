@@ -360,7 +360,7 @@ def ensure_notebook_note(
                 title = (
                     name.replace("-", " ").replace("_", " ").title()
                     if name
-                    else dt.strftime("%A, %B %d, %Y")
+                    else dt.strftime(config.daily_title_format)
                 )
                 content = render_template(
                     template_content,
@@ -377,7 +377,7 @@ def ensure_notebook_note(
                 dt = date.today()
             # Create daily note with header
             path.write_text(
-                f"---\ndate: {dt}\n---\n\n# {dt.strftime('%A, %B %d, %Y')}\n\n",
+                f"---\ndate: {dt}\n---\n\n# {dt.strftime(config.daily_title_format)}\n\n",
                 encoding="utf-8",
             )
         else:
