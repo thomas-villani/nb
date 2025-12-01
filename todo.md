@@ -128,4 +128,5 @@ todo_exclude: true
 - [ ] Export to various formats (HTML, PDF) #feature
 - [ ] Calendar view for due dates #feature
 - [ ] Due date reminders (optional notifications) #feature
+  These can use the `win11toast` library which is dead simple.
 - [ ] Add '@startby' to todos #feature
