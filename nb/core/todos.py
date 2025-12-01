@@ -778,6 +778,77 @@ def delete_todo_from_file(
     return True
 
 
+def update_todo_due_date(
+    path: Path,
+    line_number: int,
+    new_date: date,
+    check_linked_sync: bool = True,
+) -> bool:
+    """Update or add @due() in a todo line.
+
+    If @due() exists, replaces it with the new date.
+    If not, adds @due(YYYY-MM-DD) before the first #tag or at end of line.
+
+    Args:
+        path: Path to the file
+        line_number: 1-based line number of the todo
+        new_date: The new due date to set
+        check_linked_sync: Whether to check if linked file allows sync
+
+    Returns:
+        True if successfully updated, False otherwise.
+
+    Raises:
+        PermissionError: If the file is a linked file with sync disabled.
+
+    """
+    if not path.exists():
+        return False
+
+    # Check if we're allowed to modify this file
+    if check_linked_sync and not can_toggle_linked_file(path):
+        raise PermissionError(f"Cannot modify linked file (sync disabled): {path.name}")
+
+    content = path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+
+    if line_number < 1 or line_number > len(lines):
+        return False
+
+    line = lines[line_number - 1]
+    match = TODO_PATTERN.match(line)
+
+    if not match:
+        return False
+
+    date_str = new_date.isoformat()
+
+    if DUE_PATTERN.search(line):
+        # Replace existing @due()
+        new_line = DUE_PATTERN.sub(f"@due({date_str})", line)
+    else:
+        # Add @due() - insert before first #tag or at end
+        todo_content = match.group("content")
+        tag_match = TAG_PATTERN.search(todo_content)
+
+        if tag_match:
+            # Insert before first tag
+            tag_pos = tag_match.start()
+            # Find where content starts in original line
+            content_start = line.index(todo_content)
+            insert_pos = content_start + tag_pos
+            new_line = line[:insert_pos] + f"@due({date_str}) " + line[insert_pos:]
+        else:
+            # Append at end
+            new_line = line.rstrip() + f" @due({date_str})"
+
+    lines[line_number - 1] = new_line
+
+    # Write back
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return True
+
+
 def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
     """Add a new todo to a daily note.
 

@@ -59,7 +59,7 @@ todo_exclude: true
 - [x] Add a way from command line to open with other editor (e.g. nb open <note> --notepad)
 - [x] predefine a list of common emojis to set as icon from config for project
 - [x] Templates for notes - allow to define templates and create from a template with `nb new ... --template <template_name>`
-- [ ] Toml for config instead of yaml
+- [ ] Toml for config instead of yaml #feature
 - [x] Note titles -- how to integrate and use them as a way to open notes too? Or at least display in list? This already seems to be the case.
 - [x] `nb stats` command for overview statistics, especially usage stats and completion stats, some graphs?!
 - [x] `nb tags` command to list all tags with counts, and allow batch replace/rename of tags
@@ -87,73 +87,39 @@ todo_exclude: true
 - [x] Must reindex file after 'nb todo add --note'
 - [x] Add --note and --notebook filter to grep command
 - [x] Need progress / spinners for long-running tasks (syncing and reindexing and search)
-- [ ] Review autocomplete and improve
+- [ ] Review autocomplete and improve #improvement
 - [x] Add a command to delete a todo or a note
 - [x] Be able to define date format of note titles, and display, prefer day of week included in most cases
-- [ ] Interactive todo review function
-
+- [x] Interactive todo review function
+- [ ] Show id in second column in 'nb todo' rather than source. #UX
+- [ ] Capture url and other file attachments as markdown using all2md #feature
 
 ### Phase 5: Advanced TUI
-- [ ] Full Wijjit-based todo list view with richer interactions
-- [ ] Full Wijjit based editor for notes
+- [ ] Full Wijjit-based todo list view with richer interactions #feature
+- [ ] Full Wijjit based editor for notes #feature
 - [x] Stream/continuous view (`nb stream`) with lazy loading
-- [ ] Grep search within stream view
-- [ ] Interactive filtering UI
-- [ ] Navigation and links
-- [ ] Integrate git and some kind of backup
-- [ ] Capture url and other file attachments as markdown using all2md
+- [ ] Grep search within stream view #feature
+- [ ] Interactive filtering UI #feature
+- [ ] Navigation and links #feature
 
 ## Technical Debt
-- [x] Add comprehensive test suite
-- [ ] Add type hints throughout (mypy strict mode)
-- [ ] Performance optimization for large note collections
-- [ ] Better error messages and user feedback
-- [ ] Documentation site with examples
+- [x] Add comprehensive test suite #testing
+- [ ] Add type hints throughout (mypy strict mode) #polish
+- [ ] Performance optimization for large note collections #performance
+- [x] Better error messages and user feedback #polish
+- [ ] Documentation site with examples #docs
 - [x] Refactor: Remove legacy config-based linked_todos/linked_notes storage
   - [x] Remove from DEFAULT_CONFIG_YAML template and parse/save functions
   - [x] Remove `linked_todos` and `linked_notes` fields from Config dataclass
   - [x] Remove `save_to_config` branches in links.py (add/remove functions)
   - [x] Simplify `list_linked_files()` and `list_linked_notes()` to DB-only
-- [ ] Optimize imports and startup speed of cli
-- [ ] Evaluate test suite and add e2e tests on actual CLI (if not existing)
+- [ ] Optimize imports and startup speed of cli #performance
+- [x] Evaluate test suite and add e2e tests on actual CLI (if not existing) #testing
 
 
 ### Phase 6: Future Enhancements
-- [ ] Recurring todos (`@recur(weekly)`)
-- [ ] Export to various formats (HTML, PDF)
-- [ ] Calendar view for due dates
-- [ ] Due date reminders (optional notifications)
-- [ ] Would it be possible to integrate more directly into the email/calendar/outlook contacts? Is there any benefit?
-- [ ] Add '@startby' to todos
-
----
-
-## Backlog / Ideas
-
-### From Original Notes
-1. Add a way to return a range of notes (e.g., `nb "last week"`)
-2. Same for todos (date range filtering)
-3. Attachments searchable in vector database
-4. DONE: Consider shorter IDs for display
-5. Add TOML support as alternative to YAML config
-
----
-
-A “Pomodoro timer integration” in the context of a notebook app means building a Pomodoro-style work timer into the notebook so users can run timed focus sessions that are directly        
-associated with notes, tasks, or document sections. It’s not just a standalone timer — it’s linked to the notebook’s content, metadata, history and UX so users can start/stop sessions from
-a note, track productive time per note/task, and use that data for planning and analytics.                                                                                                  
-
-Below is a concise guide to what that entails, why it’s useful, recommended features, UX patterns, data model/events, platform considerations, and implementation notes.                    
-
-What the Pomodoro technique is (brief)                                                                                                                                                      
-
- • Work in focused intervals (typically 25 minutes) separated by short breaks (5 minutes). After several cycles take a longer break (15–30 minutes).                                        
- • The technique emphasizes focus, regular rest, and measuring productive time.                                                                                                             
-
-Why integrate it into a notebook app                                                                                                                                                        
-
- • Contextual focus: start a timer directly from the note or task you’re working on.                                                                                                        
- • Automatic time tracking per note/task/tag/project.                                                                                                                                       
- • Makes notes actionable (task → focused work session).                                                                                                                                    
- • Enables analytics: time spent on topics, productivity trends, session history.                                                                                                           
- • Reduces context switching between apps.     
+- [ ] Recurring todos (`@recur(weekly)`) #feature
+- [ ] Export to various formats (HTML, PDF) #feature
+- [ ] Calendar view for due dates #feature
+- [ ] Due date reminders (optional notifications) #feature
+- [ ] Add '@startby' to todos #feature

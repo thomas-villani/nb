@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 from rich.table import Table
 
+from nb.cli.completion import complete_notebook
 from nb.cli.utils import console
 from nb.index.todos_repo import get_tag_stats
 
@@ -26,7 +27,14 @@ def register_tags_commands(cli: click.Group) -> None:
     default="count",
     help="Sort order (default: by count)",
 )
-@click.option("--notebook", "-n", "notebooks", multiple=True, help="Filter by notebook")
+@click.option(
+    "--notebook",
+    "-n",
+    "notebooks",
+    multiple=True,
+    help="Filter by notebook",
+    shell_complete=complete_notebook,
+)
 @click.option("--limit", "-l", type=int, help="Limit number of tags shown")
 @click.option(
     "--open",

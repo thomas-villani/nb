@@ -1,8 +1,9 @@
-"""Shell completion CLI commands."""
+"""Shell completion CLI commands and completers."""
 
 from __future__ import annotations
 
 import click
+from click.shell_completion import CompletionItem
 
 
 def register_completion_commands(cli: click.Group) -> None:
@@ -10,9 +11,67 @@ def register_completion_commands(cli: click.Group) -> None:
     cli.add_command(completion_cmd)
 
 
-def _get_powershell_source() -> str:
-    """Generate PowerShell completion script for nb."""
-    return """\
+# =============================================================================
+# Custom Completers
+# =============================================================================
+
+
+def complete_notebook(
+    ctx: click.Context, param: click.Parameter, incomplete: str
+) -> list[CompletionItem]:
+    """Complete notebook names from configuration."""
+    try:
+        from nb.config import get_config
+
+        config = get_config()
+        names = config.notebook_names()
+        return [
+            CompletionItem(name, help="notebook")
+            for name in names
+            if name.startswith(incomplete)
+        ]
+    except Exception:
+        return []
+
+
+def complete_tag(
+    ctx: click.Context, param: click.Parameter, incomplete: str
+) -> list[CompletionItem]:
+    """Complete tag names from indexed todos."""
+    try:
+        from nb.index.todos_repo import get_tag_stats
+
+        stats = get_tag_stats()
+        return [
+            CompletionItem(t["tag"], help=f"{t['count']} todos")
+            for t in stats
+            if t["tag"].startswith(incomplete)
+        ]
+    except Exception:
+        return []
+
+
+def complete_view(
+    ctx: click.Context, param: click.Parameter, incomplete: str
+) -> list[CompletionItem]:
+    """Complete saved todo view names."""
+    try:
+        from nb.config import get_config
+
+        config = get_config()
+        names = config.todo_view_names()
+        return [
+            CompletionItem(name, help="saved view")
+            for name in names
+            if name.startswith(incomplete)
+        ]
+    except Exception:
+        return []
+
+
+def _get_powershell_source(include_nbt: bool = True) -> str:
+    """Generate PowerShell completion script for nb (and optionally nbt)."""
+    nb_script = """\
 Register-ArgumentCompleter -Native -CommandName nb -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
     $env:_NB_COMPLETE = "powershell_complete"
@@ -20,10 +79,15 @@ Register-ArgumentCompleter -Native -CommandName nb -ScriptBlock {
     $env:_NB_COMPLETE_WORD = $wordToComplete
     nb | ForEach-Object {
         $type, $value, $help = $_ -split "`t", 3
+        $resultType = switch ($type) {
+            "dir"  { "ProviderContainer" }
+            "file" { "ProviderItem" }
+            default { "ParameterValue" }
+        }
         [System.Management.Automation.CompletionResult]::new(
             $value,
             $value,
-            $(if ($type -eq "dir") { "ParameterValue" } elseif ($type -eq "file") { "ParameterValue" } else { "ParameterValue" }),
+            $resultType,
             $(if ($help) { $help } else { $value })
         )
     }
@@ -32,6 +96,39 @@ Register-ArgumentCompleter -Native -CommandName nb -ScriptBlock {
     Remove-Item Env:_NB_COMPLETE_WORD
 }
 """
+    if not include_nbt:
+        return nb_script
+
+    # nbt is an alias for "nb todo", so we prepend "nb todo" to the args
+    nbt_script = """
+Register-ArgumentCompleter -Native -CommandName nbt -ScriptBlock {
+    param($wordToComplete, $commandAst, $cursorPosition)
+    $env:_NB_COMPLETE = "powershell_complete"
+    # Prepend "nb todo" to simulate nbt -> nb todo
+    $nbtArgs = $commandAst.ToString()
+    $nbtArgs = $nbtArgs -replace "^nbt", "nb todo"
+    $env:_NB_COMPLETE_ARGS = $nbtArgs
+    $env:_NB_COMPLETE_WORD = $wordToComplete
+    nb | ForEach-Object {
+        $type, $value, $help = $_ -split "`t", 3
+        $resultType = switch ($type) {
+            "dir"  { "ProviderContainer" }
+            "file" { "ProviderItem" }
+            default { "ParameterValue" }
+        }
+        [System.Management.Automation.CompletionResult]::new(
+            $value,
+            $value,
+            $resultType,
+            $(if ($help) { $help } else { $value })
+        )
+    }
+    Remove-Item Env:_NB_COMPLETE
+    Remove-Item Env:_NB_COMPLETE_ARGS
+    Remove-Item Env:_NB_COMPLETE_WORD
+}
+"""
+    return nb_script + nbt_script
 
 
 def handle_powershell_completion(cli: click.Group) -> bool:
@@ -80,6 +177,8 @@ def handle_powershell_completion(cli: click.Group) -> bool:
 @click.pass_context
 def completion_cmd(ctx: click.Context, shell: str) -> None:
     """Generate shell completion script.
+
+    Generates completion scripts for both 'nb' and 'nbt' commands.
 
     \b
     For PowerShell, add this to your $PROFILE:

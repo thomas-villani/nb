@@ -13,7 +13,11 @@ import click
 
 from nb import __version__
 from nb.cli.attachments import register_attachment_commands
-from nb.cli.completion import handle_powershell_completion, register_completion_commands
+from nb.cli.completion import (
+    complete_notebook,
+    handle_powershell_completion,
+    register_completion_commands,
+)
 from nb.cli.config_cmd import register_config_commands
 from nb.cli.links import register_link_commands
 from nb.cli.notebooks import register_notebook_commands
@@ -82,7 +86,12 @@ class AliasedGroup(click.Group):
 @click.option(
     "-s", "--show", is_flag=True, help="Print note to console instead of opening editor"
 )
-@click.option("--notebook", "-n", help="Notebook for default today action")
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook for default today action",
+    shell_complete=complete_notebook,
+)
 @click.pass_context
 def cli(ctx: click.Context, show: bool, notebook: str | None) -> None:
     """A plaintext-first note-taking and todo management CLI.

@@ -6,6 +6,7 @@ from datetime import date, timedelta
 
 import click
 
+from nb.cli.completion import complete_notebook, complete_tag, complete_view
 from nb.cli.utils import (
     console,
     find_todo,
@@ -44,18 +45,20 @@ def register_todo_commands(cli: click.Group) -> None:
 @click.option("--due-week", is_flag=True, help="Show only todos due this week")
 @click.option("--overdue", is_flag=True, help="Show only overdue todos")
 @click.option("--priority", "-p", type=int, help="Filter by priority (1, 2, or 3)")
-@click.option("--tag", "-t", help="Filter by tag")
+@click.option("--tag", "-t", help="Filter by tag", shell_complete=complete_tag)
 @click.option(
     "--exclude-tag",
     "-T",
     multiple=True,
     help="Exclude todos with this tag (can be used multiple times)",
+    shell_complete=complete_tag,
 )
 @click.option(
     "--notebook",
     "-n",
     multiple=True,
     help="Filter by notebook (can be used multiple times)",
+    shell_complete=complete_notebook,
 )
 @click.option(
     "--note",
@@ -67,8 +70,11 @@ def register_todo_commands(cli: click.Group) -> None:
     "-N",
     multiple=True,
     help="Exclude todos from this notebook (can be used multiple times)",
+    shell_complete=complete_notebook,
 )
-@click.option("--view", "-v", help="Apply a saved todo view")
+@click.option(
+    "--view", "-v", help="Apply a saved todo view", shell_complete=complete_view
+)
 @click.option("--create-view", help="Create a view from current filters")
 @click.option("--list-views", is_flag=True, help="List all saved views")
 @click.option("--delete-view", help="Delete a saved view")
@@ -1716,3 +1722,141 @@ def todo_delete(todo_id: tuple[str, ...], force: bool) -> None:
             console.print(
                 "[dim]Hint: Use 'nb link' to enable sync for external files.[/dim]"
             )
+
+
+@todo.command("review")
+@click.option(
+    "--weekly", "-w", is_flag=True, help="Include this week + no-due-date items"
+)
+@click.option(
+    "--all",
+    "-a",
+    "show_all",
+    is_flag=True,
+    help="Review all incomplete todos",
+)
+@click.option("--tag", "-t", help="Filter by tag", shell_complete=complete_tag)
+@click.option(
+    "--notebook",
+    "-n",
+    multiple=True,
+    help="Filter by notebook (can be used multiple times)",
+    shell_complete=complete_notebook,
+)
+@click.option(
+    "--note",
+    multiple=True,
+    help="Filter by note path (can be used multiple times)",
+)
+@click.option(
+    "--exclude-notebook",
+    "-N",
+    multiple=True,
+    help="Exclude todos from this notebook (can be used multiple times)",
+    shell_complete=complete_notebook,
+)
+def todo_review(
+    weekly: bool,
+    show_all: bool,
+    tag: str | None,
+    notebook: tuple[str, ...],
+    note: tuple[str, ...],
+    exclude_notebook: tuple[str, ...],
+) -> None:
+    """Interactively review and triage todos.
+
+    Opens an interactive TUI to quickly process overdue and upcoming todos.
+    Use keyboard shortcuts to mark done, reschedule, or delete items.
+
+    \b
+    Scopes:
+      (default)   Overdue + due today
+      --weekly    Overdue + this week + items with no due date
+      --all       All incomplete todos
+
+    \b
+    Actions (in TUI):
+      d  Mark done         t  Reschedule to tomorrow
+      f  This Friday       F  Next Friday
+      w  Next Monday       n  Next month
+      e  Edit in editor    s  Skip (move to next)
+      x  Delete            q  Quit review
+
+    \b
+    Navigation:
+      j/k  Move up/down    [/]  Previous/next page
+
+    \b
+    Examples:
+      nb todo review              Review overdue + due today
+      nb todo review --weekly     Include this week's todos
+      nb todo review --all        Review everything incomplete
+      nb todo review -t work      Review only #work tagged todos
+      nb todo review -n daily     Review only from daily notebook
+    """
+    from nb.cli.utils import resolve_notebook
+    from nb.tui.review import run_review
+    from nb.utils.fuzzy import UserCancelled
+
+    config = get_config()
+
+    # Determine scope
+    if show_all:
+        scope = "all"
+    elif weekly:
+        scope = "weekly"
+    else:
+        scope = "daily"
+
+    # Resolve notebooks with fuzzy matching
+    effective_notebooks: list[str] = []
+    for nb_name in notebook:
+        if config.get_notebook(nb_name):
+            effective_notebooks.append(nb_name)
+        else:
+            try:
+                resolved = resolve_notebook(nb_name)
+            except UserCancelled:
+                console.print("[dim]Cancelled.[/dim]")
+                raise SystemExit(1)
+            if resolved:
+                effective_notebooks.append(resolved)
+            else:
+                raise SystemExit(1)
+
+    # Resolve notes
+    from nb.cli.utils import resolve_note_for_todo_filter
+
+    effective_notes: list[str] = []
+    for note_ref in note:
+        try:
+            resolved_path, _ = resolve_note_for_todo_filter(note_ref)
+        except UserCancelled:
+            console.print("[dim]Cancelled.[/dim]")
+            raise SystemExit(1)
+        if resolved_path:
+            effective_notes.append(resolved_path)
+        else:
+            console.print(f"[yellow]Note not found: {note_ref}[/yellow]")
+            raise SystemExit(1)
+
+    # Get excluded notebooks from config if not filtering by specific notebooks
+    all_excluded_notebooks: list[str] | None = None
+    if not effective_notebooks and not effective_notes:
+        config_excluded = config.excluded_notebooks() or []
+        all_excluded_notebooks = list(set(config_excluded) | set(exclude_notebook))
+        if not all_excluded_notebooks:
+            all_excluded_notebooks = None
+
+    # Convert to proper types
+    notebooks_filter = effective_notebooks if effective_notebooks else None
+    notes_filter = effective_notes if effective_notes else None
+
+    # Run the review TUI
+    run_review(
+        scope=scope,
+        tag=tag,
+        notebooks=notebooks_filter,
+        notes=notes_filter,
+        exclude_notebooks=all_excluded_notebooks,
+    )

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 
+from nb.cli.completion import complete_notebook
 from nb.cli.utils import (
     console,
     get_notebook_display_info,
@@ -45,7 +46,12 @@ def register_note_commands(cli: click.Group) -> None:
 
 
 @click.command()
-@click.option("--notebook", "-n", help="Notebook to create today's note in")
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook to create today's note in",
+    shell_complete=complete_notebook,
+)
 @click.pass_context
 def today(ctx: click.Context, notebook: str | None) -> None:
     """Open today's note.
@@ -89,7 +95,9 @@ def yesterday(ctx: click.Context) -> None:
 @click.option(
     "-s", "--show", is_flag=True, help="Print note to console instead of opening editor"
 )
-@click.option("--notebook", "-n", help="Filter by notebook")
+@click.option(
+    "--notebook", "-n", help="Filter by notebook", shell_complete=complete_notebook
+)
 @click.option("--viewed", is_flag=True, help="Use last viewed instead of last modified")
 def last_note(show: bool, notebook: str | None, viewed: bool) -> None:
     """Open the most recently modified (or viewed) note.
@@ -128,7 +136,9 @@ def last_note(show: bool, notebook: str | None, viewed: bool) -> None:
 @click.command("history")
 @click.option("--limit", "-l", default=10, help="Number of entries to show")
 @click.option("--offset", "-o", default=0, help="Skip first N entries")
-@click.option("--notebook", "-n", help="Filter by notebook")
+@click.option(
+    "--notebook", "-n", help="Filter by notebook", shell_complete=complete_notebook
+)
 @click.option(
     "--full-path", "-f", is_flag=True, help="Show full paths instead of filenames"
 )
@@ -350,7 +360,12 @@ def history_cmd(
 
 @click.command("open")
 @click.argument("note_ref")
-@click.option("--notebook", "-n", help="Notebook to open the note from")
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook to open the note from",
+    shell_complete=complete_notebook,
+)
 @click.pass_context
 def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
     """Open a note by date or name.
@@ -392,7 +407,12 @@ def open_date(ctx: click.Context, note_ref: str, notebook: str | None) -> None:
 
 @click.command("show")
 @click.argument("note_ref", required=False)
-@click.option("--notebook", "-n", help="Notebook to show the note from")
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook to show the note from",
+    shell_complete=complete_notebook,
+)
 def show_note(note_ref: str | None, notebook: str | None) -> None:
     """Print a note to the console.
 
@@ -434,7 +454,12 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
 
 @click.command("new")
 @click.argument("path", required=False)
-@click.option("--notebook", "-n", help="Notebook to create the note in")
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook to create the note in",
+    shell_complete=complete_notebook,
+)
 @click.option("--title", "-t", help="Title for the note")
 @click.option("--template", "-T", "template_name", help="Template to use for the note")
 def new_note(
@@ -645,7 +670,9 @@ def add_to_note(
 
 
 @click.command("list")
-@click.option("--notebook", "-n", help="Filter by notebook")
+@click.option(
+    "--notebook", "-n", help="Filter by notebook", shell_complete=complete_notebook
+)
 @click.option(
     "--all", "-a", "all_notes", is_flag=True, help="List all notes in all notebooks"
 )
@@ -769,7 +796,12 @@ def list_notes_cmd(
 @click.command("alias")
 @click.argument("alias_name")
 @click.argument("note_ref")
-@click.option("--notebook", "-n", help="Notebook containing the note")
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook containing the note",
+    shell_complete=complete_notebook,
+)
 def alias_note(alias_name: str, note_ref: str, notebook: str | None) -> None:
     """Create an alias for a note.
 
@@ -847,7 +879,12 @@ def list_aliases_cmd() -> None:
 
 @click.command("delete")
 @click.argument("note_ref")
-@click.option("--notebook", "-n", help="Notebook containing the note")
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook containing the note",
+    shell_complete=complete_notebook,
+)
 @click.option("--force", "-f", is_flag=True, help="Skip confirmation")
 def delete_note_cmd(note_ref: str, notebook: str | None, force: bool) -> None:
     """Delete a note from the filesystem and database.

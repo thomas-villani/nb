@@ -9,6 +9,7 @@ from rich.columns import Columns
 from rich.panel import Panel
 from rich.table import Table
 
+from nb.cli.completion import complete_notebook
 from nb.cli.utils import console
 from nb.index.todos_repo import (
     get_extended_todo_stats,
@@ -144,9 +145,21 @@ def render_completion_bar(completed: int, total: int, width: int = 20) -> str:
 
 
 @click.command("stats")
-@click.option("--notebook", "-n", "notebooks", multiple=True, help="Filter by notebook")
 @click.option(
-    "--exclude", "-x", "exclude_notebooks", multiple=True, help="Exclude notebooks"
+    "--notebook",
+    "-n",
+    "notebooks",
+    multiple=True,
+    help="Filter by notebook",
+    shell_complete=complete_notebook,
+)
+@click.option(
+    "--exclude",
+    "-x",
+    "exclude_notebooks",
+    multiple=True,
+    help="Exclude notebooks",
+    shell_complete=complete_notebook,
 )
 @click.option("--days", "-d", default=30, help="Days for activity trends (default: 30)")
 @click.option("--by-notebook", is_flag=True, help="Show breakdown by notebook")

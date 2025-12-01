@@ -6,6 +6,7 @@ from pathlib import Path
 
 import click
 
+from nb.cli.completion import complete_notebook, complete_tag
 from nb.cli.utils import console
 from nb.config import get_config
 from nb.utils.hashing import normalize_path
@@ -27,8 +28,10 @@ def register_search_commands(cli: click.Group) -> None:
 @click.option(
     "-k", "--keyword", is_flag=True, help="Use pure keyword search (no semantic)"
 )
-@click.option("-t", "--tag", help="Filter by tag")
-@click.option("--notebook", "-n", help="Filter by notebook")
+@click.option("-t", "--tag", help="Filter by tag", shell_complete=complete_tag)
+@click.option(
+    "--notebook", "-n", help="Filter by notebook", shell_complete=complete_notebook
+)
 @click.option(
     "--when",
     "when_filter",
@@ -212,7 +215,9 @@ def search_cmd(
 @click.option(
     "-i", "--ignore-case/--case-sensitive", default=True, help="Case sensitivity"
 )
-@click.option("--notebook", "-n", help="Filter by notebook")
+@click.option(
+    "--notebook", "-n", help="Filter by notebook", shell_complete=complete_notebook
+)
 @click.option("--note", help="Filter by specific note (path or alias)")
 def grep_cmd(
     pattern: str,
@@ -312,7 +317,12 @@ def grep_cmd(
     is_flag=True,
     help="Only rebuild vectors (skip file indexing)",
 )
-@click.option("--notebook", "-n", help="Only reindex this notebook")
+@click.option(
+    "--notebook",
+    "-n",
+    help="Only reindex this notebook",
+    shell_complete=complete_notebook,
+)
 def index_cmd(
     force: bool,
     rebuild: bool,
@@ -441,7 +451,9 @@ def index_cmd(
 
 
 @click.command("stream")
-@click.option("--notebook", "-n", help="Filter by notebook")
+@click.option(
+    "--notebook", "-n", help="Filter by notebook", shell_complete=complete_notebook
+)
 @click.option(
     "--when", "-w", help="Date range: 'last week', 'this week', 'last 3 days'"
 )
