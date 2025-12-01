@@ -7,9 +7,19 @@ from datetime import date, timedelta
 import click
 
 from nb.cli.completion import complete_notebook, complete_tag, complete_view
-from nb.cli.utils import console, find_todo, get_notebook_display_info, get_stdin_content
+from nb.cli.utils import (
+    console,
+    find_todo,
+    get_notebook_display_info,
+    get_stdin_content,
+)
 from nb.config import TodoViewConfig, get_config, save_config
-from nb.core.todos import add_todo_to_daily_note, add_todo_to_inbox, set_todo_status_in_file, toggle_todo_in_file
+from nb.core.todos import (
+    add_todo_to_daily_note,
+    add_todo_to_inbox,
+    set_todo_status_in_file,
+    toggle_todo_in_file,
+)
 from nb.index.scanner import index_all_notes
 from nb.index.todos_repo import (
     get_sorted_todos,
@@ -1323,10 +1333,14 @@ def _complete_todo_with_children(t) -> int:
         if child.completed:
             continue
 
-        # Set child to completed in source file
-        if set_todo_status_in_file(
-            child.source.path, child.line_number, TodoStatus.COMPLETED
-        ):
+        # Set child to completed in source file (pass content to handle stale line numbers)
+        actual_line = set_todo_status_in_file(
+            child.source.path,
+            child.line_number,
+            TodoStatus.COMPLETED,
+            expected_content=child.content,
+        )
+        if actual_line is not None:
             update_todo_completion(child.id, True)
             children_completed += 1
 
@@ -1365,9 +1379,12 @@ def todo_done(todo_id: tuple[str, ...]) -> None:
             console.print(f"[yellow]Todo {_todo[:6]} is already completed.[/yellow]")
             continue
 
-        # Toggle in source file
+        # Toggle in source file (pass content to handle stale line numbers)
         try:
-            if toggle_todo_in_file(t.source.path, t.line_number):
+            actual_line = toggle_todo_in_file(
+                t.source.path, t.line_number, expected_content=t.content
+            )
+            if actual_line is not None:
                 update_todo_completion(t.id, True)
                 console.print(f"[green]Completed:[/green] {t.content}")
 
@@ -1417,9 +1434,12 @@ def todo_undone(todo_id: tuple[str, ...]) -> None:
             console.print(f"[yellow]Todo {_todo[:6]} is not completed.[/yellow]")
             continue
 
-        # Toggle in source file
+        # Toggle in source file (pass content to handle stale line numbers)
         try:
-            if toggle_todo_in_file(t.source.path, t.line_number):
+            actual_line = toggle_todo_in_file(
+                t.source.path, t.line_number, expected_content=t.content
+            )
+            if actual_line is not None:
                 update_todo_completion(t.id, False)
                 console.print(f"[green]Reopened:[/green] {t.content}")
             else:
@@ -1470,11 +1490,15 @@ def todo_start(todo_id: tuple[str, ...]) -> None:
             console.print(f"[yellow]Todo {_todo[:6]} is already in progress.[/yellow]")
             continue
 
-        # Set status in source file
+        # Set status in source file (pass content to handle stale line numbers)
         try:
-            if set_todo_status_in_file(
-                t.source.path, t.line_number, TodoStatus.IN_PROGRESS
-            ):
+            actual_line = set_todo_status_in_file(
+                t.source.path,
+                t.line_number,
+                TodoStatus.IN_PROGRESS,
+                expected_content=t.content,
+            )
+            if actual_line is not None:
                 update_todo_status(t.id, TodoStatus.IN_PROGRESS)
                 console.print(f"[yellow]Started:[/yellow] {t.content}")
             else:
@@ -1524,11 +1548,15 @@ def todo_pause(todo_id: tuple[str, ...]) -> None:
             console.print(f"[yellow]Todo {_todo[:6]} is not in progress.[/yellow]")
             continue
 
-        # Set status in source file
+        # Set status in source file (pass content to handle stale line numbers)
         try:
-            if set_todo_status_in_file(
-                t.source.path, t.line_number, TodoStatus.PENDING
-            ):
+            actual_line = set_todo_status_in_file(
+                t.source.path,
+                t.line_number,
+                TodoStatus.PENDING,
+                expected_content=t.content,
+            )
+            if actual_line is not None:
                 update_todo_status(t.id, TodoStatus.PENDING)
                 console.print(f"[dim]Paused:[/dim] {t.content}")
             else:
@@ -1632,9 +1660,12 @@ def _delete_todo_with_children(t, force: bool = False) -> int:
     for child in reversed(children):
         children_deleted += _delete_todo_with_children(child, force=True)
 
-    # Delete from source file
+    # Delete from source file (pass content to handle stale line numbers)
     try:
-        if delete_todo_from_file(t.source.path, t.line_number):
+        actual_line = delete_todo_from_file(
+            t.source.path, t.line_number, expected_content=t.content
+        )
+        if actual_line is not None:
             delete_todo(t.id)
             return children_deleted + 1
     except PermissionError as e:

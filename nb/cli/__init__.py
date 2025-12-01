@@ -14,7 +14,11 @@ import click
 
 from nb import __version__
 from nb.cli.attachments import register_attachment_commands
-from nb.cli.completion import complete_notebook, handle_powershell_completion, register_completion_commands
+from nb.cli.completion import (
+    complete_notebook,
+    handle_powershell_completion,
+    register_completion_commands,
+)
 from nb.cli.config_cmd import register_config_commands
 from nb.cli.links import register_link_commands
 from nb.cli.notebooks import register_notebook_commands

@@ -1085,7 +1085,14 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 source_path = config.notes_root / source_path
 
             try:
-                toggle_todo_in_file(source_path, todo.line_number)
+                actual_line = toggle_todo_in_file(
+                    source_path, todo.line_number, expected_content=todo.content
+                )
+                if actual_line is None:
+                    self.send_json(
+                        {"error": "Todo not found at expected location"}, 404
+                    )
+                    return
                 # Update the database
                 from nb.models import TodoStatus
 

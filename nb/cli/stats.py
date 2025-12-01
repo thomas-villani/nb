@@ -11,12 +11,61 @@ from rich.table import Table
 
 from nb.cli.completion import complete_notebook
 from nb.cli.utils import console
-from nb.index.todos_repo import get_extended_todo_stats, get_tag_stats, get_todo_activity
+from nb.config import get_config
+from nb.index.todos_repo import (
+    get_extended_todo_stats,
+    get_tag_stats,
+    get_todo_activity,
+)
 
 
 def register_stats_commands(cli: click.Group) -> None:
     """Register all stats-related commands with the CLI."""
     cli.add_command(stats_cmd)
+
+
+def _get_week_start(target_date: date, week_start_day: str) -> date:
+    """Get the start of the calendar week containing target_date.
+
+    Args:
+        target_date: The date to find the week for.
+        week_start_day: "monday" or "sunday".
+
+    Returns:
+        The first day of the calendar week containing target_date.
+    """
+    # Monday = 0, Sunday = 6
+    start_weekday = 0 if week_start_day == "monday" else 6
+    current_weekday = target_date.weekday()
+
+    # Calculate days back to week start
+    days_back = (current_weekday - start_weekday) % 7
+    return target_date - timedelta(days=days_back)
+
+
+def _sum_range(
+    daily_values: list[int], start_date: date, end_date: date, days: int
+) -> int:
+    """Sum daily values within a date range.
+
+    Args:
+        daily_values: List of daily counts, oldest first (length = days).
+        start_date: Start of range (inclusive).
+        end_date: End of range (inclusive).
+        days: Number of days in the activity window.
+
+    Returns:
+        Sum of values within the range, or 0 if range is outside the window.
+    """
+    today = date.today()
+    window_start = today - timedelta(days=days - 1)
+
+    total = 0
+    for i, value in enumerate(daily_values):
+        day = window_start + timedelta(days=i)
+        if start_date <= day <= end_date:
+            total += value
+    return total
 
 
 # Unicode block characters for sparklines (9 levels: empty to full)
@@ -238,6 +287,50 @@ def _render_compact_stats(stats: dict, activity: dict) -> None:
     created_spark = render_sparkline(created_values, width=14)
     completed_spark = render_sparkline(completed_values, width=14)
 
+    # Today's stats (last element in filled arrays)
+    today_created = created_values[-1] if created_values else 0
+    today_completed = completed_values[-1] if completed_values else 0
+
+    # Calendar week stats based on config's week_start_day
+    config = get_config()
+    today = date.today()
+    days = activity["days"]
+    this_week_start = _get_week_start(today, config.week_start_day)
+    this_week_end = this_week_start + timedelta(days=6)
+    last_week_start = this_week_start - timedelta(days=7)
+    last_week_end = this_week_start - timedelta(days=1)
+
+    this_week_created = _sum_range(created_values, this_week_start, this_week_end, days)
+    this_week_completed = _sum_range(
+        completed_values, this_week_start, this_week_end, days
+    )
+    last_week_created = _sum_range(created_values, last_week_start, last_week_end, days)
+    last_week_completed = _sum_range(
+        completed_values, last_week_start, last_week_end, days
+    )
+
+    # Last 7 days (rolling window)
+    last_7d_created = (
+        sum(created_values[-7:]) if len(created_values) >= 7 else sum(created_values)
+    )
+    last_7d_completed = (
+        sum(completed_values[-7:])
+        if len(completed_values) >= 7
+        else sum(completed_values)
+    )
+
+    lines.append(
+        f"\n[bold]Today:[/bold]      +{today_created} created, +{today_completed} completed"
+    )
+    lines.append(
+        f"[bold]This Week:[/bold]  +{this_week_created} created, +{this_week_completed} completed"
+    )
+    lines.append(
+        f"[bold]Last Week:[/bold]  +{last_week_created} created, +{last_week_completed} completed"
+    )
+    lines.append(
+        f"[bold]Last 7 Days:[/bold] +{last_7d_created} created, +{last_7d_completed} completed"
+    )
     lines.append(f"\n[bold]Activity ({activity['days']}d):[/bold]")
     lines.append(f"  Created:   {created_spark} ({sum(created_values)})")
     lines.append(f"  Completed: {completed_spark} ({sum(completed_values)})")
@@ -327,19 +420,51 @@ def _build_overview_panel(stats: dict, activity: dict, days: int) -> Panel:
     right_lines.append(f"  Created:   [green]{created_spark}[/green] {created_total}")
     right_lines.append(f"  Completed: [blue]{completed_spark}[/blue] {completed_total}")
 
-    # Week summary
-    week_created = (
+    # Today's stats (last element in filled arrays)
+    today_created = created_values[-1] if created_values else 0
+    today_completed = completed_values[-1] if completed_values else 0
+
+    right_lines.append("")
+    right_lines.append("[bold]Today[/bold]")
+    right_lines.append(f"  +{today_created} created, +{today_completed} completed")
+
+    # Calendar week stats based on config's week_start_day
+    config = get_config()
+    today = date.today()
+    this_week_start = _get_week_start(today, config.week_start_day)
+    this_week_end = this_week_start + timedelta(days=6)
+    last_week_start = this_week_start - timedelta(days=7)
+    last_week_end = this_week_start - timedelta(days=1)
+
+    this_week_created = _sum_range(created_values, this_week_start, this_week_end, days)
+    this_week_completed = _sum_range(
+        completed_values, this_week_start, this_week_end, days
+    )
+    last_week_created = _sum_range(created_values, last_week_start, last_week_end, days)
+    last_week_completed = _sum_range(
+        completed_values, last_week_start, last_week_end, days
+    )
+
+    # Last 7 days (rolling window)
+    last_7d_created = (
         sum(created_values[-7:]) if len(created_values) >= 7 else sum(created_values)
     )
-    week_completed = (
+    last_7d_completed = (
         sum(completed_values[-7:])
         if len(completed_values) >= 7
         else sum(completed_values)
     )
 
-    right_lines.append("")
     right_lines.append("[bold]This Week[/bold]")
-    right_lines.append(f"  +{week_created} created, +{week_completed} completed")
+    right_lines.append(
+        f"  +{this_week_created} created, +{this_week_completed} completed"
+    )
+    right_lines.append("[bold]Last Week[/bold]")
+    right_lines.append(
+        f"  +{last_week_created} created, +{last_week_completed} completed"
+    )
+    right_lines.append("[bold]Last 7 Days[/bold]")
+    right_lines.append(f"  +{last_7d_created} created, +{last_7d_completed} completed")
 
     # Combine into two columns
     left_text = "\n".join(left_lines)

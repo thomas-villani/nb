@@ -355,7 +355,11 @@ def resolve_note_for_todo_filter(
 
     """
     from nb.core.aliases import get_note_by_alias
-    from nb.core.links import get_linked_file, get_linked_note, get_linked_note_in_notebook
+    from nb.core.links import (
+        get_linked_file,
+        get_linked_note,
+        get_linked_note_in_notebook,
+    )
     from nb.utils.hashing import normalize_path
 
     config = get_config()
@@ -608,7 +612,11 @@ def resolve_note_ref(
     """
     from nb.core.aliases import get_note_by_alias
     from nb.core.links import get_linked_note_in_notebook
-    from nb.core.notebooks import ensure_notebook_note, get_notebook_note_path, is_notebook_date_based
+    from nb.core.notebooks import (
+        ensure_notebook_note,
+        get_notebook_note_path,
+        is_notebook_date_based,
+    )
     from nb.utils.dates import parse_fuzzy_date
 
     config = get_config()

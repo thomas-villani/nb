@@ -267,6 +267,48 @@ def extract_todos(
     return todos
 
 
+def find_todo_line(
+    lines: list[str],
+    expected_line: int,
+    expected_content: str,
+    search_radius: int = 10,
+) -> int | None:
+    """Find the actual line number of a todo by content, searching near expected line.
+
+    When files are modified, stored line numbers can become stale. This function
+    verifies the content at the expected line and searches nearby if it doesn't match.
+
+    Args:
+        lines: List of file lines (from splitlines())
+        expected_line: 1-based line number where the todo was expected
+        expected_content: The cleaned todo content to match
+        search_radius: How many lines above/below to search (default 10)
+
+    Returns:
+        1-based line number where the todo was found, or None if not found.
+    """
+    # First check the expected line
+    if 1 <= expected_line <= len(lines):
+        line = lines[expected_line - 1]
+        match = TODO_PATTERN.match(line)
+        if match and clean_todo_content(match.group("content")) == expected_content:
+            return expected_line
+
+    # Search nearby lines, alternating above and below
+    for offset in range(1, search_radius + 1):
+        for candidate_line in [expected_line - offset, expected_line + offset]:
+            if 1 <= candidate_line <= len(lines):
+                line = lines[candidate_line - 1]
+                match = TODO_PATTERN.match(line)
+                if (
+                    match
+                    and clean_todo_content(match.group("content")) == expected_content
+                ):
+                    return candidate_line
+
+    return None
+
+
 def can_toggle_linked_file(path: Path) -> bool:
     """Check if a linked file can be toggled (sync is enabled).
 
@@ -303,7 +345,8 @@ def toggle_todo_in_file(
     path: Path,
     line_number: int,
     check_linked_sync: bool = True,
-) -> bool:
+    expected_content: str | None = None,
+) -> int | None:
     """Toggle a todo's completion status in its source file.
 
     Cycles through: pending -> completed -> pending
@@ -311,18 +354,20 @@ def toggle_todo_in_file(
 
     Args:
         path: Path to the file
-        line_number: 1-based line number of the todo
+        line_number: 1-based line number of the todo (may be stale)
         check_linked_sync: Whether to check if linked file allows sync
+        expected_content: If provided, verifies/finds the todo by content.
+            This handles cases where line numbers become stale due to file edits.
 
     Returns:
-        True if successfully toggled, False otherwise.
+        The actual line number where the todo was toggled, or None if failed.
 
     Raises:
         PermissionError: If the file is a linked file with sync disabled.
 
     """
     if not path.exists():
-        return False
+        return None
 
     # Check if we're allowed to modify this file
     if check_linked_sync and not can_toggle_linked_file(path):
@@ -331,14 +376,22 @@ def toggle_todo_in_file(
     content = path.read_text(encoding="utf-8")
     lines = content.splitlines()
 
-    if line_number < 1 or line_number > len(lines):
-        return False
+    # Find the actual line number (may differ from stored if file was edited)
+    if expected_content:
+        actual_line = find_todo_line(lines, line_number, expected_content)
+        if actual_line is None:
+            return None
+    else:
+        # Fall back to trusting the line number (legacy behavior)
+        if line_number < 1 or line_number > len(lines):
+            return None
+        actual_line = line_number
 
-    line = lines[line_number - 1]
+    line = lines[actual_line - 1]
     match = TODO_PATTERN.match(line)
 
     if not match:
-        return False
+        return None
 
     state = match.group("state")
 
@@ -352,11 +405,11 @@ def toggle_todo_in_file(
         # Pending -> completed
         new_line = line.replace("[ ]", "[x]")
 
-    lines[line_number - 1] = new_line
+    lines[actual_line - 1] = new_line
 
     # Write back
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return True
+    return actual_line
 
 
 def set_todo_status_in_file(
@@ -364,24 +417,27 @@ def set_todo_status_in_file(
     line_number: int,
     new_status: TodoStatus,
     check_linked_sync: bool = True,
-) -> bool:
+    expected_content: str | None = None,
+) -> int | None:
     """Set a todo's status to a specific state in its source file.
 
     Args:
         path: Path to the file
-        line_number: 1-based line number of the todo
+        line_number: 1-based line number of the todo (may be stale)
         new_status: The status to set
         check_linked_sync: Whether to check if linked file allows sync
+        expected_content: If provided, verifies/finds the todo by content.
+            This handles cases where line numbers become stale due to file edits.
 
     Returns:
-        True if successfully updated, False otherwise.
+        The actual line number where the todo was updated, or None if failed.
 
     Raises:
         PermissionError: If the file is a linked file with sync disabled.
 
     """
     if not path.exists():
-        return False
+        return None
 
     # Check if we're allowed to modify this file
     if check_linked_sync and not can_toggle_linked_file(path):
@@ -390,25 +446,33 @@ def set_todo_status_in_file(
     content = path.read_text(encoding="utf-8")
     lines = content.splitlines()
 
-    if line_number < 1 or line_number > len(lines):
-        return False
+    # Find the actual line number (may differ from stored if file was edited)
+    if expected_content:
+        actual_line = find_todo_line(lines, line_number, expected_content)
+        if actual_line is None:
+            return None
+    else:
+        # Fall back to trusting the line number (legacy behavior)
+        if line_number < 1 or line_number > len(lines):
+            return None
+        actual_line = line_number
 
-    line = lines[line_number - 1]
+    line = lines[actual_line - 1]
     match = TODO_PATTERN.match(line)
 
     if not match:
-        return False
+        return None
 
     # Replace the checkbox marker with the new status marker
     new_marker = new_status.marker
     # Match any of the three markers and replace
     new_line = re.sub(r"\[[ xX^]\]", f"[{new_marker}]", line, count=1)
 
-    lines[line_number - 1] = new_line
+    lines[actual_line - 1] = new_line
 
     # Write back
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return True
+    return actual_line
 
 
 def add_todo_to_inbox(text: str, notes_root: Path | None = None) -> Todo:
@@ -736,23 +800,26 @@ def delete_todo_from_file(
     path: Path,
     line_number: int,
     check_linked_sync: bool = True,
-) -> bool:
+    expected_content: str | None = None,
+) -> int | None:
     """Delete a todo line from its source file.
 
     Args:
         path: Path to the file
-        line_number: 1-based line number of the todo
+        line_number: 1-based line number of the todo (may be stale)
         check_linked_sync: Whether to check if linked file allows sync
+        expected_content: If provided, verifies/finds the todo by content.
+            This handles cases where line numbers become stale due to file edits.
 
     Returns:
-        True if successfully deleted, False otherwise.
+        The actual line number that was deleted, or None if failed.
 
     Raises:
         PermissionError: If the file is a linked file with sync disabled.
 
     """
     if not path.exists():
-        return False
+        return None
 
     # Check if we're allowed to modify this file
     if check_linked_sync and not can_toggle_linked_file(path):
@@ -761,21 +828,29 @@ def delete_todo_from_file(
     content = path.read_text(encoding="utf-8")
     lines = content.splitlines()
 
-    if line_number < 1 or line_number > len(lines):
-        return False
+    # Find the actual line number (may differ from stored if file was edited)
+    if expected_content:
+        actual_line = find_todo_line(lines, line_number, expected_content)
+        if actual_line is None:
+            return None
+    else:
+        # Fall back to trusting the line number (legacy behavior)
+        if line_number < 1 or line_number > len(lines):
+            return None
+        actual_line = line_number
 
-    line = lines[line_number - 1]
+    line = lines[actual_line - 1]
     match = TODO_PATTERN.match(line)
 
     if not match:
-        return False
+        return None
 
     # Remove the line
-    del lines[line_number - 1]
+    del lines[actual_line - 1]
 
     # Write back
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return True
+    return actual_line
 
 
 def update_todo_due_date(
@@ -783,7 +858,8 @@ def update_todo_due_date(
     line_number: int,
     new_date: date,
     check_linked_sync: bool = True,
-) -> bool:
+    expected_content: str | None = None,
+) -> int | None:
     """Update or add @due() in a todo line.
 
     If @due() exists, replaces it with the new date.
@@ -791,19 +867,21 @@ def update_todo_due_date(
 
     Args:
         path: Path to the file
-        line_number: 1-based line number of the todo
+        line_number: 1-based line number of the todo (may be stale)
         new_date: The new due date to set
         check_linked_sync: Whether to check if linked file allows sync
+        expected_content: If provided, verifies/finds the todo by content.
+            This handles cases where line numbers become stale due to file edits.
 
     Returns:
-        True if successfully updated, False otherwise.
+        The actual line number where the todo was updated, or None if failed.
 
     Raises:
         PermissionError: If the file is a linked file with sync disabled.
 
     """
     if not path.exists():
-        return False
+        return None
 
     # Check if we're allowed to modify this file
     if check_linked_sync and not can_toggle_linked_file(path):
@@ -812,14 +890,22 @@ def update_todo_due_date(
     content = path.read_text(encoding="utf-8")
     lines = content.splitlines()
 
-    if line_number < 1 or line_number > len(lines):
-        return False
+    # Find the actual line number (may differ from stored if file was edited)
+    if expected_content:
+        actual_line = find_todo_line(lines, line_number, expected_content)
+        if actual_line is None:
+            return None
+    else:
+        # Fall back to trusting the line number (legacy behavior)
+        if line_number < 1 or line_number > len(lines):
+            return None
+        actual_line = line_number
 
-    line = lines[line_number - 1]
+    line = lines[actual_line - 1]
     match = TODO_PATTERN.match(line)
 
     if not match:
-        return False
+        return None
 
     date_str = new_date.isoformat()
 
@@ -842,11 +928,11 @@ def update_todo_due_date(
             # Append at end
             new_line = line.rstrip() + f" @due({date_str})"
 
-    lines[line_number - 1] = new_line
+    lines[actual_line - 1] = new_line
 
     # Write back
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return True
+    return actual_line
 
 
 def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:

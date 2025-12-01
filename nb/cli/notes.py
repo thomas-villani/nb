@@ -17,7 +17,13 @@ from nb.cli.utils import (
     resolve_note_ref,
 )
 from nb.config import get_config
-from nb.core.notes import create_note, delete_note, ensure_daily_note, list_daily_notes, open_note
+from nb.core.notes import (
+    create_note,
+    delete_note,
+    ensure_daily_note,
+    list_daily_notes,
+    open_note,
+)
 from nb.utils.fuzzy import UserCancelled
 
 
@@ -683,7 +689,11 @@ def list_notes_cmd(
     Use --week or --month to filter by date (defaults to daily notebook if no --notebook given).
     """
     from nb.core.notebooks import get_notebook_notes_with_linked
-    from nb.core.notes import get_all_notes, get_latest_notes_per_notebook, list_notebook_notes_by_date
+    from nb.core.notes import (
+        get_all_notes,
+        get_latest_notes_per_notebook,
+        list_notebook_notes_by_date,
+    )
 
     if week or month:
         # Get date range

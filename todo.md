@@ -90,7 +90,7 @@ todo_exclude: true
 - [x] Add a command to delete a todo or a note
 - [x] Be able to define date format of note titles, and display, prefer day of week included in most cases
 - [x] Interactive todo review function
-- [ ] Show id in second column in 'nb todo' rather than source. #UX
+- [x] Show id in second column in 'nb todo' rather than source. #UX
 - [ ] Capture url and other file attachments as markdown using all2md #feature
 
 ### Phase 5: Advanced TUI

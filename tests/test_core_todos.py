@@ -459,7 +459,7 @@ class TestToggleTodoInFile:
 
         result = toggle_todo_in_file(note_path, line_number=3)
 
-        assert result is True
+        assert result == 3  # Returns actual line number on success
         new_content = note_path.read_text()
         assert "- [x] Task to complete" in new_content
 
@@ -475,7 +475,7 @@ class TestToggleTodoInFile:
 
         result = toggle_todo_in_file(note_path, line_number=3)
 
-        assert result is True
+        assert result == 3  # Returns actual line number on success
         new_content = note_path.read_text()
         assert "- [ ] Completed task" in new_content
 
@@ -486,10 +486,10 @@ class TestToggleTodoInFile:
         note_path = create_note("projects", "test.md", content)
 
         result = toggle_todo_in_file(note_path, line_number=999)
-        assert result is False
+        assert result is None
 
         result = toggle_todo_in_file(note_path, line_number=0)
-        assert result is False
+        assert result is None
 
     def test_non_todo_line(self, mock_config, create_note):
         notes_root = mock_config.notes_root
@@ -502,13 +502,59 @@ Regular text
         note_path = create_note("projects", "test.md", content)
 
         result = toggle_todo_in_file(note_path, line_number=1)
-        assert result is False
+        assert result is None
 
     def test_missing_file(self, mock_config):
         notes_root = mock_config.notes_root
 
         result = toggle_todo_in_file(notes_root / "nonexistent.md", line_number=1)
-        assert result is False
+        assert result is None
+
+    def test_stale_line_number_finds_nearby_todo(self, mock_config, create_note):
+        """Test that expected_content allows finding todo even if line number is stale."""
+        notes_root = mock_config.notes_root
+
+        content = """\
+# Tasks
+
+- [ ] First task
+- [ ] Second task
+- [ ] Third task
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        # Pretend the database has a stale line number (says line 4 but it's actually line 3)
+        result = toggle_todo_in_file(
+            note_path, line_number=4, expected_content="First task"
+        )
+
+        # Should find and toggle the correct todo at line 3
+        assert result == 3
+        new_content = note_path.read_text()
+        assert "- [x] First task" in new_content
+        assert "- [ ] Second task" in new_content  # Not toggled
+
+    def test_expected_content_not_found(self, mock_config, create_note):
+        """Test that returns None if expected content not found nearby."""
+        notes_root = mock_config.notes_root
+
+        content = """\
+# Tasks
+
+- [ ] First task
+- [ ] Second task
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        # Try to find a todo that doesn't exist
+        result = toggle_todo_in_file(
+            note_path, line_number=3, expected_content="Nonexistent task"
+        )
+
+        assert result is None
+        # File should be unchanged
+        new_content = note_path.read_text()
+        assert "- [ ] First task" in new_content
 
 
 class TestAddTodoToInbox:

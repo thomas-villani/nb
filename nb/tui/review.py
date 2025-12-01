@@ -11,8 +11,17 @@ from rich.table import Table
 from rich.text import Text
 
 from nb.config import get_config
-from nb.core.todos import delete_todo_from_file, toggle_todo_in_file, update_todo_due_date
-from nb.index.todos_repo import delete_todo, get_sorted_todos, query_todos, update_todo_completion
+from nb.core.todos import (
+    delete_todo_from_file,
+    toggle_todo_in_file,
+    update_todo_due_date,
+)
+from nb.index.todos_repo import (
+    delete_todo,
+    get_sorted_todos,
+    query_todos,
+    update_todo_completion,
+)
 from nb.models import Todo
 from nb.tui.todos import get_key
 from nb.utils.dates import get_week_range
@@ -556,7 +565,12 @@ def run_review(
             todo = state.current_todo()
             if todo:
                 try:
-                    if toggle_todo_in_file(todo.source.path, todo.line_number):
+                    actual_line = toggle_todo_in_file(
+                        todo.source.path,
+                        todo.line_number,
+                        expected_content=todo.content,
+                    )
+                    if actual_line is not None:
                         update_todo_completion(todo.id, True)
                         state.stats.completed += 1
                         state.message = f"Completed: {todo.content[:30]}"
@@ -569,9 +583,13 @@ def run_review(
             if todo:
                 try:
                     tomorrow = today + timedelta(days=1)
-                    if update_todo_due_date(
-                        todo.source.path, todo.line_number, tomorrow
-                    ):
+                    actual_line = update_todo_due_date(
+                        todo.source.path,
+                        todo.line_number,
+                        tomorrow,
+                        expected_content=todo.content,
+                    )
+                    if actual_line is not None:
                         state.stats.rescheduled += 1
                         state.message = f"Rescheduled to tomorrow: {todo.content[:25]}"
                         state.remove_current()
@@ -583,9 +601,13 @@ def run_review(
             if todo:
                 try:
                     this_friday = get_this_friday()
-                    if update_todo_due_date(
-                        todo.source.path, todo.line_number, this_friday
-                    ):
+                    actual_line = update_todo_due_date(
+                        todo.source.path,
+                        todo.line_number,
+                        this_friday,
+                        expected_content=todo.content,
+                    )
+                    if actual_line is not None:
                         state.stats.rescheduled += 1
                         state.message = f"Rescheduled to {this_friday.strftime('%a %b %d')}: {todo.content[:20]}"
                         state.remove_current()
@@ -597,9 +619,13 @@ def run_review(
             if todo:
                 try:
                     next_friday = get_next_friday()
-                    if update_todo_due_date(
-                        todo.source.path, todo.line_number, next_friday
-                    ):
+                    actual_line = update_todo_due_date(
+                        todo.source.path,
+                        todo.line_number,
+                        next_friday,
+                        expected_content=todo.content,
+                    )
+                    if actual_line is not None:
                         state.stats.rescheduled += 1
                         state.message = f"Rescheduled to {next_friday.strftime('%a %b %d')}: {todo.content[:20]}"
                         state.remove_current()
@@ -611,9 +637,13 @@ def run_review(
             if todo:
                 try:
                     next_monday = get_next_monday()
-                    if update_todo_due_date(
-                        todo.source.path, todo.line_number, next_monday
-                    ):
+                    actual_line = update_todo_due_date(
+                        todo.source.path,
+                        todo.line_number,
+                        next_monday,
+                        expected_content=todo.content,
+                    )
+                    if actual_line is not None:
                         state.stats.rescheduled += 1
                         state.message = f"Rescheduled to {next_monday.strftime('%b %d')}: {todo.content[:20]}"
                         state.remove_current()
@@ -625,9 +655,13 @@ def run_review(
             if todo:
                 try:
                     next_month = get_first_of_next_month()
-                    if update_todo_due_date(
-                        todo.source.path, todo.line_number, next_month
-                    ):
+                    actual_line = update_todo_due_date(
+                        todo.source.path,
+                        todo.line_number,
+                        next_month,
+                        expected_content=todo.content,
+                    )
+                    if actual_line is not None:
                         state.stats.rescheduled += 1
                         state.message = f"Rescheduled to {next_month.strftime('%b %d')}: {todo.content[:20]}"
                         state.remove_current()
@@ -663,7 +697,12 @@ def run_review(
             todo = state.current_todo()
             if todo:
                 try:
-                    if delete_todo_from_file(todo.source.path, todo.line_number):
+                    actual_line = delete_todo_from_file(
+                        todo.source.path,
+                        todo.line_number,
+                        expected_content=todo.content,
+                    )
+                    if actual_line is not None:
                         delete_todo(todo.id)
                         state.stats.deleted += 1
                         state.message = f"Deleted: {todo.content[:30]}"

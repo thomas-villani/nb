@@ -13,7 +13,11 @@ from rich.text import Text
 
 from nb.config import get_config
 from nb.core.todos import set_todo_status_in_file, toggle_todo_in_file
-from nb.index.todos_repo import get_sorted_todos, update_todo_completion, update_todo_status
+from nb.index.todos_repo import (
+    get_sorted_todos,
+    update_todo_completion,
+    update_todo_status,
+)
 from nb.models import Todo, TodoStatus
 from nb.utils.dates import get_week_range
 
@@ -367,7 +371,12 @@ def run_interactive_todos(
             todo = state.current_todo()
             if todo:
                 try:
-                    if toggle_todo_in_file(todo.source.path, todo.line_number):
+                    actual_line = toggle_todo_in_file(
+                        todo.source.path,
+                        todo.line_number,
+                        expected_content=todo.content,
+                    )
+                    if actual_line is not None:
                         new_status = not todo.completed
                         update_todo_completion(todo.id, new_status)
                         action = "Completed" if new_status else "Reopened"
@@ -402,9 +411,13 @@ def run_interactive_todos(
                         else:
                             new_status = TodoStatus.IN_PROGRESS
                             action = "Started"
-                        if set_todo_status_in_file(
-                            todo.source.path, todo.line_number, new_status
-                        ):
+                        actual_line = set_todo_status_in_file(
+                            todo.source.path,
+                            todo.line_number,
+                            new_status,
+                            expected_content=todo.content,
+                        )
+                        if actual_line is not None:
                             update_todo_status(todo.id, new_status)
                             state.message = f"{action}: {todo.content[:40]}"
                             state.refresh_todos()
