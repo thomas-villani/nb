@@ -1044,13 +1044,14 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                         "created": (
                             t.created_date.isoformat() if t.created_date else None
                         ),
-                        "isOverdue": t.due_date is not None
-                        and t.due_date < today
+                        # Use due_date_only for date comparisons (due_date may be datetime)
+                        "isOverdue": t.due_date_only is not None
+                        and t.due_date_only < today
                         and t.status.value != "completed",
-                        "isDueToday": t.due_date == today,
-                        "isDueThisWeek": t.due_date is not None
+                        "isDueToday": t.due_date_only == today,
+                        "isDueThisWeek": t.due_date_only is not None
                         and today
-                        < t.due_date
+                        < t.due_date_only
                         <= today + __import__("datetime").timedelta(days=7),
                     }
                     for t in todos[:100]

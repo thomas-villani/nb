@@ -190,18 +190,19 @@ def render_todo_row(todo: Todo, is_selected: bool, idx: int) -> tuple:
     if len(source_str) > 18:
         source_str = source_str[:15] + "..."
 
-    # Due date with overdue indicator
+    # Due date with overdue indicator (use due_date_only for date comparisons)
     due_str = ""
     due_style = "dim"
     if todo.due_date:
-        overdue_days = _get_overdue_days(todo.due_date)
+        due = todo.due_date_only
+        overdue_days = _get_overdue_days(due)
         if overdue_days and overdue_days > 0:
             due_str = f"{overdue_days}d overdue"
             due_style = "red bold"
-        elif todo.due_date == today:
+        elif due == today:
             due_str = "today"
             due_style = "yellow bold"
-        elif todo.due_date <= week_end:
+        elif due <= week_end:
             due_str = todo.due_date.strftime("%a")
             due_style = "cyan"
         else:
@@ -512,12 +513,13 @@ def run_review(
 
     # Sort: overdue first (oldest), then by due date
     def sort_key(t: Todo) -> tuple:
-        if t.due_date is None:
+        due = t.due_date_only
+        if due is None:
             return (2, date.max)  # No date last
-        elif t.due_date < today:
-            return (0, t.due_date)  # Overdue first, oldest first
+        elif due < today:
+            return (0, due)  # Overdue first, oldest first
         else:
-            return (1, t.due_date)  # Future dates
+            return (1, due)  # Future dates
 
     todos.sort(key=sort_key)
 

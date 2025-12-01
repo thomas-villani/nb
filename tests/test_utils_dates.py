@@ -468,3 +468,144 @@ class TestParseDateRange:
         start, end = parse_date_range("2025-11-26")
         assert start == date(2025, 11, 26)
         assert end == date(2025, 11, 26)
+
+
+class TestIsRelativeDate:
+    """Tests for is_relative_date function."""
+
+    def test_today_is_relative(self):
+        from nb.utils.dates import is_relative_date
+
+        assert is_relative_date("today") is True
+        assert is_relative_date("TODAY") is True
+
+    def test_tomorrow_is_relative(self):
+        from nb.utils.dates import is_relative_date
+
+        assert is_relative_date("tomorrow") is True
+
+    def test_yesterday_is_relative(self):
+        from nb.utils.dates import is_relative_date
+
+        assert is_relative_date("yesterday") is True
+
+    def test_weekday_is_relative(self):
+        from nb.utils.dates import is_relative_date
+
+        assert is_relative_date("friday") is True
+        assert is_relative_date("Monday") is True
+        assert is_relative_date("next friday") is True
+        assert is_relative_date("last monday") is True
+
+    def test_relative_with_time(self):
+        from nb.utils.dates import is_relative_date
+
+        assert is_relative_date("today 2pm") is True
+        assert is_relative_date("tomorrow 14:30") is True
+        assert is_relative_date("friday 9am") is True
+
+    def test_iso_date_not_relative(self):
+        from nb.utils.dates import is_relative_date
+
+        assert is_relative_date("2025-12-01") is False
+        assert is_relative_date("dec 15") is False
+
+    def test_empty_not_relative(self):
+        from nb.utils.dates import is_relative_date
+
+        assert is_relative_date("") is False
+        assert is_relative_date("   ") is False
+
+
+class TestParseFuzzyDatetime:
+    """Tests for parse_fuzzy_datetime function."""
+
+    def test_date_only(self, fixed_today: date):
+        from datetime import datetime
+
+        from nb.utils.dates import parse_fuzzy_datetime
+
+        result = parse_fuzzy_datetime("2025-12-01")
+        assert result == datetime(2025, 12, 1, 0, 0)
+
+    def test_relative_date(self, fixed_today: date):
+        from datetime import datetime, time
+
+        from nb.utils.dates import parse_fuzzy_datetime
+
+        result = parse_fuzzy_datetime("today")
+        assert result == datetime.combine(fixed_today, time.min)
+
+    def test_with_time_24h(self, fixed_today: date):
+        from datetime import datetime, time
+
+        from nb.utils.dates import parse_fuzzy_datetime
+
+        result = parse_fuzzy_datetime("today 14:30")
+        assert result == datetime.combine(fixed_today, time(14, 30))
+
+    def test_with_time_12h_pm(self, fixed_today: date):
+        from datetime import datetime, time
+
+        from nb.utils.dates import parse_fuzzy_datetime
+
+        result = parse_fuzzy_datetime("today 2pm")
+        assert result == datetime.combine(fixed_today, time(14, 0))
+
+    def test_with_time_12h_am(self, fixed_today: date):
+        from datetime import datetime, time
+
+        from nb.utils.dates import parse_fuzzy_datetime
+
+        result = parse_fuzzy_datetime("today 9am")
+        assert result == datetime.combine(fixed_today, time(9, 0))
+
+    def test_iso_date_with_time(self):
+        from datetime import datetime
+
+        from nb.utils.dates import parse_fuzzy_datetime
+
+        result = parse_fuzzy_datetime("2025-12-01 09:30")
+        assert result == datetime(2025, 12, 1, 9, 30)
+
+    def test_empty_returns_none(self):
+        from nb.utils.dates import parse_fuzzy_datetime
+
+        assert parse_fuzzy_datetime("") is None
+        assert parse_fuzzy_datetime("   ") is None
+
+
+class TestFormatDatetime:
+    """Tests for format_datetime function."""
+
+    def test_date_only_midnight(self):
+        from datetime import datetime
+
+        from nb.utils.dates import format_datetime
+
+        dt = datetime(2025, 12, 1, 0, 0)
+        assert format_datetime(dt) == "2025-12-01"
+
+    def test_with_time(self):
+        from datetime import datetime
+
+        from nb.utils.dates import format_datetime
+
+        dt = datetime(2025, 12, 1, 14, 30)
+        assert format_datetime(dt) == "2025-12-01 14:30"
+
+    def test_force_include_time(self):
+        from datetime import datetime
+
+        from nb.utils.dates import format_datetime
+
+        dt = datetime(2025, 12, 1, 0, 0)
+        assert format_datetime(dt, include_time=True) == "2025-12-01 00:00"
+
+    def test_force_exclude_time(self):
+        from datetime import datetime
+
+        from nb.utils.dates import format_datetime
+
+        dt = datetime(2025, 12, 1, 14, 30)
+        assert format_datetime(dt, include_time=False) == "2025-12-01"

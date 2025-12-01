@@ -159,14 +159,19 @@ def render_todo_table(state: TodoViewState) -> Table:
             added_str = "-"
         added_style = "dim"
 
-        # Due date
+        # Due date (use due_date_only for date comparisons)
         if todo.due_date:
-            due_str = todo.due_date.strftime("%b %d")
-            if todo.due_date < today:
+            # Show time if not midnight
+            if todo.has_due_time:
+                due_str = todo.due_date.strftime("%b %d %H:%M")
+            else:
+                due_str = todo.due_date.strftime("%b %d")
+            due = todo.due_date_only
+            if due < today:
                 due_style = "red bold"
-            elif todo.due_date == today:
+            elif due == today:
                 due_style = "yellow bold"
-            elif todo.due_date <= week_end:
+            elif due <= week_end:
                 due_style = "cyan"
             else:
                 due_style = "dim"

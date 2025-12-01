@@ -2,16 +2,39 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nb.index.db import get_db
 from nb.models import Priority, Todo, TodoSource, TodoStatus
+from nb.utils.dates import format_datetime
 from nb.utils.hashing import normalize_path
 
 if TYPE_CHECKING:
     from nb.index.db import Database
+
+
+def _parse_due_datetime(value: str | None) -> datetime | None:
+    """Parse due date from database value.
+
+    Handles both date-only (YYYY-MM-DD) and datetime (YYYY-MM-DD HH:MM or ISO format) strings.
+    Returns datetime at midnight for date-only values.
+    """
+    if not value:
+        return None
+
+    try:
+        # Try ISO datetime format first (with T separator)
+        if "T" in value:
+            return datetime.fromisoformat(value)
+        # Try datetime with space separator (YYYY-MM-DD HH:MM)
+        if " " in value:
+            return datetime.strptime(value, "%Y-%m-%d %H:%M")
+        # Fall back to date-only (YYYY-MM-DD) -> datetime at midnight
+        return datetime.combine(date.fromisoformat(value), time.min)
+    except ValueError:
+        return None
 
 
 def _row_to_todo(row) -> Todo:
@@ -42,7 +65,7 @@ def _row_to_todo(row) -> Todo:
             if row["created_date"]
             else date.today()
         ),
-        due_date=date.fromisoformat(row["due_date"]) if row["due_date"] else None,
+        due_date=_parse_due_datetime(row["due_date"]),
         priority=Priority.from_int(row["priority"]) if row["priority"] else None,
         tags=[],  # Loaded separately
         notebook=row["project"],  # DB column is 'project'
@@ -102,6 +125,11 @@ def upsert_todo(todo: Todo, commit: bool = True, db: Database | None = None) -> 
             # Newly completed - set to today
             completed_date = date.today().isoformat()
 
+    # Format due_date for storage (includes time if not midnight)
+    due_date_str = None
+    if todo.due_date:
+        due_date_str = format_datetime(todo.due_date)
+
     db.execute(
         """
         INSERT OR REPLACE INTO todos (
@@ -123,7 +151,7 @@ def upsert_todo(todo: Todo, commit: bool = True, db: Database | None = None) -> 
             todo.line_number,
             created_date,
             completed_date,
-            todo.due_date.isoformat() if todo.due_date else None,
+            due_date_str,
             todo.priority.value if todo.priority else None,
             todo.notebook,
             todo.parent_id,
@@ -261,17 +289,24 @@ def update_todo_status(todo_id: str, status: TodoStatus) -> None:
     db.commit()
 
 
-def update_todo_due_date_db(todo_id: str, new_date: date | None) -> None:
+def update_todo_due_date_db(todo_id: str, new_date: datetime | date | None) -> None:
     """Update a todo's due date in the database.
 
     Args:
         todo_id: The todo ID to update.
-        new_date: The new due date, or None to clear the due date.
+        new_date: The new due date/datetime, or None to clear the due date.
     """
     db = get_db()
+    if new_date is None:
+        due_date_str = None
+    elif isinstance(new_date, datetime):
+        due_date_str = format_datetime(new_date)
+    else:
+        due_date_str = new_date.isoformat()
+
     db.execute(
         "UPDATE todos SET due_date = ? WHERE id = ?",
-        (new_date.isoformat() if new_date else None, todo_id),
+        (due_date_str, todo_id),
     )
     db.commit()
 
@@ -549,24 +584,26 @@ def get_sorted_todos(
     def sort_key(todo: Todo) -> tuple:
         # Group: 0=overdue, 1=in_progress, 2=today, 3=this week, 4=later, 5=no due date
         # In-progress todos get their own group (1) regardless of due date
+        # Use due_date_only for date comparisons (due_date may be datetime)
+        due = todo.due_date_only
         if todo.in_progress:
             group = 1
-            date_key = todo.due_date or todo.created_date or today
-        elif todo.due_date is None:
+            date_key = due or todo.created_date or today
+        elif due is None:
             group = 5
             date_key = todo.created_date or today
-        elif todo.due_date < today:
+        elif due < today:
             group = 0
-            date_key = todo.due_date
-        elif todo.due_date == today:
+            date_key = due
+        elif due == today:
             group = 2
-            date_key = todo.due_date
-        elif (todo.due_date - today).days <= 7:
+            date_key = due
+        elif (due - today).days <= 7:
             group = 3
-            date_key = todo.due_date
+            date_key = due
         else:
             group = 4
-            date_key = todo.due_date
+            date_key = due
 
         # Priority: 1, 2, 3, then 999 for no priority
         priority_key = todo.priority.value if todo.priority else 999

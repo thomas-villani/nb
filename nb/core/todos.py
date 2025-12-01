@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from nb.config import get_config
 from nb.models import Attachment, Priority, Todo, TodoSource, TodoStatus
-from nb.utils.dates import parse_fuzzy_date
+from nb.utils.dates import format_datetime, is_relative_date, parse_fuzzy_datetime
 from nb.utils.hashing import make_attachment_id, make_todo_id
 
 # Regex patterns for todo parsing
@@ -46,12 +46,12 @@ def clean_todo_content(content: str) -> str:
     return content.strip()
 
 
-def parse_due_date(content: str) -> date | None:
-    """Extract due date from todo content."""
+def parse_due_date(content: str) -> datetime | None:
+    """Extract due date (with optional time) from todo content."""
     match = DUE_PATTERN.search(content)
     if match:
         date_str = match.group("date")
-        return parse_fuzzy_date(date_str)
+        return parse_fuzzy_datetime(date_str)
     return None
 
 
@@ -856,19 +856,19 @@ def delete_todo_from_file(
 def update_todo_due_date(
     path: Path,
     line_number: int,
-    new_date: date,
+    new_date: datetime | date,
     check_linked_sync: bool = True,
     expected_content: str | None = None,
 ) -> int | None:
     """Update or add @due() in a todo line.
 
     If @due() exists, replaces it with the new date.
-    If not, adds @due(YYYY-MM-DD) before the first #tag or at end of line.
+    If not, adds @due(YYYY-MM-DD) or @due(YYYY-MM-DD HH:MM) before the first #tag or at end of line.
 
     Args:
         path: Path to the file
         line_number: 1-based line number of the todo (may be stale)
-        new_date: The new due date to set
+        new_date: The new due date/datetime to set
         check_linked_sync: Whether to check if linked file allows sync
         expected_content: If provided, verifies/finds the todo by content.
             This handles cases where line numbers become stale due to file edits.
@@ -907,7 +907,11 @@ def update_todo_due_date(
     if not match:
         return None
 
-    date_str = new_date.isoformat()
+    # Format datetime appropriately (with time if not midnight)
+    if isinstance(new_date, datetime):
+        date_str = format_datetime(new_date)
+    else:
+        date_str = new_date.isoformat()
 
     if DUE_PATTERN.search(line):
         # Replace existing @due()
@@ -1065,3 +1069,52 @@ def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
     upsert_todos_batch([todo])
 
     return todo
+
+
+def normalize_due_dates_in_file(path: Path) -> int:
+    """Normalize relative due dates in a file to absolute dates.
+
+    Replaces expressions like @due(today), @due(tomorrow), @due(friday)
+    with their resolved ISO dates like @due(2025-12-01).
+
+    Args:
+        path: Path to the markdown file to normalize.
+
+    Returns:
+        Number of due dates that were normalized.
+    """
+    if not path.exists():
+        return 0
+
+    content = path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+    changes = 0
+    modified_lines = []
+
+    for line in lines:
+        new_line = line
+
+        # Find all @due(...) patterns in the line
+        for match in DUE_PATTERN.finditer(line):
+            date_expr = match.group("date")
+
+            # Check if this is a relative date that should be normalized
+            if is_relative_date(date_expr):
+                # Parse the relative date to get the actual datetime
+                parsed_dt = parse_fuzzy_datetime(date_expr)
+                if parsed_dt:
+                    # Format it as an absolute date (with time if specified)
+                    normalized = format_datetime(parsed_dt)
+                    # Replace just this @due() expression
+                    old_due = f"@due({date_expr})"
+                    new_due = f"@due({normalized})"
+                    new_line = new_line.replace(old_due, new_due, 1)
+                    changes += 1
+
+        modified_lines.append(new_line)
+
+    # Write back only if changes were made
+    if changes > 0:
+        path.write_text("\n".join(modified_lines) + "\n", encoding="utf-8")
+
+    return changes

@@ -629,16 +629,19 @@ def _list_todos(
             groups["IN PROGRESS"].append(t)
         elif t.due_date is None:
             groups["NO DUE DATE"].append(t)
-        elif t.due_date < today_date:
-            groups["OVERDUE"].append(t)
-        elif t.due_date == today_date:
-            groups["DUE TODAY"].append(t)
-        elif t.due_date <= week_end:
-            groups["DUE THIS WEEK"].append(t)
-        elif t.due_date <= next_week_end:
-            groups["DUE NEXT WEEK"].append(t)
         else:
-            groups["DUE LATER"].append(t)
+            # Use due_date_only for date comparisons (due_date may be datetime)
+            due = t.due_date_only
+            if due < today_date:
+                groups["OVERDUE"].append(t)
+            elif due == today_date:
+                groups["DUE TODAY"].append(t)
+            elif due <= week_end:
+                groups["DUE THIS WEEK"].append(t)
+            elif due <= next_week_end:
+                groups["DUE NEXT WEEK"].append(t)
+            else:
+                groups["DUE LATER"].append(t)
 
     # Apply hide filters
     if hide_later:
@@ -1136,9 +1139,14 @@ def _print_todo(
     due_str = ""
     due_color = "yellow"  # Default to yellow for future due dates
     if show_due and t.due_date:
-        due_str = t.due_date.strftime("%b %d")
+        # Show time if not midnight, otherwise just date
+        if t.has_due_time:
+            due_str = t.due_date.strftime("%b %d %H:%M")
+        else:
+            due_str = t.due_date.strftime("%b %d")
         # Red if due today or overdue (and not completed)
-        if t.due_date <= date.today() and not t.completed:
+        due = t.due_date_only
+        if due and due <= date.today() and not t.completed:
             due_color = "red"
 
     priority_str = ""
@@ -1582,32 +1590,39 @@ def todo_due(todo_id: tuple[str, ...], date_expr: str) -> None:
     \b
     DATE_EXPR can be:
     - A date: "2025-12-15", "dec 15", "tomorrow", "friday"
+    - A date with time: "2025-12-15 14:30", "tomorrow 2pm", "friday 9am"
     - "none" or "clear" to remove the due date
 
     Note: "friday" means the NEXT Friday (future), not the most recent.
 
     \b
     Examples:
-      nb todo due abc123 friday       # Set due to next Friday
+      nb todo due abc123 friday         # Set due to next Friday
       nb todo due abc123 tomorrow
       nb todo due abc123 "dec 25"
       nb todo due abc123 2025-12-15
-      nb todo due abc123 none         # Remove due date
-      nb todo due abc def friday      # Multiple IDs
+      nb todo due abc123 "friday 2pm"   # With time
+      nb todo due abc123 "tomorrow 9am"
+      nb todo due abc123 none           # Remove due date
+      nb todo due abc def friday        # Multiple IDs
     """
     from nb.core.todos import remove_todo_due_date, update_todo_due_date
     from nb.index.todos_repo import update_todo_due_date_db
-    from nb.utils.dates import is_clear_date_keyword, parse_fuzzy_date_future
+    from nb.utils.dates import (
+        format_datetime,
+        is_clear_date_keyword,
+        parse_fuzzy_datetime_future,
+    )
 
     # Check if we should clear the due date
     is_clear = is_clear_date_keyword(date_expr)
 
     if not is_clear:
-        new_date = parse_fuzzy_date_future(date_expr)
+        new_date = parse_fuzzy_datetime_future(date_expr)
         if not new_date:
             console.print(f"[red]Could not parse date: {date_expr}[/red]")
             console.print(
-                "[dim]Try: tomorrow, friday, next monday, dec 15, 2025-12-15, or 'none' to clear[/dim]"
+                "[dim]Try: tomorrow, friday 2pm, next monday 9am, dec 15, 2025-12-15 14:30, or 'none' to clear[/dim]"
             )
             raise SystemExit(1)
     else:
@@ -1648,9 +1663,9 @@ def todo_due(todo_id: tuple[str, ...], date_expr: str) -> None:
                     console.print(f"[green]Cleared due date:[/green] {t.content}")
                 else:
                     assert new_date is not None
-                    console.print(
-                        f"[green]Due {new_date.strftime('%b %d')}:[/green] {t.content}"
-                    )
+                    # Format with time if not midnight
+                    date_display = format_datetime(new_date)
+                    console.print(f"[green]Due {date_display}:[/green] {t.content}")
             else:
                 console.print("[red]Failed to update todo in source file.[/red]")
                 console.print(

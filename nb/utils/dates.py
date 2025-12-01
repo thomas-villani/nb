@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
 from dateutil import parser as dateutil_parser
 from dateutil.relativedelta import FR, MO, SA, SU, TH, TU, WE, relativedelta
@@ -188,6 +188,194 @@ def parse_fuzzy_date_future(text: str) -> date | None:
 def is_clear_date_keyword(text: str) -> bool:
     """Check if the text is a keyword that means 'clear/remove the due date'."""
     return text.strip().lower() in CLEAR_DATE_KEYWORDS
+
+
+# Keywords that are relative dates (should be auto-replaced with actual dates)
+RELATIVE_DATE_KEYWORDS = {
+    "today",
+    "yesterday",
+    "tomorrow",
+    "next week",
+    "last week",
+}
+
+
+def is_relative_date(text: str) -> bool:
+    """Check if the text is a relative date that should be auto-replaced.
+
+    Returns True for:
+    - Named dates: "today", "yesterday", "tomorrow"
+    - Relative: "next week", "last week"
+    - Weekday names: "friday", "next friday", "last monday"
+    - Any of the above with an optional time suffix
+    """
+    if not text:
+        return False
+
+    text = text.strip().lower()
+
+    # Check for time suffix and strip it
+    # Patterns like "today 14:30", "tomorrow 2pm", "friday 9am"
+    time_pattern = re.compile(r"\s+\d{1,2}(:\d{2})?\s*(am|pm)?$", re.IGNORECASE)
+    text_without_time = time_pattern.sub("", text).strip()
+
+    # Check named dates
+    if text_without_time in RELATIVE_DATE_KEYWORDS:
+        return True
+
+    # Check weekday patterns
+    if text_without_time in WEEKDAYS:
+        return True
+
+    # Check "next <weekday>" or "last <weekday>"
+    next_match = re.match(r"^next\s+(\w+)$", text_without_time)
+    if next_match and next_match.group(1) in WEEKDAYS:
+        return True
+
+    last_match = re.match(r"^last\s+(\w+)$", text_without_time)
+    if last_match and last_match.group(1) in WEEKDAYS:
+        return True
+
+    return False
+
+
+def parse_time_suffix(text: str) -> tuple[str, time | None]:
+    """Extract time suffix from a date expression.
+
+    Args:
+        text: Date expression that may contain a time suffix like "14:30" or "2pm"
+
+    Returns:
+        Tuple of (date_part, time_or_none)
+
+    Examples:
+        "today 14:30" -> ("today", time(14, 30))
+        "friday 2pm" -> ("friday", time(14, 0))
+        "2025-12-01 09:00" -> ("2025-12-01", time(9, 0))
+        "tomorrow" -> ("tomorrow", None)
+    """
+    if not text:
+        return text, None
+
+    text = text.strip()
+
+    # Pattern for time: HH:MM, H:MM, HHam/pm, Ham/pm
+    # Must be at the end of the string, preceded by whitespace
+    time_patterns = [
+        # 24-hour format: 14:30, 9:00
+        (
+            r"^(.+?)\s+(\d{1,2}):(\d{2})$",
+            lambda m: time(int(m.group(2)), int(m.group(3))),
+        ),
+        # 12-hour format with am/pm: 2pm, 11am, 2:30pm
+        (
+            r"^(.+?)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)$",
+            lambda m: time(
+                int(m.group(2)) % 12 + (12 if m.group(4).lower() == "pm" else 0),
+                int(m.group(3)) if m.group(3) else 0,
+            ),
+        ),
+    ]
+
+    for pattern, time_extractor in time_patterns:
+        match = re.match(pattern, text, re.IGNORECASE)
+        if match:
+            try:
+                return match.group(1).strip(), time_extractor(match)
+            except ValueError:
+                # Invalid time (e.g., 25:00)
+                pass
+
+    return text, None
+
+
+def parse_fuzzy_datetime(text: str) -> datetime | None:
+    """Parse a fuzzy date expression into a datetime object.
+
+    Like parse_fuzzy_date but returns datetime and supports time suffixes.
+
+    Supports:
+    - All formats from parse_fuzzy_date
+    - Time suffixes: "today 14:30", "friday 2pm", "2025-12-01 09:00"
+
+    Returns datetime with time if specified, or datetime at midnight (00:00:00) if not.
+    Returns None if parsing fails.
+    """
+    if not text:
+        return None
+
+    # Extract time suffix if present
+    date_part, time_value = parse_time_suffix(text)
+
+    # Parse the date part
+    parsed_date = parse_fuzzy_date(date_part)
+    if parsed_date is None:
+        return None
+
+    # Combine date with time (default to midnight)
+    if time_value is None:
+        time_value = time.min
+    return datetime.combine(parsed_date, time_value)
+
+
+def parse_fuzzy_datetime_future(text: str) -> datetime | None:
+    """Parse a fuzzy datetime expression with weekday names defaulting to NEXT occurrence.
+
+    Like parse_fuzzy_date_future but returns datetime and supports time suffixes.
+
+    Returns None if parsing fails or if text is a clear keyword.
+    """
+    if not text:
+        return None
+
+    text_lower = text.strip().lower()
+
+    # Check if user wants to clear the due date
+    if text_lower in CLEAR_DATE_KEYWORDS:
+        return None
+
+    # Extract time suffix if present
+    date_part, time_value = parse_time_suffix(text)
+
+    # Parse the date part using future-oriented parser
+    parsed_date = parse_fuzzy_date_future(date_part)
+    if parsed_date is None:
+        return None
+
+    # Combine date with time (default to midnight)
+    if time_value is None:
+        time_value = time.min
+    return datetime.combine(parsed_date, time_value)
+
+
+def format_datetime(dt: datetime, include_time: bool | None = None) -> str:
+    """Format a datetime for display in @due() tags.
+
+    Args:
+        dt: The datetime to format
+        include_time: If True, always include time. If False, never include time.
+            If None (default), include time only if it's not midnight.
+
+    Returns:
+        ISO format date string, optionally with time (YYYY-MM-DD or YYYY-MM-DD HH:MM)
+    """
+    if include_time is None:
+        # Auto-detect: include time if not midnight
+        include_time = dt.time() != time.min
+
+    if include_time:
+        return dt.strftime("%Y-%m-%d %H:%M")
+    else:
+        return dt.strftime("%Y-%m-%d")
+
+
+def datetime_to_date(dt: datetime | date | None) -> date | None:
+    """Convert datetime to date, handling None and date inputs."""
+    if dt is None:
+        return None
+    if isinstance(dt, datetime):
+        return dt.date()
+    return dt
 
 
 def parse_date_from_filename(filename: str) -> date | None:

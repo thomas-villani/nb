@@ -693,6 +693,7 @@ def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
                     alias=ln.alias,
                     notes_root=notes_root,
                     todo_exclude=ln.todo_exclude,
+                    sync=ln.sync,
                 )
                 return
             elif ln.path.is_dir():
@@ -705,6 +706,7 @@ def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
                         alias=ln.alias,
                         notes_root=notes_root,
                         todo_exclude=ln.todo_exclude,
+                        sync=ln.sync,
                     )
                     return
                 except ValueError:

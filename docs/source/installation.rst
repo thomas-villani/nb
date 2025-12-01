@@ -13,8 +13,8 @@ Install from source
 .. code-block:: bash
 
    # Clone the repository
-   git clone https://github.com/user/nb-cli.git
-   cd nb-cli
+   git clone https://github.com/thomas-villani/nb.git
+   cd nb
 
    # Install with uv (recommended)
    uv sync

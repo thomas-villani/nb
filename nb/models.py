@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, time
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -103,7 +103,7 @@ class Todo:
     source: TodoSource
     line_number: int
     created_date: date
-    due_date: date | None = None
+    due_date: datetime | None = None  # Supports optional time component
     priority: Priority | None = None
     tags: list[str] = field(default_factory=list)
     notebook: str | None = None  # Database column is 'project' for legacy reasons
@@ -124,18 +124,45 @@ class Todo:
         return self.status == TodoStatus.IN_PROGRESS
 
     @property
-    def is_overdue(self) -> bool:
-        """Check if todo is past due date."""
+    def due_date_only(self) -> date | None:
+        """Get just the date portion of due_date."""
+        if self.due_date is None:
+            return None
+        if isinstance(self.due_date, datetime):
+            return self.due_date.date()
+        return self.due_date  # Already a date
+
+    @property
+    def has_due_time(self) -> bool:
+        """Check if due_date has a non-midnight time component."""
         if self.due_date is None:
             return False
-        return self.due_date < date.today()
+        if isinstance(self.due_date, datetime):
+            return self.due_date.time() != time.min
+        return False  # date objects have no time
+
+    @property
+    def is_overdue(self) -> bool:
+        """Check if todo is past due date.
+
+        For datetime with time: considers both date and time.
+        For datetime at midnight or date: only considers the date.
+        """
+        if self.due_date is None:
+            return False
+        if self.has_due_time:
+            return self.due_date < datetime.now()
+        # Compare dates only
+        due = self.due_date_only
+        return due < date.today() if due else False
 
     @property
     def is_due_today(self) -> bool:
         """Check if todo is due today."""
         if self.due_date is None:
             return False
-        return self.due_date == date.today()
+        due = self.due_date_only
+        return due == date.today() if due else False
 
     @property
     def priority_sort_key(self) -> int:

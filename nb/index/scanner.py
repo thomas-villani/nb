@@ -10,7 +10,7 @@ from pathlib import Path
 
 from nb.config import get_config
 from nb.core.notes import get_note
-from nb.core.todos import extract_todos
+from nb.core.todos import extract_todos, normalize_due_dates_in_file
 from nb.index.db import Database, get_db
 from nb.index.todos_repo import delete_todos_for_source, upsert_todos_batch
 from nb.utils.hashing import make_note_hash, normalize_path
@@ -245,6 +245,9 @@ def index_note(
 
     # Delete existing todos for this file
     delete_todos_for_source(full_path)
+
+    # Normalize relative due dates (e.g., @due(today) -> @due(2025-12-01))
+    normalize_due_dates_in_file(full_path)
 
     # Extract and index new todos (batch for performance)
     todos = extract_todos(full_path, source_type=source_type, notes_root=notes_root)
@@ -489,6 +492,9 @@ def _index_note_thread_safe(
 
     # Delete existing todos for this file (use thread-local db for thread safety)
     delete_todos_for_source(full_path, db=db)
+
+    # Normalize relative due dates (e.g., @due(today) -> @due(2025-12-01))
+    normalize_due_dates_in_file(full_path)
 
     # Extract and index new todos (batch for performance, use thread-local db)
     todos = extract_todos(full_path, source_type=source_type, notes_root=notes_root)
@@ -810,6 +816,9 @@ def index_todos_from_file(path: Path, notes_root: Path | None = None) -> int:
     # Delete existing todos for this file
     delete_todos_for_source(path)
 
+    # Normalize relative due dates (e.g., @due(today) -> @due(2025-12-01))
+    normalize_due_dates_in_file(path)
+
     # Extract and index new todos (batch for performance)
     todos = extract_todos(path, source_type=source_type, notes_root=notes_root)
     upsert_todos_batch(todos)
@@ -833,6 +842,10 @@ def scan_linked_files() -> int:
 
         # Delete existing todos for this linked file
         delete_todos_for_source(linked.path)
+
+        # Normalize relative due dates if sync is enabled
+        if linked.sync:
+            normalize_due_dates_in_file(linked.path)
 
         # Extract and index todos (batch for performance)
         todos = extract_todos(
@@ -979,6 +992,7 @@ def index_linked_note(
     notes_root: Path | None = None,
     index_vectors: bool = True,
     todo_exclude: bool = False,
+    sync: bool = True,
 ) -> None:
     """Index a single linked (external) note file.
 
@@ -989,6 +1003,7 @@ def index_linked_note(
         notes_root: Override notes root directory.
         index_vectors: Whether to index for vector search.
         todo_exclude: Whether to exclude todos from this linked note.
+        sync: Whether to sync changes (like normalizing due dates) back to the file.
 
     """
     if notes_root is None:
@@ -1101,6 +1116,11 @@ def index_linked_note(
 
     # Also index todos from this file (batch for performance)
     delete_todos_for_source(path)
+
+    # Normalize relative due dates if sync is enabled
+    if sync:
+        normalize_due_dates_in_file(path)
+
     todos = extract_todos(
         path,
         source_type="linked",
@@ -1149,6 +1169,7 @@ def scan_linked_notes(
                 notebook=notebook,
                 alias=linked.alias,
                 todo_exclude=linked.todo_exclude,
+                sync=linked.sync,
             )
             total_notes += 1
             if on_progress:
@@ -1210,6 +1231,7 @@ def index_single_linked_note(alias: str) -> int:
             notebook=notebook,
             alias=linked.alias,
             todo_exclude=linked.todo_exclude,
+            sync=linked.sync,
         )
 
     return len(files)

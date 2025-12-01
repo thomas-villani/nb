@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import datetime, time, timedelta
 
 from nb.core.todos import (
     ATTACH_PATTERN,
@@ -112,15 +112,28 @@ class TestCleanTodoContent:
 
 
 class TestParseDueDate:
-    """Tests for parse_due_date function."""
+    """Tests for parse_due_date function.
+
+    parse_due_date now returns datetime (with time at midnight for date-only values).
+    """
 
     def test_parses_iso_date(self):
         result = parse_due_date("Task @due(2025-12-01)")
-        assert result == date(2025, 12, 1)
+        assert result == datetime(2025, 12, 1, 0, 0)
 
     def test_parses_fuzzy_date(self, fixed_today):
         result = parse_due_date("Task @due(tomorrow)")
-        assert result == fixed_today + timedelta(days=1)
+        expected = datetime.combine(fixed_today + timedelta(days=1), time.min)
+        assert result == expected
+
+    def test_parses_date_with_time(self, fixed_today):
+        result = parse_due_date("Task @due(tomorrow 2pm)")
+        expected = datetime.combine(fixed_today + timedelta(days=1), time(14, 0))
+        assert result == expected
+
+    def test_parses_iso_date_with_time(self):
+        result = parse_due_date("Task @due(2025-12-01 14:30)")
+        assert result == datetime(2025, 12, 1, 14, 30)
 
     def test_no_due_date(self):
         result = parse_due_date("Task without due date")
@@ -204,7 +217,9 @@ class TestExtractTodos:
         assert len(todos) == 1
         todo = todos[0]
         assert todo.priority == Priority.HIGH
-        assert todo.due_date == fixed_today + timedelta(days=1)
+        # due_date is now datetime (with time at midnight)
+        expected_due = datetime.combine(fixed_today + timedelta(days=1), time.min)
+        assert todo.due_date == expected_due
         assert "urgent" in todo.tags
 
     def test_handles_nested_todos(self, mock_config, create_note):
@@ -589,7 +604,9 @@ class TestAddTodoToInbox:
 
         assert todo.content == "Task"
         assert todo.priority == Priority.HIGH
-        assert todo.due_date == fixed_today + timedelta(days=1)
+        # due_date is now datetime (with time at midnight)
+        expected_due = datetime.combine(fixed_today + timedelta(days=1), time.min)
+        assert todo.due_date == expected_due
         assert "urgent" in todo.tags
 
     def test_returns_todo_object(self, mock_config):
@@ -982,3 +999,127 @@ Afternoon Tasks:
         todo = add_todo_to_note("Exercise", note_path, section="Morn")
 
         assert todo.section == "Morning Tasks"
+
+
+class TestNormalizeDueDates:
+    """Tests for normalize_due_dates_in_file function."""
+
+    def test_normalizes_today(self, mock_config, create_note, fixed_today):
+        """Test that @due(today) is replaced with ISO date."""
+        from nb.core.todos import normalize_due_dates_in_file
+
+        content = """\
+# Tasks
+
+- [ ] Task @due(today) #test
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        changes = normalize_due_dates_in_file(note_path)
+
+        assert changes == 1
+        result = note_path.read_text()
+        expected_date = fixed_today.isoformat()
+        assert f"@due({expected_date})" in result
+        assert "@due(today)" not in result
+
+    def test_normalizes_tomorrow(self, mock_config, create_note, fixed_today):
+        """Test that @due(tomorrow) is replaced with ISO date."""
+        from nb.core.todos import normalize_due_dates_in_file
+
+        content = """\
+# Tasks
+
+- [ ] Task @due(tomorrow)
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        changes = normalize_due_dates_in_file(note_path)
+
+        assert changes == 1
+        result = note_path.read_text()
+        expected_date = (fixed_today + timedelta(days=1)).isoformat()
+        assert f"@due({expected_date})" in result
+
+    def test_normalizes_weekday(self, mock_config, create_note, fixed_today):
+        """Test that @due(friday) is replaced with ISO date."""
+        from nb.core.todos import normalize_due_dates_in_file
+
+        content = """\
+# Tasks
+
+- [ ] Task @due(friday)
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        changes = normalize_due_dates_in_file(note_path)
+
+        assert changes == 1
+        result = note_path.read_text()
+        assert "@due(friday)" not in result
+        # Result should contain @due(2025-11-28) since fixed_today is Friday 2025-11-28
+        assert "@due(2025-11-28)" in result
+
+    def test_preserves_iso_dates(self, mock_config, create_note):
+        """Test that ISO dates are not changed."""
+        from nb.core.todos import normalize_due_dates_in_file
+
+        content = """\
+# Tasks
+
+- [ ] Task @due(2025-12-15) #test
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        changes = normalize_due_dates_in_file(note_path)
+
+        assert changes == 0
+        result = note_path.read_text()
+        assert "@due(2025-12-15)" in result
+
+    def test_normalizes_multiple(self, mock_config, create_note, fixed_today):
+        """Test normalizing multiple relative dates in same file."""
+        from nb.core.todos import normalize_due_dates_in_file
+
+        content = """\
+# Tasks
+
+- [ ] Task 1 @due(today)
+- [ ] Task 2 @due(tomorrow)
+- [ ] Task 3 @due(2025-12-15)
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        changes = normalize_due_dates_in_file(note_path)
+
+        assert changes == 2  # today and tomorrow, not the ISO date
+        result = note_path.read_text()
+        assert "@due(today)" not in result
+        assert "@due(tomorrow)" not in result
+        assert "@due(2025-12-15)" in result
+
+    def test_normalizes_with_time(self, mock_config, create_note, fixed_today):
+        """Test normalizing relative date with time suffix."""
+        from nb.core.todos import normalize_due_dates_in_file
+
+        content = """\
+# Tasks
+
+- [ ] Task @due(tomorrow 2pm)
+"""
+        note_path = create_note("projects", "test.md", content)
+
+        changes = normalize_due_dates_in_file(note_path)
+
+        assert changes == 1
+        result = note_path.read_text()
+        expected_date = (fixed_today + timedelta(days=1)).isoformat()
+        # Should include time
+        assert f"@due({expected_date} 14:00)" in result
+
+    def test_handles_missing_file(self, tmp_path):
+        """Test that missing file returns 0 changes."""
+        from nb.core.todos import normalize_due_dates_in_file
+
+        changes = normalize_due_dates_in_file(tmp_path / "nonexistent.md")
+        assert changes == 0
