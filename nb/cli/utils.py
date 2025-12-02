@@ -516,6 +516,50 @@ def resolve_note(
     return None
 
 
+def find_notes_by_title(
+    title_query: str,
+    notebook: str | None = None,
+) -> list[tuple[Path, str]]:
+    """Find notes by partial title match (case-insensitive).
+
+    Args:
+        title_query: Partial title to search for
+        notebook: Optional notebook to filter
+
+    Returns:
+        List of (path, title) tuples sorted by title relevance
+    """
+    from nb.index.db import get_db
+
+    config = get_config()
+    db = get_db()
+
+    # Case-insensitive LIKE query on title column
+    if notebook:
+        rows = db.fetchall(
+            "SELECT path, title FROM notes WHERE notebook = ? AND title LIKE ? COLLATE NOCASE",
+            (notebook, f"%{title_query}%"),
+        )
+    else:
+        rows = db.fetchall(
+            "SELECT path, title FROM notes WHERE title LIKE ? COLLATE NOCASE",
+            (f"%{title_query}%",),
+        )
+
+    results = []
+    for row in rows:
+        note_path = config.notes_root / row["path"]
+        title = row["title"] or ""
+        if note_path.exists():
+            results.append((note_path, title))
+
+    # Sort by relevance: exact start match first, then by title length
+    title_lower = title_query.lower()
+    results.sort(key=lambda x: (not x[1].lower().startswith(title_lower), len(x[1])))
+
+    return results
+
+
 def get_display_path(path: Path) -> Path:
     """Get a path suitable for display (relative to notes_root if possible).
 
@@ -727,13 +771,46 @@ def resolve_note_ref(
                 return None
             return daily_path
 
-    # Try fuzzy matching across all notes
+    # Try fuzzy matching across all notes (filename-based)
     resolved_path = resolve_note(note_ref, interactive=interactive)
     if resolved_path:
         # Convert to absolute if needed
         if not resolved_path.is_absolute():
             resolved_path = config.notes_root / resolved_path
         return resolved_path
+
+    # Try title-based search as a fallback
+    if interactive:
+        from nb.utils.fuzzy import prompt_fuzzy_selection_with_context
+
+        title_matches = find_notes_by_title(note_ref, notebook=notebook)
+        if title_matches:
+            if len(title_matches) == 1:
+                # Single match - return it
+                return title_matches[0][0]
+            else:
+                # Multiple matches - prompt user to select
+                name_to_path: dict[str, Path] = {}
+                name_to_context: dict[str, str] = {}
+
+                for path, title in title_matches:
+                    # Use title as display name, with path for disambiguation
+                    rel_path = get_display_path(path)
+                    display_key = title if title else path.stem
+                    # Avoid duplicates
+                    if display_key in name_to_path:
+                        display_key = f"{title} ({rel_path})"
+                    name_to_path[display_key] = path
+                    name_to_context[display_key] = f"{title}  [dim]({rel_path})[/dim]"
+
+                resolved_name = prompt_fuzzy_selection_with_context(
+                    note_ref,
+                    list(name_to_path.keys()),
+                    name_to_context,
+                    item_type="note",
+                )
+                if resolved_name:
+                    return name_to_path.get(resolved_name)
 
     return None
 

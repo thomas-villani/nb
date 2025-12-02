@@ -102,20 +102,20 @@ todo_exclude: true
 
 ### Active
 - [x] Add a 'recently viewed/edited notes' page on nb web
-- [ ] Add a way to title a new note from command line
+- [^] Add a way to title a new note from command line
 - [^] Figure out how to handle subdirs in notes better and include in hierarchy, perhaps as a 'section' in a notebook?
 - [ ] kanban view for nb todo and nb web
 - [x] for links: Web UI - clickable links, backlinks panel, graph view
 - [x] for links: ASCII graph - nb graph <note>
 - [x] for links: Related notes - nb related <note> combining links + tags + embeddings
 - [ ] Capture url and other file attachments as markdown using all2md #feature
-- [ ] Add `nb where <notebook|note|note-alias>` command that simply prints the path to stdout
+- [^] Add `nb where <notebook|note|note-alias>` command that simply prints the path to stdout
 - [ ] Need some kind of display of the frontmatter stuff on the `nb web` page
 - [ ] Allow search within specific notebooks as well in `nb web` command
-- [ ] Allow opening notes by title partial match
-- [ ] Add nicer table-like view in web ui for notes with created and modified date
-- [ ] Add an 'expanded' view (--expand/-x) for 'nb todo' to show more of the todo text
-- [ ] Add a way to check off all in progress items as completed in a notebook / note (extend `nb todo all-done`)
+- [^] Allow opening notes by title partial match
+- [x] Add nicer table-like view in web ui for notes with created and modified date
+- [^] Add an 'expanded' view (--expand/-x) for 'nb todo' to show more of the todo text
+- [^] Add a way to check off all in progress items as completed in a notebook / note (extend `nb todo all-done`)
 - [ ] Better daily metrics - what was completed today? By notebook. `nb completed` or `nb done` something
 
 ### Phase 5: Wijjit TUI
@@ -143,6 +143,7 @@ todo_exclude: true
 
 ### Phase 6: Future Enhancements
 - [ ] Recurring todos (`@recur(weekly)`) #feature
+- [ ] Contextual views - e.g. set time windows when `nbt` shows certain notebooks (e.g. work notebooks from 9-5p)
 - [ ] Auto TL;DR generation and stash in frontmatter
 - [ ] Export to various formats (HTML, PDF) #feature
 - [ ] Calendar view for due dates #feature

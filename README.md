@@ -82,6 +82,7 @@ nb open friday -n work    # Open Friday's note in work notebook
 nb open myproject -n ideas  # Open ideas/myproject.md
 nb open newfile -n ideas  # Prompts to create if doesn't exist
 nb open newfile --no-prompt  # Fail if note doesn't exist (no prompt)
+nb open "quarterly report"    # Open note by partial title match
 
 nb show                   # Show today's note in console
 nb show friday            # Show Friday's daily note
@@ -209,6 +210,19 @@ notebooks:
     template: meeting   # Auto-use .nb/templates/meeting.md
 ```
 
+### Path Lookup
+
+Get the full filesystem path to notebooks, notes, or aliases:
+
+```bash
+nb where daily              # Path to daily notebook directory
+nb where friday             # Path to Friday's daily note
+nb where myalias            # Path to aliased note
+nb where myproject -n work  # Path to work/myproject.md
+```
+
+Useful for scripting and integrations. When multiple matches exist, all paths are printed (one per line).
+
 ### Note Aliases
 
 Create short aliases for frequently accessed notes:
@@ -306,6 +320,10 @@ nb todo -s created      # Sort by creation date
 nb todo --limit 10      # Show only first 10 todos
 nb todo -l 5            # Short form
 nb todo -l 10 -o 10     # Show todos 11-20 (offset + limit)
+
+# Display options
+nb todo -x              # Expanded view: more content (up to 80 chars), hide source/due as needed
+nb todo -x -n daily     # Combine expanded view with notebook filter
 
 # Todo actions
 nb todo add "New task"  # Add to inbox (todo.md)

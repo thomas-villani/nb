@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+import fnmatch
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-
-import fnmatch
 
 from nb.config import get_config
 from nb.core.notes import get_note

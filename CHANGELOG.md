@@ -2,6 +2,30 @@
 
 ## New Features
 
+### CLI Enhancements
+
+- **`nb where` command**: Print the full path to a notebook, note, or alias. Useful for scripts and integrations.
+  ```bash
+  nb where daily              # Path to daily notebook directory
+  nb where friday             # Path to Friday's daily note
+  nb where myalias            # Path to aliased note
+  nb where myproject -n work  # Path to work/myproject.md
+  ```
+
+- **Expanded todo view (`--expand/-x`)**: Show up to 80 characters of todo content. Automatically hides source and due columns as needed to fit more content on narrower terminals.
+  ```bash
+  nb todo -x                  # Expanded view with more content visible
+  nb todo -x -n daily         # Combine with notebook filter
+  ```
+
+- **Condensed todo source**: When filtering todos by a single notebook (`-n`), the notebook name is omitted from the source column since it's redundant, giving more space for note names.
+
+- **Open notes by partial title match**: When opening a note, if no exact filename match is found, the title database is searched. Single matches open directly; multiple matches present an interactive selection.
+  ```bash
+  nb open "quarterly report"  # Opens note with matching title
+  ```
+
+
 ### Note Linking Enhancements
 
 - **Clickable links in web UI**: Wiki links `[[note]]` and internal markdown links now navigate between notes in the browser. External links open in new tabs. Visual styling distinguishes link types (wiki links in green, internal links in blue).

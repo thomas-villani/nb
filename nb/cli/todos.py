@@ -116,6 +116,12 @@ def register_todo_commands(cli: click.Group) -> None:
 @click.option("-i", "--interactive", is_flag=True, help="Open interactive todo viewer")
 @click.option("--limit", "-l", type=int, help="Limit the number of todos displayed")
 @click.option("--offset", "-o", type=int, default=0, help="Skip the first N todos")
+@click.option(
+    "--expand",
+    "-x",
+    is_flag=True,
+    help="Expanded view: show more content (up to 80 chars), hide source/due as needed",
+)
 @click.pass_context
 def todo(
     ctx: click.Context,
@@ -145,6 +151,7 @@ def todo(
     interactive: bool,
     limit: int | None,
     offset: int,
+    expand: bool,
 ) -> None:
     """Manage todos.
 
@@ -414,6 +421,7 @@ def todo(
                 exclude_note_excluded=exclude_note_excluded,
                 limit=limit,
                 offset=offset,
+                expand=expand,
             )
 
 
@@ -546,6 +554,7 @@ def _list_todos(
     exclude_note_excluded: bool = True,
     limit: int | None = None,
     offset: int = 0,
+    expand: bool = False,
 ) -> None:
     """List todos with optional filters."""
     # Determine completion filter
@@ -768,7 +777,11 @@ def _list_todos(
         return
 
     # Calculate column widths for alignment
-    widths = _calculate_column_widths(all_visible_todos)
+    # Hide notebook in source column when filtering to a single notebook
+    hide_notebook = notebooks is not None and len(notebooks) == 1
+    widths = _calculate_column_widths(
+        all_visible_todos, hide_notebook=hide_notebook, expand=expand
+    )
 
     # Display
     for group_name, group_todos in groups.items():
@@ -781,7 +794,9 @@ def _list_todos(
             _print_todo(t, indent=0, widths=widths)
 
 
-def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
+def _calculate_column_widths(
+    todos: list, hide_notebook: bool = False, expand: bool = False
+) -> dict[str, int | bool]:
     """Calculate column widths for aligned todo output.
 
     Uses dynamic terminal width with progressive truncation:
@@ -790,9 +805,17 @@ def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
     3. No created/tags, compact source - notebook only (narrower)
     4. Minimal - hide due date column (very narrow)
 
+    When expand=True, prioritizes content width (up to 80 chars) and hides
+    source/due columns as needed to fit.
+
+    Args:
+        todos: List of todos to calculate widths for
+        hide_notebook: If True, source column shows only note (not notebook/note)
+        expand: If True, maximize content width and hide source/due as needed
+
     Returns dict with column widths and visibility flags:
     - content, source, created, due, priority: int widths
-    - show_created, show_due, compact_source, nosection_source: bool flags
+    - show_created, show_due, compact_source, nosection_source, hide_notebook: bool flags
     """
     terminal_width = console.width or 120
     # Cap terminal width to prevent excessively long lines
@@ -803,30 +826,46 @@ def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
 
     # Calculate full source width based on actual content (min 15, max 30)
     # Account for icons which add ~2 visual chars (emoji + space)
+    # When hide_notebook=True, don't include notebook or icon in width calculation
     max_source_full = 15
     max_source_nosection = 12  # notebook/note without section
     max_source_compact = 8  # notebook only
     for t in todos:
-        source_str = _format_todo_source(t)
-        nosection_str = _format_nosection_source(t)
-        # Check if notebook has an icon
         parts = _get_todo_source_parts(t)
         _, icon = (
             get_notebook_display_info(parts["notebook"])
             if parts["notebook"]
             else (None, None)
         )
-        icon_width = 2 if icon else 0
+        # No icon when hiding notebook
+        icon_width = 0 if hide_notebook else (2 if icon else 0)
+
+        if hide_notebook:
+            # Source is just note::section or note
+            note = parts["note"] or ""
+            section = parts["section"] or ""
+            if section:
+                source_str = f"{note}::{section}"
+            else:
+                source_str = note
+            nosection_str = note
+        else:
+            source_str = _format_todo_source(t)
+            nosection_str = _format_nosection_source(t)
 
         # Full source includes icon width
         max_source_full = max(max_source_full, len(source_str) + icon_width)
-        # No-section source (notebook/note)
+        # No-section source (notebook/note or just note)
         max_source_nosection = max(
             max_source_nosection, len(nosection_str) + icon_width
         )
-        # Compact is notebook + icon
-        notebook_len = len(parts["notebook"]) if parts["notebook"] else 0
-        max_source_compact = max(max_source_compact, notebook_len + icon_width)
+        # Compact is notebook + icon (or just note when hiding)
+        if hide_notebook:
+            note_len = len(parts["note"]) if parts["note"] else 0
+            max_source_compact = max(max_source_compact, note_len)
+        else:
+            notebook_len = len(parts["notebook"]) if parts["notebook"] else 0
+            max_source_compact = max(max_source_compact, notebook_len + icon_width)
 
     source_width_full = min(max_source_full, 30)
     source_width_nosection = min(max_source_nosection, 25)
@@ -855,6 +894,77 @@ def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
         total += 2  # gap after priority
         return total
 
+    def calc_total_no_source(show_due: bool) -> int:
+        """Calculate total width needed without source column."""
+        total = base_spacing + priority_width
+        total += 2  # gap after content
+        if show_due:
+            total += due_width + 2  # column + gap
+        total += 2  # gap after priority
+        return total
+
+    # Expanded view mode: prioritize content width (up to 80 chars)
+    # Hide source first, then due, to maximize content space
+    if expand:
+        expanded_max_content = 80
+
+        # Try with source visible (compact), no created
+        fixed_total = calc_total(
+            source_width_compact, show_created=False, show_due=True
+        )
+        content_width = min(terminal_width - fixed_total, expanded_max_content)
+        if content_width >= min_content_width:
+            return {
+                "content": content_width,
+                "source": source_width_compact,
+                "created": 0,
+                "due": due_width,
+                "priority": priority_width,
+                "show_created": False,
+                "show_due": True,
+                "compact_source": True,
+                "nosection_source": False,
+                "hide_notebook": hide_notebook,
+                "hide_source": False,
+            }
+
+        # Try with source hidden, due visible
+        fixed_total = calc_total_no_source(show_due=True)
+        content_width = min(terminal_width - fixed_total, expanded_max_content)
+        if content_width >= min_content_width:
+            return {
+                "content": content_width,
+                "source": 0,
+                "created": 0,
+                "due": due_width,
+                "priority": priority_width,
+                "show_created": False,
+                "show_due": True,
+                "compact_source": False,
+                "nosection_source": False,
+                "hide_notebook": hide_notebook,
+                "hide_source": True,
+            }
+
+        # Try with both source and due hidden
+        fixed_total = calc_total_no_source(show_due=False)
+        content_width = min(
+            max(terminal_width - fixed_total, min_content_width), expanded_max_content
+        )
+        return {
+            "content": content_width,
+            "source": 0,
+            "created": 0,
+            "due": 0,
+            "priority": priority_width,
+            "show_created": False,
+            "show_due": False,
+            "compact_source": False,
+            "nosection_source": False,
+            "hide_notebook": hide_notebook,
+            "hide_source": True,
+        }
+
     # Try configurations in order of preference
     # Use explicit width thresholds for better control over medium-width terminals
     #
@@ -877,6 +987,8 @@ def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
             "show_due": True,
             "compact_source": False,
             "nosection_source": False,
+            "hide_notebook": hide_notebook,
+            "hide_source": False,
         }
 
     # 2. Remove created/tags and use no-section source (medium terminals, 90-130)
@@ -894,6 +1006,8 @@ def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
             "show_due": True,
             "compact_source": False,
             "nosection_source": True,
+            "hide_notebook": hide_notebook,
+            "hide_source": False,
         }
 
     # 3. Remove created and use compact source (notebook only, narrower terminals)
@@ -910,6 +1024,8 @@ def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
             "show_due": True,
             "compact_source": True,
             "nosection_source": False,
+            "hide_notebook": hide_notebook,
+            "hide_source": False,
         }
 
     # 4. Remove created, compact source, and hide due date (very narrow)
@@ -927,26 +1043,36 @@ def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
         "show_due": False,
         "compact_source": True,
         "nosection_source": False,
+        "hide_notebook": hide_notebook,
+        "hide_source": False,
     }
 
 
-def _format_todo_source(t, max_width: int = 0, max_section_len: int = 15) -> str:
+def _format_todo_source(
+    t, max_width: int = 0, max_section_len: int = 15, hide_notebook: bool = False
+) -> str:
     """Format the source of a todo for display (plain text, used for sorting).
 
     Format: notebook/note_title::Section (if section exists)
             notebook/note_title (if no section)
+            note_title::Section (if hide_notebook and section exists)
+            note_title (if hide_notebook and no section)
 
     Args:
         t: Todo object
         max_width: Maximum total width (0 = no limit). If exceeded, truncates with ellipsis.
         max_section_len: Maximum length for section name (default 15)
+        hide_notebook: If True, omit notebook from output (show only note)
     """
     parts = _get_todo_source_parts(t)
     if not parts["notebook"] and not parts["note"]:
         return ""
 
     base_source = ""
-    if parts["notebook"] and parts["note"]:
+    if hide_notebook:
+        # Only show note, not notebook
+        base_source = parts["note"] or ""
+    elif parts["notebook"] and parts["note"]:
         base_source = f"{parts['notebook']}/{parts['note']}"
     elif parts["notebook"]:
         base_source = parts["notebook"]
@@ -1016,7 +1142,9 @@ def _get_todo_source_parts(t) -> dict[str, str]:
     return result
 
 
-def _format_colored_todo_source(t, width: int = 0, max_section_len: int = 15) -> str:
+def _format_colored_todo_source(
+    t, width: int = 0, max_section_len: int = 15, hide_notebook: bool = False
+) -> str:
     """Format the source of a todo with colors for display.
 
     Uses configured notebook colors and icons.
@@ -1025,6 +1153,7 @@ def _format_colored_todo_source(t, width: int = 0, max_section_len: int = 15) ->
         t: Todo object
         width: Width for the column (pads if shorter, truncates if longer)
         max_section_len: Maximum length for section name (default 15)
+        hide_notebook: If True, omit notebook and icon from output
 
     Returns:
         Rich-formatted string with colors.
@@ -1032,11 +1161,15 @@ def _format_colored_todo_source(t, width: int = 0, max_section_len: int = 15) ->
     parts = _get_todo_source_parts(t)
 
     # Check if notebook has an icon - icons take ~2 visual chars (emoji + space)
-    color, icon = (
-        get_notebook_display_info(parts["notebook"])
-        if parts["notebook"]
-        else ("white", None)
-    )
+    # No icon when hiding notebook
+    if hide_notebook:
+        color, icon = "white", None
+    else:
+        color, icon = (
+            get_notebook_display_info(parts["notebook"])
+            if parts["notebook"]
+            else ("white", None)
+        )
     icon_width = 2 if icon else 0  # emoji + space
 
     # Adjust available width for text (reserve space for icon)
@@ -1044,11 +1177,16 @@ def _format_colored_todo_source(t, width: int = 0, max_section_len: int = 15) ->
 
     # Build the plain source with adjusted width
     plain_source = _format_todo_source(
-        t, max_width=text_width, max_section_len=max_section_len
+        t,
+        max_width=text_width,
+        max_section_len=max_section_len,
+        hide_notebook=hide_notebook,
     )
 
     # Check if we need truncation
-    full_plain = _format_todo_source(t, max_width=0, max_section_len=max_section_len)
+    full_plain = _format_todo_source(
+        t, max_width=0, max_section_len=max_section_len, hide_notebook=hide_notebook
+    )
     needs_truncation = text_width > 0 and len(full_plain) > text_width
 
     if needs_truncation:
@@ -1060,20 +1198,27 @@ def _format_colored_todo_source(t, width: int = 0, max_section_len: int = 15) ->
         colored_parts = []
         remaining = truncated
 
-        # Color notebook part
-        if parts["notebook"] and remaining.startswith(parts["notebook"]):
+        # Color notebook part (skip if hiding notebook)
+        if (
+            not hide_notebook
+            and parts["notebook"]
+            and remaining.startswith(parts["notebook"])
+        ):
             colored_parts.append(f"[{color}]{icon_prefix}{parts['notebook']}[/{color}]")
             remaining = remaining[len(parts["notebook"]) :]
             icon_prefix = ""  # Only show icon once
-        elif parts["notebook"]:
+        elif not hide_notebook and parts["notebook"]:
             # Notebook itself was truncated
             colored_parts.append(f"[{color}]{icon_prefix}{remaining}[/{color}]")
             remaining = ""
 
-        # Color "/" separator and note part
-        if remaining.startswith("/") and parts["note"]:
+        # Color "/" separator and note part (skip "/" if hiding notebook)
+        if not hide_notebook and remaining.startswith("/") and parts["note"]:
             colored_parts.append("/")
             remaining = remaining[1:]
+
+        # Color note part
+        if parts["note"] and remaining:
             # Find how much of the note fits
             if "::" in remaining:
                 note_part = remaining.split("::")[0]
@@ -1105,7 +1250,7 @@ def _format_colored_todo_source(t, width: int = 0, max_section_len: int = 15) ->
         # Build full colored source string
         colored_parts = []
 
-        if parts["notebook"]:
+        if not hide_notebook and parts["notebook"]:
             icon_prefix = f"{icon} " if icon else ""
             colored_parts.append(f"[{color}]{icon_prefix}{parts['notebook']}[/{color}]")
 
@@ -1132,7 +1277,7 @@ def _format_colored_todo_source(t, width: int = 0, max_section_len: int = 15) ->
     return colored
 
 
-def _format_nosection_source(t, max_width: int = 0) -> str:
+def _format_nosection_source(t, max_width: int = 0, hide_notebook: bool = False) -> str:
     """Format the source of a todo without section (notebook/note only).
 
     Used for medium-width terminals where full source with section is too wide,
@@ -1141,12 +1286,15 @@ def _format_nosection_source(t, max_width: int = 0) -> str:
     Args:
         t: Todo object
         max_width: Maximum width (0 = no limit)
+        hide_notebook: If True, show only note name
     """
     parts = _get_todo_source_parts(t)
     if not parts["notebook"] and not parts["note"]:
         return ""
 
-    if parts["notebook"] and parts["note"]:
+    if hide_notebook:
+        result = parts["note"] or ""
+    elif parts["notebook"] and parts["note"]:
         result = f"{parts['notebook']}/{parts['note']}"
     elif parts["notebook"]:
         result = parts["notebook"]
@@ -1159,12 +1307,15 @@ def _format_nosection_source(t, max_width: int = 0) -> str:
     return result
 
 
-def _format_colored_nosection_source(t, width: int = 0) -> str:
+def _format_colored_nosection_source(
+    t, width: int = 0, hide_notebook: bool = False
+) -> str:
     """Format source without section (notebook/note) with colors.
 
     Args:
         t: Todo object
         width: Width for the column (pads if shorter, truncates if longer)
+        hide_notebook: If True, omit notebook and icon from output
 
     Returns:
         Rich-formatted string with colors.
@@ -1174,15 +1325,23 @@ def _format_colored_nosection_source(t, width: int = 0) -> str:
     if not parts["notebook"] and not parts["note"]:
         return " " * width if width > 0 else ""
 
-    notebook = parts["notebook"]
+    notebook = parts["notebook"] if not hide_notebook else None
     note = parts["note"]
-    color, icon = get_notebook_display_info(notebook) if notebook else ("white", None)
+
+    if hide_notebook:
+        color, icon = "white", None
+    else:
+        color, icon = (
+            get_notebook_display_info(notebook) if notebook else ("white", None)
+        )
 
     # Icons take ~2 visual chars (emoji + space)
     icon_width = 2 if icon else 0
 
     # Build plain source for width calculation
-    if notebook and note:
+    if hide_notebook:
+        plain_source = note or ""
+    elif notebook and note:
         plain_source = f"{notebook}/{note}"
     elif notebook:
         plain_source = notebook
@@ -1203,22 +1362,25 @@ def _format_colored_nosection_source(t, width: int = 0) -> str:
     colored_parts = []
     remaining = truncated
 
-    if notebook and remaining.startswith(notebook):
+    if not hide_notebook and notebook and remaining.startswith(notebook):
         icon_prefix = f"{icon} " if icon else ""
         colored_parts.append(f"[{color}]{icon_prefix}{notebook}[/{color}]")
         remaining = remaining[len(notebook) :]
-    elif notebook:
+    elif not hide_notebook and notebook:
         # Notebook was truncated
         icon_prefix = f"{icon} " if icon else ""
         colored_parts.append(f"[{color}]{icon_prefix}{remaining}[/{color}]")
         remaining = ""
 
-    if remaining.startswith("/") and note:
+    if not hide_notebook and remaining.startswith("/") and note:
         colored_parts.append("/")
         remaining = remaining[1:]
+
+    # Color note part
+    if remaining:
         if remaining.endswith("…"):
             colored_parts.append(f"[blue]{remaining}[/blue]")
-        elif remaining:
+        else:
             colored_parts.append(f"[blue]{remaining}[/blue]")
         remaining = ""
 
@@ -1236,35 +1398,57 @@ def _format_colored_nosection_source(t, width: int = 0) -> str:
     return colored
 
 
-def _format_compact_source(t, max_width: int = 0) -> str:
-    """Format the source of a todo in compact mode (notebook only).
+def _format_compact_source(t, max_width: int = 0, hide_notebook: bool = False) -> str:
+    """Format the source of a todo in compact mode (notebook only, or note if hiding).
 
     Used when terminal is too narrow for full source display.
 
     Args:
         t: Todo object
         max_width: Maximum width (0 = no limit)
+        hide_notebook: If True, show note instead of notebook
     """
     parts = _get_todo_source_parts(t)
-    notebook = parts["notebook"] if parts["notebook"] else ""
+    if hide_notebook:
+        result = parts["note"] if parts["note"] else ""
+    else:
+        result = parts["notebook"] if parts["notebook"] else ""
 
-    if max_width > 0 and len(notebook) > max_width:
-        notebook = notebook[: max_width - 1] + "…"
+    if max_width > 0 and len(result) > max_width:
+        result = result[: max_width - 1] + "…"
 
-    return notebook
+    return result
 
 
-def _format_colored_compact_source(t, width: int = 0) -> str:
-    """Format compact source (notebook only) with colors.
+def _format_colored_compact_source(
+    t, width: int = 0, hide_notebook: bool = False
+) -> str:
+    """Format compact source (notebook only, or note if hiding) with colors.
 
     Args:
         t: Todo object
         width: Width for the column (pads if shorter, truncates if longer)
+        hide_notebook: If True, show note instead of notebook
 
     Returns:
         Rich-formatted string with colors.
     """
     parts = _get_todo_source_parts(t)
+
+    if hide_notebook:
+        # Show note instead of notebook
+        if not parts["note"]:
+            return " " * width if width > 0 else ""
+        text = parts["note"]
+        # No icon when hiding notebook
+        icon_width = 0
+        # Truncate if needed
+        if width > 0 and len(text) > width:
+            text = text[: width - 1] + "…"
+        colored = f"[blue]{text}[/blue]"
+        if width > 0 and len(text) < width:
+            colored += " " * (width - len(text))
+        return colored
 
     if not parts["notebook"]:
         return " " * width if width > 0 else ""
@@ -1309,10 +1493,12 @@ def _print_todo(
         checkbox = "[dim]o[/dim]"
 
     # Get visibility flags from widths
-    show_created = widths.get("show_created", True) if widths else True
-    show_due = widths.get("show_due", True) if widths else True
-    compact_source = widths.get("compact_source", False) if widths else False
-    nosection_source = widths.get("nosection_source", False) if widths else False
+    show_created = bool(widths.get("show_created", True)) if widths else True
+    show_due = bool(widths.get("show_due", True)) if widths else True
+    compact_source = bool(widths.get("compact_source", False)) if widths else False
+    nosection_source = bool(widths.get("nosection_source", False)) if widths else False
+    hide_notebook = bool(widths.get("hide_notebook", False)) if widths else False
+    hide_source = bool(widths.get("hide_source", False)) if widths else False
 
     # Build content - truncate if needed for alignment
     # Reduce content width by indent amount to keep columns aligned
@@ -1327,19 +1513,23 @@ def _print_todo(
     # Build source column (colored) - different modes for different widths
     source_width = widths["source"] if widths else 15
     if compact_source:
-        source_str = _format_compact_source(t)
-        source_part = _format_colored_compact_source(t, source_width)
+        source_str = _format_compact_source(t, hide_notebook=hide_notebook)
+        source_part = _format_colored_compact_source(
+            t, source_width, hide_notebook=hide_notebook
+        )
     elif nosection_source:
-        source_str = _format_nosection_source(t)
+        source_str = _format_nosection_source(t, hide_notebook=hide_notebook)
         source_part = (
-            _format_colored_nosection_source(t, source_width)
+            _format_colored_nosection_source(
+                t, source_width, hide_notebook=hide_notebook
+            )
             if source_str
             else " " * source_width
         )
     else:
-        source_str = _format_todo_source(t)
+        source_str = _format_todo_source(t, hide_notebook=hide_notebook)
         source_part = (
-            _format_colored_todo_source(t, source_width)
+            _format_colored_todo_source(t, source_width, hide_notebook=hide_notebook)
             if source_str
             else " " * source_width
         )
@@ -1386,9 +1576,12 @@ def _print_todo(
 
     # Build line based on visible columns
     # ID stays left-aligned, indent comes after ID before checkbox
-    line_parts = [
-        f"[dim]{short_id}[/dim] {prefix}{checkbox} {content_part}  {source_part}"
-    ]
+    if hide_source:
+        line_parts = [f"[dim]{short_id}[/dim] {prefix}{checkbox} {content_part}"]
+    else:
+        line_parts = [
+            f"[dim]{short_id}[/dim] {prefix}{checkbox} {content_part}  {source_part}"
+        ]
 
     if show_created:
         created_part = f"[dim]{created_str:>6}[/dim]" if created_str else " " * 6

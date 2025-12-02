@@ -43,6 +43,7 @@ def register_note_commands(cli: click.Group) -> None:
     cli.add_command(unalias_note)
     cli.add_command(list_aliases_cmd)
     cli.add_command(delete_note_cmd)
+    cli.add_command(where_cmd)
 
 
 @click.command()
@@ -377,10 +378,12 @@ def open_date(
 ) -> None:
     """Open a note by date or name.
 
+    \b
     NOTE_REF can be:
     - A date like "2025-11-26" or "nov 26"
     - A relative date like "friday" or "last monday"
     - A note name (when used with -n for non-date-based notebooks)
+    - A notebook/note path: "work/myproject", "daily/friday"
     - A note alias (created with 'nb alias')
     - A linked note alias (when used with -n for the linked note's notebook)
     - A path to a note file
@@ -498,10 +501,12 @@ def open_date(
 def show_note(note_ref: str | None, notebook: str | None) -> None:
     """Print a note to the console.
 
+    \b
     NOTE_REF can be:
     - A date like "2025-11-26" or "nov 26"
     - A relative date like "friday" or "last monday"
     - A note name (when used with -n for non-date-based notebooks)
+    - A notebook/note path: "work/myproject", "daily/friday"
     - A note alias (created with 'nb alias')
     - A linked note alias (when used with -n for the linked note's notebook)
     - A path to a note file
@@ -1304,3 +1309,79 @@ def delete_note_cmd(note_ref: str, notebook: str | None, force: bool) -> None:
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
         raise SystemExit(1) from None
+
+
+@click.command("where")
+@click.argument("ref")
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook context for resolving note",
+    shell_complete=complete_notebook,
+)
+def where_cmd(ref: str, notebook: str | None) -> None:
+    """Print the full path to a notebook, note, or alias.
+
+    REF can be:
+    - A notebook name: prints path to notebook directory
+    - A note name/path/date: prints path to note file
+    - An alias (from 'nb alias'): prints path to aliased note
+    - A linked note alias: prints path to linked file
+
+    When multiple matches exist, all paths are printed (one per line).
+
+    \b
+    Examples:
+      nb where daily              # Path to daily notebook directory
+      nb where friday             # Path to Friday's daily note
+      nb where myalias            # Path to aliased note
+      nb where myproject -n work  # Path to work/myproject.md
+    """
+    from nb.core.aliases import get_note_by_alias
+    from nb.core.links import get_linked_note, get_linked_note_in_notebook
+
+    config = get_config()
+    paths_found: list[Path] = []
+
+    # 1. Check if it's a notebook name
+    nb_config = config.get_notebook(ref)
+    if nb_config:
+        nb_path = config.get_notebook_path(ref)
+        if nb_path and nb_path.exists():
+            paths_found.append(nb_path)
+
+    # 2. Check note aliases (from nb alias)
+    alias_path = get_note_by_alias(ref)
+    if alias_path and alias_path.exists() and alias_path not in paths_found:
+        paths_found.append(alias_path)
+
+    # 3. Check linked notes
+    if notebook:
+        linked = get_linked_note_in_notebook(notebook, ref)
+        if linked and linked.path.exists() and linked.path not in paths_found:
+            paths_found.append(linked.path)
+    else:
+        linked = get_linked_note(ref)
+        if linked and linked.path.exists() and linked.path not in paths_found:
+            paths_found.append(linked.path)
+
+    # 4. Try to resolve as a note reference (non-interactive)
+    try:
+        note_path = resolve_note_ref(
+            ref,
+            notebook=notebook,
+            interactive=False,
+        )
+        if note_path and note_path.exists() and note_path not in paths_found:
+            paths_found.append(note_path)
+    except UserCancelled:
+        pass
+
+    # Output results
+    if not paths_found:
+        console.print(f"[red]Not found: {ref}[/red]", err=True)
+        raise SystemExit(1)
+
+    for p in paths_found:
+        # Print absolute path (plain text for piping)
+        print(str(p.resolve()))
