@@ -1,3 +1,52 @@
+# v0.2.1 - 2025-12-02
+
+Patch release with several CLI and web UI improvements, todo-list UX enhancements, and two breaking DB-related changes (see "Breaking Changes" below). Developers should read the migration guidance before upgrading.
+
+## New Features
+
+- [cd210ff] Add --in-progress / -i option to `nb todo all-done` to only mark IN_PROGRESS todos as completed (leaves PENDING todos unchanged)
+- [cd210ff] Add frontmatter "Properties" panel to the web UI and serialize frontmatter values (dates, lists) for safe JSON delivery and client-side rendering
+- [cd210ff] Trigger background reindexing of a note after saving via the web UI so todos, tags, links and search stay up-to-date
+- [cbbf7b8] Add `nb where` CLI to print full filesystem paths for notebooks, notes and aliases; supports `-n` notebook context and prints all matches (scripting/integration use)
+- [cbbf7b8] Add title-based note search and interactive fallback in resolve_note_ref so notes can be opened by partial title match (single matches open directly; multiple matches prompt selection)
+- [cbbf7b8] Add `--expand` / `-x` option to `nb todo` to prioritize todo content (up to ~80 chars) and progressively hide source/due columns for improved readability
+
+## Improvements
+
+- [cbbf7b8] When filtering todos to a single notebook (`-n`), omit notebook name from the source column to free space; update column-width calculations and formatting helpers to support hide_notebook/hide_source modes
+- [cbbf7b8] Refactor todo source formatting and colored output functions to handle new hide/expand behaviors and improve truncation/alignment logic
+- [8dbb6e5] Web UI: add clickable wiki/markdown links, backlinks panel, and interactive D3 knowledge-graph view; server APIs added: /api/resolve-link, /api/backlinks, /api/graph
+- [efbc417] Add core note-linking APIs (NoteLink/Backlink/BrokenLink), CLI commands (`nb links`, `nb backlinks`) and indexer updates to extract/store link metadata (link_type, is_external, line_number)
+- [cd210ff] Minor cleanup in note_links CLI, update todo.md to reflect completed items, and other documentation updates (README/CHANGELOG/todo.md)
+- [0c30940] Add changelog.md for release history tracking
+
+## Bug Fixes / Minor
+
+- [e0fd07a] Minor todos and documentation updates
+- [626fb5a] Bump package version to 0.2.1
+
+## Breaking Changes
+
+- [5119ef4] Add path-based sections, .nbignore, and web UI history
+  - What changed: indexer now extracts path-based "sections" from note file paths and persists them to new DB tables (note_sections, todo_sections). CLI and web UI gained section filtering/display options; scanner supports .nbignore (fnmatch) to ignore files/dirs.
+  - DB impact: schema bumped to v15. Migration required: run the provided migration to add section tables or reindex your notes to populate note_sections/todo_sections.
+  - Upgrade guidance:
+    - Backup your DB before upgrading.
+    - Run the v15 migration script if you maintain schema migrations.
+    - If you do not run migrations, reindex the repository (`nb index` / reindex procedure) to populate section tables.
+    - Review any automation that parses note paths, and test CLI filters (--section / --exclude-section) and tree/grouped displays.
+
+- [19393ef] Add per-notebook alias support and UI/todo improvements
+  - What changed: aliases and linked_notes are now scoped per-notebook (composite primary keys). Alias/link operations accept notebook parameters; web UI/todo behaviors updated (todo due-date editor, notebook sorting/filtering).
+  - DB impact: schema bumped to v13 and a migration was included to convert aliases and linked_notes to per-notebook composite keys.
+  - Upgrade guidance:
+    - Backup your DB before upgrading.
+    - Run the included migration to convert alias/linked_note tables to composite PKs.
+    - If you maintain external integrations that assume global alias uniqueness, update them to provide notebook context.
+    - Verify alias-add/remove/update flows and any code that lists aliases across notebooks.
+
+Note: There are other index/schema-related changes in recent releases (e.g., link metadata stored by the indexer). If you rely on DB schema stability, ensure you run all migrations in sequence and/or fully reindex when prompted by the upgrade logs.
+
 # v0.2.0 - 2025-12-01
 
 This release completes a large phase of development: it stabilizes the todos/workflow model, adds rich UIs (TUI + web), recorder + transcription support, vector search & attachments, and a broad set of CLI ergonomics and automation improvements. It also includes multiple database schema upgrades and several breaking changes — follow the migration guidance below before upgrading production deployments.
