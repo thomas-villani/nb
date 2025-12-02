@@ -110,12 +110,12 @@ todo_exclude: true
 - [x] for links: Related notes - nb related <note> combining links + tags + embeddings
 - [ ] Capture url and other file attachments as markdown using all2md #feature
 - [x] Add `nb where <notebook|note|note-alias>` command that simply prints the path to stdout
-- [ ] Need some kind of display of the frontmatter stuff on the `nb web` page
+- [x] Need some kind of display of the frontmatter stuff on the `nb web` page
 - [ ] Allow search within specific notebooks as well in `nb web` command
-- [^] Allow opening notes by title partial match
+- [x] Allow opening notes by title partial match
 - [x] Add nicer table-like view in web ui for notes with created and modified date
-- [^] Add an 'expanded' view (--expand/-x) for 'nb todo' to show more of the todo text
-- [^] Add a way to check off all in progress items as completed in a notebook / note (extend `nb todo all-done`)
+- [x] Add an 'expanded' view (--expand/-x) for 'nb todo' to show more of the todo text
+- [x] Add a way to check off all in progress items as completed in a notebook / note (extend `nb todo all-done`)
 - [ ] Better daily metrics - what was completed today? By notebook. `nb completed` or `nb done` something
 
 ### Phase 5: Wijjit TUI
