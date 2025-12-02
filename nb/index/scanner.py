@@ -13,7 +13,11 @@ from nb.config import get_config
 from nb.core.notes import get_note
 from nb.core.todos import extract_todos, normalize_due_dates_in_file
 from nb.index.db import Database, get_db
-from nb.index.todos_repo import delete_todos_for_source, upsert_todos_batch
+from nb.index.todos_repo import (
+    delete_todos_for_source,
+    get_todo_dates_for_source,
+    upsert_todos_batch,
+)
 from nb.utils.hashing import make_note_hash, normalize_path
 
 # Thread-local storage for database connections
@@ -357,6 +361,9 @@ def index_note(
     else:
         source_type = "note"
 
+    # Preserve dates before deleting (so we can restore them after re-indexing)
+    preserved_dates = get_todo_dates_for_source(full_path)
+
     # Delete existing todos for this file
     delete_todos_for_source(full_path)
 
@@ -365,7 +372,7 @@ def index_note(
 
     # Extract and index new todos (batch for performance)
     todos = extract_todos(full_path, source_type=source_type, notes_root=notes_root)
-    upsert_todos_batch(todos)
+    upsert_todos_batch(todos, preserved_dates=preserved_dates)
 
 
 def count_files_to_index(
@@ -639,6 +646,9 @@ def _index_note_thread_safe(
     else:
         source_type = "note"
 
+    # Preserve dates before deleting (so we can restore them after re-indexing)
+    preserved_dates = get_todo_dates_for_source(full_path, db=db)
+
     # Delete existing todos for this file (use thread-local db for thread safety)
     delete_todos_for_source(full_path, db=db)
 
@@ -647,7 +657,7 @@ def _index_note_thread_safe(
 
     # Extract and index new todos (batch for performance, use thread-local db)
     todos = extract_todos(full_path, source_type=source_type, notes_root=notes_root)
-    upsert_todos_batch(todos, db=db)
+    upsert_todos_batch(todos, db=db, preserved_dates=preserved_dates)
 
 
 def rebuild_search_index(
@@ -962,6 +972,9 @@ def index_todos_from_file(path: Path, notes_root: Path | None = None) -> int:
     else:
         source_type = "note"
 
+    # Preserve dates before deleting
+    preserved_dates = get_todo_dates_for_source(path)
+
     # Delete existing todos for this file
     delete_todos_for_source(path)
 
@@ -970,7 +983,7 @@ def index_todos_from_file(path: Path, notes_root: Path | None = None) -> int:
 
     # Extract and index new todos (batch for performance)
     todos = extract_todos(path, source_type=source_type, notes_root=notes_root)
-    upsert_todos_batch(todos)
+    upsert_todos_batch(todos, preserved_dates=preserved_dates)
 
     return len(todos)
 
@@ -989,6 +1002,9 @@ def scan_linked_files() -> int:
         if not linked.path.exists():
             continue
 
+        # Preserve dates before deleting
+        preserved_dates = get_todo_dates_for_source(linked.path)
+
         # Delete existing todos for this linked file
         delete_todos_for_source(linked.path)
 
@@ -1005,7 +1021,7 @@ def scan_linked_files() -> int:
             alias=linked.alias,
         )
 
-        upsert_todos_batch(todos)
+        upsert_todos_batch(todos, preserved_dates=preserved_dates)
         total_todos += len(todos)
 
     return total_todos
@@ -1025,6 +1041,9 @@ def index_linked_file(path: Path, alias: str | None = None) -> int:
     if not path.exists():
         return 0
 
+    # Preserve dates before deleting
+    preserved_dates = get_todo_dates_for_source(path)
+
     # Delete existing todos for this file
     delete_todos_for_source(path)
 
@@ -1037,7 +1056,7 @@ def index_linked_file(path: Path, alias: str | None = None) -> int:
         alias=alias,
     )
 
-    upsert_todos_batch(todos)
+    upsert_todos_batch(todos, preserved_dates=preserved_dates)
 
     return len(todos)
 
@@ -1278,6 +1297,8 @@ def index_linked_note(
             pass
 
     # Also index todos from this file (batch for performance)
+    # Preserve dates before deleting
+    preserved_dates = get_todo_dates_for_source(path)
     delete_todos_for_source(path)
 
     # Normalize relative due dates if sync is enabled
@@ -1292,7 +1313,7 @@ def index_linked_note(
         notes_root=notes_root,
         notebook=notebook,
     )
-    upsert_todos_batch(todos)
+    upsert_todos_batch(todos, preserved_dates=preserved_dates)
 
 
 def scan_linked_notes(

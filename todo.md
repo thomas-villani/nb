@@ -117,6 +117,7 @@ todo_exclude: true
 - [x] Add an 'expanded' view (--expand/-x) for 'nb todo' to show more of the todo text
 - [x] Add a way to check off all in progress items as completed in a notebook / note (extend `nb todo all-done`)
 - [ ] Better daily metrics - what was completed today? By notebook. `nb completed` or `nb done` something
+- [ ] Add --about flag
 
 ### Phase 5: Wijjit TUI
 - [ ] Full Wijjit-based todo list view with richer interactions #feature

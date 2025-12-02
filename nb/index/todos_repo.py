@@ -97,7 +97,12 @@ def _load_todo_sections(todo_id: str) -> list[str]:
     return [row["section"] for row in rows]
 
 
-def upsert_todo(todo: Todo, commit: bool = True, db: Database | None = None) -> None:
+def upsert_todo(
+    todo: Todo,
+    commit: bool = True,
+    db: Database | None = None,
+    preserved_dates: dict[str, tuple[str | None, str | None]] | None = None,
+) -> None:
     """Insert or update a todo in the database.
 
     Preserves created_date for existing todos.
@@ -108,35 +113,53 @@ def upsert_todo(todo: Todo, commit: bool = True, db: Database | None = None) -> 
         commit: If True, commit immediately. Set False for batch operations.
         db: Optional database instance (uses global get_db() if not provided).
             Pass a thread-local db when called from parallel indexing.
+        preserved_dates: Optional dict mapping todo_id to (created_date, completed_date).
+            Used to preserve dates when re-indexing after deletion.
     """
     if db is None:
         db = get_db()
 
-    # Check if todo already exists to preserve created_date and completed_date
-    existing = db.fetchone(
-        "SELECT created_date, completed_date, status FROM todos WHERE id = ?",
-        (todo.id,),
-    )
-    if existing and existing["created_date"]:
-        # Preserve the original created_date
-        created_date = existing["created_date"]
+    # Check preserved_dates first (used when re-indexing after deletion)
+    # Then fall back to checking the database for existing record
+    preserved = preserved_dates.get(todo.id) if preserved_dates else None
+
+    if preserved and preserved[0]:
+        # Use preserved created_date from before deletion
+        created_date = preserved[0]
     else:
-        # New todo - use the provided date or today
-        created_date = (
-            todo.created_date.isoformat()
-            if todo.created_date
-            else date.today().isoformat()
+        # Check if todo already exists in database (for cases without pre-deletion)
+        existing = db.fetchone(
+            "SELECT created_date, completed_date, status FROM todos WHERE id = ?",
+            (todo.id,),
         )
+        if existing and existing["created_date"]:
+            created_date = existing["created_date"]
+        else:
+            # New todo - use the provided date or today
+            created_date = (
+                todo.created_date.isoformat()
+                if todo.created_date
+                else date.today().isoformat()
+            )
 
     # Handle completed_date
     completed_date = None
     if todo.completed:
-        if existing and existing["completed_date"]:
-            # Preserve existing completed_date
-            completed_date = existing["completed_date"]
+        if preserved and preserved[1]:
+            # Use preserved completed_date from before deletion
+            completed_date = preserved[1]
         else:
-            # Newly completed - set to today
-            completed_date = date.today().isoformat()
+            # Check database for existing completed_date
+            if not preserved:
+                existing = db.fetchone(
+                    "SELECT completed_date FROM todos WHERE id = ?",
+                    (todo.id,),
+                )
+                if existing and existing["completed_date"]:
+                    completed_date = existing["completed_date"]
+            if not completed_date:
+                # Newly completed - set to today
+                completed_date = date.today().isoformat()
 
     # Format due_date for storage (includes time if not midnight)
     due_date_str = None
@@ -194,7 +217,11 @@ def upsert_todo(todo: Todo, commit: bool = True, db: Database | None = None) -> 
         db.commit()
 
 
-def upsert_todos_batch(todos: list[Todo], db: Database | None = None) -> None:
+def upsert_todos_batch(
+    todos: list[Todo],
+    db: Database | None = None,
+    preserved_dates: dict[str, tuple[str | None, str | None]] | None = None,
+) -> None:
     """Insert or update multiple todos in a single transaction.
 
     This is much faster than calling upsert_todo repeatedly for large batches.
@@ -203,6 +230,8 @@ def upsert_todos_batch(todos: list[Todo], db: Database | None = None) -> None:
         todos: List of todos to upsert.
         db: Optional database instance (uses global get_db() if not provided).
             Pass a thread-local db when called from parallel indexing.
+        preserved_dates: Optional dict mapping todo_id to (created_date, completed_date).
+            Used to preserve dates when re-indexing after deletion.
     """
     if not todos:
         return
@@ -211,7 +240,7 @@ def upsert_todos_batch(todos: list[Todo], db: Database | None = None) -> None:
         db = get_db()
 
     for todo in todos:
-        upsert_todo(todo, commit=False, db=db)
+        upsert_todo(todo, commit=False, db=db, preserved_dates=preserved_dates)
 
     db.commit()
 
@@ -235,6 +264,39 @@ def delete_todo(todo_id: str) -> None:
     db = get_db()
     db.execute("DELETE FROM todos WHERE id = ?", (todo_id,))
     db.commit()
+
+
+def get_todo_dates_for_source(
+    source_path: Path, db: Database | None = None
+) -> dict[str, tuple[str | None, str | None]]:
+    """Get created_date and completed_date for all todos in a source file.
+
+    Used to preserve dates when re-indexing a file.
+
+    Args:
+        source_path: Path to the source file.
+        db: Optional database instance.
+
+    Returns:
+        Dict mapping todo_id to (created_date, completed_date) tuples.
+    """
+    if db is None:
+        db = get_db()
+    normalized = normalize_path(source_path)
+    legacy = str(source_path)
+
+    if normalized != legacy:
+        rows = db.fetchall(
+            "SELECT id, created_date, completed_date FROM todos WHERE source_path = ? OR source_path = ?",
+            (normalized, legacy),
+        )
+    else:
+        rows = db.fetchall(
+            "SELECT id, created_date, completed_date FROM todos WHERE source_path = ?",
+            (normalized,),
+        )
+
+    return {row["id"]: (row["created_date"], row["completed_date"]) for row in rows}
 
 
 def delete_todos_for_source(source_path: Path, db: Database | None = None) -> None:
