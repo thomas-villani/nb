@@ -16,6 +16,12 @@ from nb.utils.dates import parse_date_from_filename
 # Pattern for wiki-style links: [[path|title]] or [[path]]
 WIKI_LINK_PATTERN = re.compile(r"\[\[([^|\]]+)(?:\|([^\]]+))?\]\]")
 
+# Pattern for markdown-style links: [display](target) - negative lookbehind excludes images ![alt](src)
+MD_LINK_PATTERN = re.compile(r"(?<!!)\[([^\]]+)\]\(([^)]+)\)")
+
+# Protocols that indicate an external link
+EXTERNAL_LINK_PREFIXES = ("http://", "https://", "mailto:", "ftp://", "file://")
+
 # Pattern for inline tags: #tag
 INLINE_TAG_PATTERN = re.compile(r"(?:^|[\s(])#(\w+)")
 
@@ -132,6 +138,134 @@ def extract_wiki_links(body: str) -> list[tuple[str, str]]:
         else:
             display = path
         links.append((path, display))
+    return links
+
+
+def is_external_link(target: str) -> bool:
+    """Check if a link target is an external URL.
+
+    Returns True for http://, https://, mailto:, ftp://, file:// links.
+    """
+    return target.lower().startswith(EXTERNAL_LINK_PREFIXES)
+
+
+def extract_markdown_links(body: str) -> list[tuple[str, str, bool]]:
+    """Extract markdown-style links from note body.
+
+    Returns list of (target, display_text, is_external) tuples.
+    Does not include image links (![alt](src)).
+    """
+    links = []
+    for match in MD_LINK_PATTERN.finditer(body):
+        display = match.group(1).strip()
+        target = match.group(2).strip()
+        external = is_external_link(target)
+        links.append((target, display, external))
+    return links
+
+
+def extract_all_links(body: str) -> list[tuple[str, str, str, bool]]:
+    """Extract all links (wiki-style and markdown-style) from note body.
+
+    Returns list of (target, display_text, link_type, is_external) tuples.
+    - link_type is 'wiki' for [[...]] or 'markdown' for [...](...).
+    - is_external is True for http/https/mailto/etc URLs.
+    """
+    links: list[tuple[str, str, str, bool]] = []
+
+    # Extract wiki-style links (never external - they're internal note references)
+    for match in WIKI_LINK_PATTERN.finditer(body):
+        target = match.group(1).strip()
+        display = match.group(2)
+        if display:
+            display = display.strip()
+        else:
+            display = target
+        links.append((target, display, "wiki", False))
+
+    # Extract markdown-style links
+    for match in MD_LINK_PATTERN.finditer(body):
+        display = match.group(1).strip()
+        target = match.group(2).strip()
+        external = is_external_link(target)
+        links.append((target, display, "markdown", external))
+
+    return links
+
+
+def extract_frontmatter_links(meta: dict[str, Any]) -> list[tuple[str, str, str, bool]]:
+    """Extract links from frontmatter 'links' array.
+
+    Returns list of (target, display_text, link_type, is_external) tuples.
+    The link_type will be 'frontmatter' to indicate source.
+
+    Supported formats:
+        links:
+          # Simple strings
+          - "note://notebook/note-name"    # Internal note link
+          - "https://example.com"          # External URL
+
+          # Object format for URLs
+          - title: "My Link"
+            url: "https://example.com"
+
+          # Object format for notes
+          - title: "Project Plan"
+            note: "2026-plan"
+            notebook: "work"              # Optional notebook context
+    """
+    links: list[tuple[str, str, str, bool]] = []
+
+    links_field = meta.get("links")
+    if not links_field:
+        return links
+
+    # Ensure it's a list
+    if isinstance(links_field, str):
+        links_field = [links_field]
+    elif not isinstance(links_field, list):
+        return links
+
+    for item in links_field:
+        if isinstance(item, str):
+            # String format: URL or note:// protocol
+            item = item.strip()
+            if not item:
+                continue
+
+            if item.startswith("note://"):
+                # note://notebook/note-name format
+                path = item[7:]  # Remove "note://"
+                display = path.split("/")[-1] if "/" in path else path
+                links.append((path, display, "frontmatter", False))
+            elif is_external_link(item):
+                # External URL
+                links.append((item, item, "frontmatter", True))
+            else:
+                # Treat as note reference
+                links.append((item, item, "frontmatter", False))
+
+        elif isinstance(item, dict):
+            # Object format
+            title = str(item.get("title", ""))
+
+            if "url" in item:
+                # External URL link
+                url = str(item["url"])
+                display = title or url
+                links.append((url, display, "frontmatter", True))
+
+            elif "note" in item:
+                # Internal note link
+                note = str(item["note"])
+                notebook = item.get("notebook")
+                if notebook:
+                    target = f"{notebook}/{note}"
+                else:
+                    target = note
+                display = title or note
+                links.append((target, display, "frontmatter", False))
+
     return links
 
 

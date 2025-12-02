@@ -15,6 +15,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Unified search** - Keyword, semantic, and hybrid search powered by localvectordb
 - **Note streaming** - Browse notes interactively with keyboard navigation
 - **Linked files** - Index external todo files and note directories
+- **Note linking** - Wiki-style and markdown links between notes with backlink tracking
 - **Attachments** - Attach files and URLs to notes and todos
 - **Interactive mode** - Keyboard-driven todo management
 - **Web viewer** - Browse notes in a browser with search and todos
@@ -487,6 +488,101 @@ nb link enable-sync wiki                  # Re-enable sync
 
 Linked notes appear in `nb list` with `(linked)` indicator and under a virtual notebook (prefixed with `@` by default).
 
+### Note Linking
+
+Create connections between notes using wiki-style or markdown links. Links are indexed and can be queried with backlinks.
+
+#### Link Syntax
+
+**In note body:**
+
+```markdown
+See [[projects/myproject]] for the full plan.
+Also check [[myproject|the project docs]] for details.
+
+For more info, read [the API guide](docs/api.md) or visit [our wiki](https://wiki.example.com).
+```
+
+| Syntax | Description |
+|--------|-------------|
+| `[[path]]` | Wiki-style link to note |
+| `[[path\|display]]` | Wiki-style link with custom display text |
+| `[text](path.md)` | Markdown link to internal note |
+| `[text](https://...)` | Markdown link to external URL |
+| `[text](./relative.md)` | Relative path (resolved from note's directory) |
+
+**In frontmatter:**
+
+```yaml
+---
+date: 2025-12-02
+links:
+  # String formats
+  - "note://work/project-plan"    # Internal note link
+  - "https://example.com"          # External URL
+
+  # Object format for URLs
+  - title: "Company Wiki"
+    url: "https://wiki.example.com"
+
+  # Object format for notes
+  - title: "Project Plan"
+    note: "2026-plan"
+    notebook: "work"              # Optional notebook context
+---
+```
+
+#### Link Commands
+
+```bash
+# Show outgoing links from a note
+nb links today                  # Links from today's note
+nb links projects/myproject     # Links from specific note
+nb links today --internal       # Only internal links
+nb links today --external       # Only external links
+nb links today --json           # Output as JSON
+
+# Check for broken links
+nb links --check                # Check all notes for broken internal links
+nb links today --check          # Check specific note
+
+# Show backlinks (notes linking TO a note)
+nb backlinks projects/myproject # What notes link to this?
+nb backlinks today --count      # Just show the count
+nb backlinks myproject --json   # Output as JSON
+```
+
+#### Example Output
+
+```bash
+$ nb links projects/myproject
+
+Outgoing links from projects/myproject.md:
+
+Internal:
+  [[daily/2025-11-28]] → daily/2025/Nov25.../2025-11-28.md
+  [[api-docs|API Documentation]] → references/api-docs.md
+  [Config guide](./config.md) → projects/config.md
+
+External:
+  [Python docs](https://docs.python.org)
+  [GitHub](https://github.com/...)
+
+4 links (3 internal, 1 external)
+```
+
+```bash
+$ nb backlinks projects/myproject
+
+Notes linking to projects/myproject.md:
+
+  daily/2025-11-27.md:15 ([[...]])
+  daily/2025-11-28.md:8 ([[...]])
+  meetings/standup.md:23 ([...](...))
+
+3 backlinks
+```
+
 ### Attachments
 
 ```bash
@@ -833,6 +929,7 @@ todo_exclude: true  # Hide todos from this note in nb todo
 | `date` | Note date (YYYY-MM-DD format) |
 | `title` | Note title (used in search results) |
 | `tags` | List of tags for filtering |
+| `links` | List of related notes/URLs (see Note Linking section) |
 | `todo_exclude` | Hide todos from `nb todo` (use `-a` or `-n` to view) |
 
 ### Todos

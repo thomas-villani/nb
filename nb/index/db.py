@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 # Current schema version
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -252,6 +252,24 @@ ALTER TABLE linked_notes_new RENAME TO linked_notes;
 -- Note: removed UNIQUE constraint on path - same file can be linked multiple times with different aliases
 """
 
+# Phase 13 additions: note link type and external flag
+SCHEMA_V14 = """
+-- Add link_type column to distinguish wiki-style, markdown, and frontmatter links
+ALTER TABLE note_links ADD COLUMN link_type TEXT DEFAULT 'wiki';
+
+-- Add is_external flag for http/https/mailto URLs
+ALTER TABLE note_links ADD COLUMN is_external INTEGER DEFAULT 0;
+
+-- Add line_number for locating links in source file
+ALTER TABLE note_links ADD COLUMN line_number INTEGER;
+
+-- Index for querying backlinks (notes linking TO a target)
+CREATE INDEX IF NOT EXISTS idx_note_links_target ON note_links(target_path);
+
+-- Index for external link queries
+CREATE INDEX IF NOT EXISTS idx_note_links_external ON note_links(is_external);
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -267,6 +285,7 @@ MIGRATIONS: dict[int, str] = {
     11: SCHEMA_V11,
     12: SCHEMA_V12,
     13: SCHEMA_V13,
+    14: SCHEMA_V14,
 }
 
 

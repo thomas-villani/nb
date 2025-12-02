@@ -104,6 +104,10 @@ todo_exclude: true
 - [ ] Add a 'recently viewed/edited notes' page on nb web
 - [ ] Add a way to title a new note from command line
 - [ ] Figure out how to handle subdirs in notes better and include in hierarchy, perhaps as a 'section' in a notebook?
+- [ ] kanban view for nb todo
+- [ ] for links: Web UI - clickable links, backlinks panel, graph view
+- [ ] for links: ASCII graph - nb graph <note>
+- [ ] for links: Related notes - nb related <note> combining links + tags + embeddings
 
 ### Phase 5: Advanced TUI
 - [ ] Full Wijjit-based todo list view with richer interactions #feature

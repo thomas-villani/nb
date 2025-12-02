@@ -168,14 +168,24 @@ def index_note(
     except OSError:
         mtime = None
 
-    # Check for todo_exclude in frontmatter
-    from nb.utils.markdown import extract_todo_exclude, parse_note_file
+    # Check for todo_exclude in frontmatter and extract links
+    from nb.utils.markdown import (
+        extract_all_links,
+        extract_frontmatter_links,
+        extract_todo_exclude,
+        parse_note_file,
+    )
 
     try:
-        meta, _ = parse_note_file(full_path)
+        meta, body = parse_note_file(full_path)
         todo_exclude = 1 if extract_todo_exclude(meta) else 0
+        # Extract all links from body (wiki + markdown) and frontmatter
+        body_links = extract_all_links(body)
+        frontmatter_links = extract_frontmatter_links(meta)
+        all_links = body_links + frontmatter_links
     except Exception:
         todo_exclude = 0
+        all_links = []
 
     db = get_db()
 
@@ -208,12 +218,23 @@ def index_note(
             [(normalized_note_path, tag) for tag in note.tags],
         )
 
-    # Update links
+    # Update links (using extracted links with full metadata)
     db.execute("DELETE FROM note_links WHERE source_path = ?", (normalized_note_path,))
-    if note.links:
+    if all_links:
         db.executemany(
-            "INSERT INTO note_links (source_path, target_path, display_text) VALUES (?, ?, ?)",
-            [(normalized_note_path, link, link) for link in note.links],
+            """INSERT INTO note_links
+               (source_path, target_path, display_text, link_type, is_external)
+               VALUES (?, ?, ?, ?, ?)""",
+            [
+                (
+                    normalized_note_path,
+                    target,
+                    display,
+                    link_type,
+                    1 if is_external else 0,
+                )
+                for target, display, link_type, is_external in all_links
+            ],
         )
 
     db.commit()
@@ -420,14 +441,24 @@ def _index_note_thread_safe(
     except OSError:
         mtime = None
 
-    # Check for todo_exclude in frontmatter
-    from nb.utils.markdown import extract_todo_exclude, parse_note_file
+    # Check for todo_exclude in frontmatter and extract links
+    from nb.utils.markdown import (
+        extract_all_links,
+        extract_frontmatter_links,
+        extract_todo_exclude,
+        parse_note_file,
+    )
 
     try:
-        meta, _ = parse_note_file(full_path)
+        meta, body = parse_note_file(full_path)
         todo_exclude = 1 if extract_todo_exclude(meta) else 0
+        # Extract all links from body (wiki + markdown) and frontmatter
+        body_links = extract_all_links(body)
+        frontmatter_links = extract_frontmatter_links(meta)
+        all_links = body_links + frontmatter_links
     except Exception:
         todo_exclude = 0
+        all_links = []
 
     # Use thread-local database connection
     db = _get_thread_db()
@@ -461,12 +492,23 @@ def _index_note_thread_safe(
             [(normalized_note_path, tag) for tag in note.tags],
         )
 
-    # Update links
+    # Update links (using extracted links with full metadata)
     db.execute("DELETE FROM note_links WHERE source_path = ?", (normalized_note_path,))
-    if note.links:
+    if all_links:
         db.executemany(
-            "INSERT INTO note_links (source_path, target_path, display_text) VALUES (?, ?, ?)",
-            [(normalized_note_path, link, link) for link in note.links],
+            """INSERT INTO note_links
+               (source_path, target_path, display_text, link_type, is_external)
+               VALUES (?, ?, ?, ?, ?)""",
+            [
+                (
+                    normalized_note_path,
+                    target,
+                    display,
+                    link_type,
+                    1 if is_external else 0,
+                )
+                for target, display, link_type, is_external in all_links
+            ],
         )
 
     db.commit()
@@ -1030,16 +1072,25 @@ def index_linked_note(
     # Determine effective todo_exclude with proper precedence:
     # 1. If frontmatter explicitly sets todo_exclude (true OR false), use that
     # 2. Otherwise, inherit from link config OR notebook config
-    from nb.utils.markdown import parse_note_file
+    from nb.utils.markdown import (
+        extract_all_links,
+        extract_frontmatter_links,
+        parse_note_file,
+    )
 
     frontmatter_has_explicit_value = False
     frontmatter_exclude = False
+    all_links: list[tuple[str, str, str, bool]] = []
 
     try:
-        meta, _ = parse_note_file(path)
+        meta, body = parse_note_file(path)
         if "todo_exclude" in meta:
             frontmatter_has_explicit_value = True
             frontmatter_exclude = bool(meta.get("todo_exclude", False))
+        # Extract all links from body (wiki + markdown) and frontmatter
+        body_links = extract_all_links(body)
+        frontmatter_links = extract_frontmatter_links(meta)
+        all_links = body_links + frontmatter_links
     except Exception:
         pass
 
@@ -1092,12 +1143,17 @@ def index_linked_note(
             [(note_path, tag) for tag in note.tags],
         )
 
-    # Update links
+    # Update links (using extracted links with full metadata)
     db.execute("DELETE FROM note_links WHERE source_path = ?", (note_path,))
-    if note.links:
+    if all_links:
         db.executemany(
-            "INSERT INTO note_links (source_path, target_path, display_text) VALUES (?, ?, ?)",
-            [(note_path, link, link) for link in note.links],
+            """INSERT INTO note_links
+               (source_path, target_path, display_text, link_type, is_external)
+               VALUES (?, ?, ?, ?, ?)""",
+            [
+                (note_path, target, display, link_type, 1 if is_external else 0)
+                for target, display, link_type, is_external in all_links
+            ],
         )
 
     db.commit()

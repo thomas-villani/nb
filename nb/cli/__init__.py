@@ -21,6 +21,7 @@ from nb.cli.completion import (
 )
 from nb.cli.config_cmd import register_config_commands
 from nb.cli.links import register_link_commands
+from nb.cli.note_links import register_note_link_commands
 from nb.cli.notebooks import register_notebook_commands
 from nb.cli.notes import register_note_commands, today
 from nb.cli.record import register_record_commands
@@ -150,6 +151,7 @@ register_config_commands(cli)
 register_todo_commands(cli)
 register_search_commands(cli)
 register_link_commands(cli)
+register_note_link_commands(cli)
 register_attachment_commands(cli)
 register_template_commands(cli)
 register_completion_commands(cli)
