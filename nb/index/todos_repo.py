@@ -84,6 +84,19 @@ def _load_todo_tags(todo_id: str) -> list[str]:
     return [row["tag"] for row in rows]
 
 
+def _load_todo_sections(todo_id: str) -> list[str]:
+    """Load sections for a todo from the database.
+
+    Returns sections in order of depth (shallowest to deepest).
+    """
+    db = get_db()
+    rows = db.fetchall(
+        "SELECT section FROM todo_sections WHERE todo_id = ? ORDER BY depth",
+        (todo_id,),
+    )
+    return [row["section"] for row in rows]
+
+
 def upsert_todo(todo: Todo, commit: bool = True, db: Database | None = None) -> None:
     """Insert or update a todo in the database.
 
@@ -169,6 +182,14 @@ def upsert_todo(todo: Todo, commit: bool = True, db: Database | None = None) -> 
             [(todo.id, tag) for tag in todo.tags],
         )
 
+    # Update sections (path-based subdirectory hierarchy)
+    db.execute("DELETE FROM todo_sections WHERE todo_id = ?", (todo.id,))
+    if todo.sections:
+        db.executemany(
+            "INSERT INTO todo_sections (todo_id, section, depth) VALUES (?, ?, ?)",
+            [(todo.id, section, depth) for depth, section in enumerate(todo.sections)],
+        )
+
     if commit:
         db.commit()
 
@@ -205,6 +226,7 @@ def get_todo_by_id(todo_id: str) -> Todo | None:
 
     todo = _row_to_todo(row)
     todo.tags = _load_todo_tags(todo_id)
+    todo.sections = _load_todo_sections(todo_id)
     return todo
 
 
@@ -330,6 +352,8 @@ def query_todos(
     source_path: Path | None = None,
     parent_only: bool = True,
     exclude_note_excluded: bool = True,
+    path_sections: list[str] | None = None,
+    exclude_path_sections: list[str] | None = None,
 ) -> list[Todo]:
     """Query todos with filters.
 
@@ -345,13 +369,15 @@ def query_todos(
         priority: Filter by priority level (1, 2, or 3)
         notebooks: Filter by notebook names (stored as project in DB)
         notes: Filter by specific note paths (relative to notes root)
-        sections: Filter by section names (partial match)
+        sections: Filter by section names (markdown headings, partial match)
         exclude_notebooks: List of notebooks to exclude
         tag: Filter by tag
         exclude_tags: List of tags to exclude
         source_path: Filter by source file path
         parent_only: If True, only return top-level todos (not subtasks)
         exclude_note_excluded: If True, exclude todos from notes with todo_exclude=true
+        path_sections: Filter by path-based subdirectory sections (any match)
+        exclude_path_sections: List of path-based sections to exclude
 
     Returns:
         List of matching Todo objects.
@@ -495,6 +521,22 @@ def query_todos(
         )
         params.extend([t.lower() for t in exclude_tags])
 
+    # Filter by path-based sections (subdirectory hierarchy)
+    if path_sections:
+        placeholders = ", ".join("?" for _ in path_sections)
+        conditions.append(
+            f"EXISTS (SELECT 1 FROM todo_sections ps WHERE ps.todo_id = t.id AND ps.section IN ({placeholders}))"
+        )
+        params.extend(path_sections)
+
+    # Exclude path-based sections
+    if exclude_path_sections:
+        placeholders = ", ".join("?" for _ in exclude_path_sections)
+        conditions.append(
+            f"NOT EXISTS (SELECT 1 FROM todo_sections xs WHERE xs.todo_id = t.id AND xs.section IN ({placeholders}))"
+        )
+        params.extend(exclude_path_sections)
+
     if source_path:
         conditions.append("t.source_path = ?")
         params.append(normalize_path(source_path))
@@ -511,6 +553,7 @@ def query_todos(
     for row in rows:
         todo = _row_to_todo(row)
         todo.tags = _load_todo_tags(todo.id)
+        todo.sections = _load_todo_sections(todo.id)
         todos.append(todo)
 
     return todos
@@ -528,6 +571,7 @@ def get_todo_children(parent_id: str) -> list[Todo]:
     for row in rows:
         todo = _row_to_todo(row)
         todo.tags = _load_todo_tags(todo.id)
+        todo.sections = _load_todo_sections(todo.id)
         # Recursively load children
         todo.children = get_todo_children(todo.id)
         children.append(todo)
@@ -549,6 +593,8 @@ def get_sorted_todos(
     created_start: date | None = None,
     created_end: date | None = None,
     exclude_note_excluded: bool = True,
+    path_sections: list[str] | None = None,
+    exclude_path_sections: list[str] | None = None,
 ) -> list[Todo]:
     """Get todos sorted by the default sorting order.
 
@@ -577,6 +623,8 @@ def get_sorted_todos(
         created_end=created_end,
         parent_only=True,
         exclude_note_excluded=exclude_note_excluded,
+        path_sections=path_sections,
+        exclude_path_sections=exclude_path_sections,
     )
 
     today = date.today()

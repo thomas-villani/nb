@@ -764,6 +764,24 @@ def add_to_note(
 @click.option(
     "--details", "-d", is_flag=True, help="Show extra details (todo count, mtime, etc.)"
 )
+@click.option(
+    "--section",
+    "-S",
+    multiple=True,
+    help="Filter by path section/subdirectory (repeatable)",
+)
+@click.option(
+    "--exclude-section",
+    "-xs",
+    multiple=True,
+    help="Exclude notes from this section (repeatable)",
+)
+@click.option(
+    "--tree",
+    "-t",
+    is_flag=True,
+    help="Display notes as a tree grouped by subdirectory sections",
+)
 def list_notes_cmd(
     notebook: str | None,
     all_notes: bool,
@@ -771,6 +789,9 @@ def list_notes_cmd(
     month: bool,
     full: bool,
     details: bool,
+    section: tuple[str, ...],
+    exclude_section: tuple[str, ...],
+    tree: bool,
 ) -> None:
     """List notes.
 
@@ -839,6 +860,101 @@ def list_notes_cmd(
 
         return "  ".join(parts)
 
+    def filter_notes_by_sections(
+        note_paths: list,
+        include_sections: tuple[str, ...],
+        exclude_sections: tuple[str, ...],
+    ) -> list:
+        """Filter notes by path-based sections."""
+        from nb.core.notes import get_sections_for_path
+
+        if not include_sections and not exclude_sections:
+            return note_paths
+
+        filtered = []
+        for item in note_paths:
+            # Handle both plain Path and tuple (path, title, tags, ...)
+            if isinstance(item, tuple):
+                note_path = item[0]
+            else:
+                note_path = item
+
+            note_sections = get_sections_for_path(note_path)
+
+            # Check include filter (any match)
+            if include_sections:
+                if not any(s in note_sections for s in include_sections):
+                    continue
+
+            # Check exclude filter (none should match)
+            if exclude_sections:
+                if any(s in note_sections for s in exclude_sections):
+                    continue
+
+            filtered.append(item)
+        return filtered
+
+    def render_notes_tree(
+        notes: list,
+        notebook_name: str,
+        full_path: bool,
+        details_map: dict,
+        format_details_fn,
+    ) -> None:
+        """Render notes as a tree grouped by subdirectory sections."""
+        from rich.tree import Tree
+
+        from nb.core.notes import get_sections_for_path
+
+        # Get notebook display info
+        color, icon = get_notebook_display_info(notebook_name)
+        icon_prefix = f"{icon} " if icon else ""
+
+        # Build tree structure
+        root = Tree(f"[bold {color}]{icon_prefix}{notebook_name}[/bold {color}]")
+        section_nodes: dict = {}  # Maps section path tuple to tree node
+
+        for item in notes:
+            # Handle tuple format (path, title, tags, is_linked, alias)
+            if isinstance(item, tuple):
+                note_path = item[0]
+                title = item[1] if len(item) > 1 else None
+                tags = item[2] if len(item) > 2 else []
+            else:
+                note_path = item
+                title = None
+                tags = []
+
+            note_sections = get_sections_for_path(note_path)
+
+            # Find or create parent node
+            parent = root
+            for i, sec in enumerate(note_sections):
+                section_key = tuple(note_sections[: i + 1])
+                if section_key not in section_nodes:
+                    section_nodes[section_key] = parent.add(f"[dim]{sec}/[/dim]")
+                parent = section_nodes[section_key]
+
+            # Build note display
+            display = title if title else note_path.stem
+            tags_str = " ".join(f"[yellow]#{t}[/yellow]" for t in tags) if tags else ""
+            path_display = f"[dim]({note_path if full_path else note_path.stem})[/dim]"
+
+            note_parts = [display]
+            if tags_str:
+                note_parts.append(tags_str)
+            note_parts.append(path_display)
+
+            # Add details if available
+            if details_map and note_path in details_map:
+                details_str = format_details_fn(details_map[note_path])
+                if details_str:
+                    note_parts.append(details_str)
+
+            parent.add(" ".join(note_parts))
+
+        console.print(root)
+
     if week or month:
         # Get date range
         from nb.utils.dates import get_month_range, get_week_range
@@ -851,17 +967,21 @@ def list_notes_cmd(
         if notebook:
             # Filter specific notebook by date
             notes = list_notebook_notes_by_date(notebook, start=start, end=end)
-            if not notes:
-                console.print(
-                    f"[dim]No notes found in {notebook} for this {'week' if week else 'month'}.[/dim]"
-                )
-                return
         else:
             # Default to daily notes
             notes = list_daily_notes(start=start, end=end)
-            if not notes:
-                console.print("[dim]No daily notes found.[/dim]")
-                return
+
+        # Apply section filters
+        notes = filter_notes_by_sections(notes, section, exclude_section)
+
+        if not notes:
+            msg = (
+                f"No notes found in {notebook}" if notebook else "No daily notes found"
+            )
+            if section or exclude_section:
+                msg += " matching section filters"
+            console.print(f"[dim]{msg}.[/dim]")
+            return
 
         # Get details if requested
         details_map = get_note_details_batch(notes) if details else {}
@@ -878,8 +998,14 @@ def list_notes_cmd(
         # Get notes with metadata (title, tags, linked status)
         notes = get_notebook_notes_with_metadata(notebook)
 
+        # Apply section filters
+        notes = filter_notes_by_sections(notes, section, exclude_section)
+
         if not notes:
-            console.print(f"[dim]No notes in {notebook}.[/dim]")
+            msg = f"No notes in {notebook}"
+            if section or exclude_section:
+                msg += " matching section filters"
+            console.print(f"[dim]{msg}.[/dim]")
             return
 
         # Get extra details if requested
@@ -888,6 +1014,11 @@ def list_notes_cmd(
             details_map = get_note_details_batch(note_paths)
         else:
             details_map = {}
+
+        # Use tree display if --tree flag is set
+        if tree:
+            render_notes_tree(notes, notebook, full, details_map, format_details_str)
+            return
 
         for note_path, title, tags, is_linked, alias in notes:
             # Build display name (title or stem)
@@ -929,8 +1060,14 @@ def list_notes_cmd(
         # List all notes in all notebooks (one line each)
         notes = get_all_notes()
 
+        # Apply section filters
+        notes = filter_notes_by_sections(notes, section, exclude_section)
+
         if not notes:
-            console.print("[dim]No notes found.[/dim]")
+            msg = "No notes found"
+            if section or exclude_section:
+                msg += " matching section filters"
+            console.print(f"[dim]{msg}.[/dim]")
             return
 
         # Get details if requested
@@ -969,6 +1106,19 @@ def list_notes_cmd(
         if not notes_by_notebook:
             console.print("[dim]No notes found.[/dim]")
             return
+
+        # Apply section filters to each notebook's notes
+        if section or exclude_section:
+            filtered_by_notebook = {}
+            for nb_name, nb_notes in notes_by_notebook.items():
+                filtered = filter_notes_by_sections(nb_notes, section, exclude_section)
+                if filtered:
+                    filtered_by_notebook[nb_name] = filtered
+            notes_by_notebook = filtered_by_notebook
+
+            if not notes_by_notebook:
+                console.print("[dim]No notes found matching section filters.[/dim]")
+                return
 
         # Get details if requested
         if details:

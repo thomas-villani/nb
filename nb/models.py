@@ -80,6 +80,9 @@ class Note:
     attachments: list[Attachment] = field(default_factory=list)
     notebook: str = ""
     content_hash: str = ""
+    sections: list[str] = field(
+        default_factory=list
+    )  # Path-based subdirectory sections
 
 
 @dataclass
@@ -111,7 +114,10 @@ class Todo:
     children: list[Todo] = field(default_factory=list)
     attachments: list[Attachment] = field(default_factory=list)
     details: str | None = None  # Multi-line details/description below the todo
-    section: str | None = None  # Section heading above the todo
+    section: str | None = None  # Section heading above the todo (markdown heading)
+    sections: list[str] = field(
+        default_factory=list
+    )  # Path-based subdirectory sections
 
     @property
     def completed(self) -> bool:

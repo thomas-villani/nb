@@ -805,6 +805,26 @@ def get_notebook_for_path(path: Path) -> str:
     return ""
 
 
+def get_sections_for_path(path: Path) -> list[str]:
+    """Extract subdirectory sections from a note's path.
+
+    Returns all intermediate directory names between the notebook
+    and the filename. These represent the hierarchical "sections"
+    within a notebook.
+
+    Examples:
+        - "projects/myapp/docs/api.md" -> ["myapp", "docs"]
+        - "daily/2025/Nov25-Dec01/2025-11-27.md" -> ["2025", "Nov25-Dec01"]
+        - "projects/readme.md" -> []
+        - "standalone.md" -> []
+    """
+    parts = path.parts
+    if len(parts) <= 2:
+        return []  # No subdirectories (just notebook/filename or just filename)
+    # Skip first (notebook) and last (filename)
+    return list(parts[1:-1])
+
+
 def list_notes(
     notebook: str | None = None, notes_root: Path | None = None
 ) -> list[Path]:

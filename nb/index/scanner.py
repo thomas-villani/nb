@@ -8,6 +8,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
+import fnmatch
+
 from nb.config import get_config
 from nb.core.notes import get_note
 from nb.core.todos import extract_todos, normalize_due_dates_in_file
@@ -40,23 +42,96 @@ def _get_thread_db() -> Database:
     return _thread_local.db
 
 
+def load_nbignore(notes_root: Path) -> list[str]:
+    """Load ignore patterns from .nbignore file.
+
+    The .nbignore file uses fnmatch-style patterns (similar to .gitignore but simpler).
+    Each line is a pattern, blank lines and lines starting with # are ignored.
+
+    Example .nbignore:
+        # Ignore archive folders
+        archive
+        old_*
+        temp/
+    """
+    ignore_file = notes_root / ".nbignore"
+    if not ignore_file.exists():
+        return []
+
+    patterns = []
+    try:
+        for line in ignore_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            # Skip empty lines and comments
+            if line and not line.startswith("#"):
+                patterns.append(line)
+    except Exception:
+        pass  # If we can't read the file, just ignore it
+    return patterns
+
+
+def should_ignore(path: Path, patterns: list[str], notes_root: Path) -> bool:
+    """Check if a path matches any ignore pattern.
+
+    Args:
+        path: Absolute path to the file
+        patterns: List of fnmatch patterns from .nbignore
+        notes_root: The notes root directory
+
+    Returns:
+        True if the path should be ignored
+    """
+    if not patterns:
+        return False
+
+    try:
+        rel_path = path.relative_to(notes_root)
+    except ValueError:
+        return False
+
+    rel_str = str(rel_path).replace("\\", "/")
+
+    for pattern in patterns:
+        # Match against full relative path
+        if fnmatch.fnmatch(rel_str, pattern):
+            return True
+        # Match with wildcard prefix for nested matches
+        if fnmatch.fnmatch(rel_str, f"*/{pattern}"):
+            return True
+        if fnmatch.fnmatch(rel_str, f"**/{pattern}"):
+            return True
+        # Check if any path component matches the pattern
+        for part in rel_path.parts:
+            if fnmatch.fnmatch(part, pattern):
+                return True
+    return False
+
+
 def scan_notes(notes_root: Path | None = None) -> list[Path]:
     """Find all markdown files in the notes root and external notebooks.
 
-    Excludes hidden directories and .nb directory.
+    Excludes:
+    - Hidden directories (starting with .)
+    - Hidden files (starting with .)
+    - Files/directories matching patterns in .nbignore
     """
     if notes_root is None:
         notes_root = get_config().notes_root
 
     notes = []
 
+    # Load .nbignore patterns
+    ignore_patterns = load_nbignore(notes_root)
+
     # Scan notes_root
     if notes_root.exists():
         for md_file in notes_root.rglob("*.md"):
-            # Skip hidden directories and .nb
-            if any(
-                part.startswith(".") for part in md_file.relative_to(notes_root).parts
-            ):
+            rel_parts = md_file.relative_to(notes_root).parts
+            # Skip hidden directories and hidden files (starting with .)
+            if any(part.startswith(".") for part in rel_parts):
+                continue
+            # Skip files matching .nbignore patterns
+            if should_ignore(md_file, ignore_patterns, notes_root):
                 continue
             notes.append(md_file)
 
@@ -64,11 +139,16 @@ def scan_notes(notes_root: Path | None = None) -> list[Path]:
     config = get_config()
     for nb in config.external_notebooks():
         if nb.path and nb.path.exists():
+            # Load .nbignore for external notebook if present
+            ext_ignore_patterns = load_nbignore(nb.path)
             for md_file in nb.path.rglob("*.md"):
-                # Skip hidden directories
+                # Skip hidden directories and hidden files
                 try:
                     rel_parts = md_file.relative_to(nb.path).parts
                     if any(part.startswith(".") for part in rel_parts):
+                        continue
+                    # Skip files matching .nbignore patterns
+                    if should_ignore(md_file, ext_ignore_patterns, nb.path):
                         continue
                 except ValueError:
                     continue
@@ -234,6 +314,20 @@ def index_note(
                     1 if is_external else 0,
                 )
                 for target, display, link_type, is_external in all_links
+            ],
+        )
+
+    # Update sections (path-based subdirectory hierarchy)
+    from nb.core.notes import get_sections_for_path
+
+    sections = get_sections_for_path(note.path)
+    db.execute("DELETE FROM note_sections WHERE note_path = ?", (normalized_note_path,))
+    if sections:
+        db.executemany(
+            "INSERT INTO note_sections (note_path, section, depth) VALUES (?, ?, ?)",
+            [
+                (normalized_note_path, section, depth)
+                for depth, section in enumerate(sections)
             ],
         )
 
@@ -508,6 +602,20 @@ def _index_note_thread_safe(
                     1 if is_external else 0,
                 )
                 for target, display, link_type, is_external in all_links
+            ],
+        )
+
+    # Update sections (path-based subdirectory hierarchy)
+    from nb.core.notes import get_sections_for_path
+
+    sections = get_sections_for_path(note.path)
+    db.execute("DELETE FROM note_sections WHERE note_path = ?", (normalized_note_path,))
+    if sections:
+        db.executemany(
+            "INSERT INTO note_sections (note_path, section, depth) VALUES (?, ?, ?)",
+            [
+                (normalized_note_path, section, depth)
+                for depth, section in enumerate(sections)
             ],
         )
 

@@ -91,7 +91,7 @@ todo_exclude: true
 - [x] Interactive todo review function
 - [x] Show id in second column in 'nb todo' rather than source. #UX
 - [x] Add more details about notes in 'nb list', e.g. todo count, last modified, etc.
-- [x] Allow due dates to have times, and to auto parse @due(today) and other relative dates to fill the date on indexing
+- [x] Allow due dates to have times, and to auto parse @due(2025-12-02) and other relative dates to fill the date on indexing
 - [x] Update help command to launch real docs
 - [x] Add command to change due-dates of todos from cli with fuzzy dates allowed
 - [x] Add command to mark all todos in a note as complete
@@ -101,14 +101,22 @@ todo_exclude: true
 - [x] Show filename too in nb web, not just title
 
 ### Active
-- [ ] Add a 'recently viewed/edited notes' page on nb web
+- [x] Add a 'recently viewed/edited notes' page on nb web
 - [ ] Add a way to title a new note from command line
-- [ ] Figure out how to handle subdirs in notes better and include in hierarchy, perhaps as a 'section' in a notebook?
-- [ ] kanban view for nb todo
-- [^] for links: Web UI - clickable links, backlinks panel, graph view
-- [^] for links: ASCII graph - nb graph <note>
-- [^] for links: Related notes - nb related <note> combining links + tags + embeddings
+- [^] Figure out how to handle subdirs in notes better and include in hierarchy, perhaps as a 'section' in a notebook?
+- [ ] kanban view for nb todo and nb web
+- [x] for links: Web UI - clickable links, backlinks panel, graph view
+- [x] for links: ASCII graph - nb graph <note>
+- [x] for links: Related notes - nb related <note> combining links + tags + embeddings
 - [ ] Capture url and other file attachments as markdown using all2md #feature
+- [ ] Add `nb where <notebook|note|note-alias>` command that simply prints the path to stdout
+- [ ] Need some kind of display of the frontmatter stuff on the `nb web` page
+- [ ] Allow search within specific notebooks as well in `nb web` command
+- [ ] Allow opening notes by title partial match
+- [ ] Add nicer table-like view in web ui for notes with created and modified date
+- [ ] Add an 'expanded' view (--expand/-x) for 'nb todo' to show more of the todo text
+- [ ] Add a way to check off all in progress items as completed in a notebook / note (extend `nb todo all-done`)
+- [ ] Better daily metrics - what was completed today? By notebook. `nb completed` or `nb done` something
 
 ### Phase 5: Wijjit TUI
 - [ ] Full Wijjit-based todo list view with richer interactions #feature
@@ -131,11 +139,11 @@ todo_exclude: true
   - [x] Simplify `list_linked_files()` and `list_linked_notes()` to DB-only
 - [ ] Optimize imports and startup speed of cli #performance
 - [x] Evaluate test suite and add e2e tests on actual CLI (if not existing) #testing
-- [ ] Allow opening notes by title partial match
 
 
 ### Phase 6: Future Enhancements
 - [ ] Recurring todos (`@recur(weekly)`) #feature
+- [ ] Auto TL;DR generation and stash in frontmatter
 - [ ] Export to various formats (HTML, PDF) #feature
 - [ ] Calendar view for due dates #feature
 - [ ] Due date reminders (optional notifications) #feature

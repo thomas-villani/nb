@@ -135,6 +135,15 @@ def extract_todos(
 
         project = get_notebook_for_file(path)
 
+    # Determine path-based sections (subdirectory hierarchy)
+    from nb.core.notes import get_sections_for_path
+
+    try:
+        relative_path = path.relative_to(notes_root)
+    except ValueError:
+        relative_path = path
+    note_sections = get_sections_for_path(relative_path)
+
     # Get created date from file or parse from filename
     from nb.utils.dates import parse_date_from_filename
 
@@ -245,6 +254,7 @@ def extract_todos(
             children=[],
             attachments=[],
             section=current_section,
+            sections=note_sections,  # Path-based subdirectory sections
         )
 
         # Handle nesting - find parent based on indentation

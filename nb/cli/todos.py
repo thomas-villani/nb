@@ -50,14 +50,14 @@ def register_todo_commands(cli: click.Group) -> None:
     "--exclude-tag",
     "-T",
     multiple=True,
-    help="Exclude todos with this tag (can be used multiple times)",
+    help="Exclude todos with this tag (repeatable)",
     shell_complete=complete_tag,
 )
 @click.option(
     "--notebook",
     "-n",
     multiple=True,
-    help="Filter by notebook (can be used multiple times)",
+    help="Filter by notebook (repeatable)",
     shell_complete=complete_notebook,
 )
 @click.option(
@@ -66,10 +66,22 @@ def register_todo_commands(cli: click.Group) -> None:
     help="Filter by note path or linked alias (repeatable)",
 )
 @click.option(
+    "--section",
+    "-S",
+    multiple=True,
+    help="Filter by path section/subdirectory (repeatable)",
+)
+@click.option(
+    "--exclude-section",
+    "-xs",
+    multiple=True,
+    help="Exclude todos from this section (repeatable)",
+)
+@click.option(
     "--exclude-notebook",
     "-N",
     multiple=True,
-    help="Exclude todos from this notebook (can be used multiple times)",
+    help="Exclude todos from this notebook (repeatable)",
     shell_complete=complete_notebook,
 )
 @click.option(
@@ -84,7 +96,7 @@ def register_todo_commands(cli: click.Group) -> None:
     "--focus",
     "-f",
     is_flag=True,
-    help="Focus mode: show only overdue, today, this week, and next week",
+    help="Focus mode: hide later/no-date; hide next week if this week has items",
 )
 @click.option(
     "--sort-by",
@@ -117,6 +129,8 @@ def todo(
     exclude_tag: tuple[str, ...],
     notebook: tuple[str, ...],
     note: tuple[str, ...],
+    section: tuple[str, ...],
+    exclude_section: tuple[str, ...],
     exclude_notebook: tuple[str, ...],
     view: str | None,
     create_view: str | None,
@@ -135,7 +149,7 @@ def todo(
     """Manage todos.
 
     Run 'nb todo' without a subcommand to list todos grouped by status and due date:
-    OVERDUE, IN PROGRESS, DUE TODAY, DUE THIS WEEK, DUE NEXT WEEK, DUE LATER, NO DUE DATE.
+    OVERDUE, IN PROGRESS, DUE TODAY, DUE TOMORROW, DUE THIS WEEK, DUE NEXT WEEK, DUE LATER, NO DUE DATE.
 
     Todos can be marked in-progress with 'nb todo start <ID>' which changes
     the marker from [ ] to [^] in the source file.
@@ -186,7 +200,7 @@ def todo(
     Display Filters:
       --hide-later      Hide the "DUE LATER" section
       --hide-no-date    Hide the "NO DUE DATE" section
-      -f, --focus       Focus mode: hide both later and no-date sections
+      -f, --focus       Focus mode: hide later/no-date and next week (if this week has items)
 
     \b
     View Management:
@@ -388,8 +402,13 @@ def todo(
                 notes=notes_filter,
                 sections=sections_filter,
                 exclude_notebooks=all_excluded_notebooks,
+                path_sections=list(section) if section else None,
+                exclude_path_sections=(
+                    list(exclude_section) if exclude_section else None
+                ),
                 hide_later=effective_hide_later,
                 hide_no_date=effective_hide_no_date,
+                focus=focus,
                 sort_by=sort_by,
                 include_completed=effective_include_completed,
                 exclude_note_excluded=exclude_note_excluded,
@@ -517,8 +536,11 @@ def _list_todos(
     notes: list[str] | None = None,
     sections: list[str] | None = None,
     exclude_notebooks: list[str] | None = None,
+    path_sections: list[str] | None = None,
+    exclude_path_sections: list[str] | None = None,
     hide_later: bool = False,
     hide_no_date: bool = False,
+    focus: bool = False,
     sort_by: str = "source",
     include_completed: bool = False,
     exclude_note_excluded: bool = True,
@@ -568,6 +590,8 @@ def _list_todos(
             created_start=created_start,
             created_end=created_end,
             exclude_note_excluded=exclude_note_excluded,
+            path_sections=path_sections,
+            exclude_path_sections=exclude_path_sections,
         )
     else:
         todos = get_sorted_todos(
@@ -584,31 +608,13 @@ def _list_todos(
             created_start=created_start,
             created_end=created_end,
             exclude_note_excluded=exclude_note_excluded,
+            path_sections=path_sections,
+            exclude_path_sections=exclude_path_sections,
         )
 
     if not todos:
         console.print("[dim]No todos found.[/dim]")
         return
-
-    # Apply offset and limit for pagination
-    total_count = len(todos)
-    if offset > 0:
-        todos = todos[offset:]
-    if limit is not None:
-        todos = todos[:limit]
-
-    if not todos:
-        console.print(
-            f"[dim]No todos in range (offset {offset}, total {total_count}).[/dim]"
-        )
-        return
-
-    # Show pagination info if limit/offset is used
-    if limit is not None or offset > 0:
-        end_idx = min(offset + len(todos), total_count)
-        console.print(
-            f"[dim]Showing {offset + 1}-{end_idx} of {total_count} todos[/dim]"
-        )
 
     # Calculate next week range
     next_week_end = week_end + timedelta(days=7)
@@ -653,6 +659,19 @@ def _list_todos(
     if hide_no_date:
         groups["NO DUE DATE"] = []
 
+    # In focus mode, hide "DUE NEXT WEEK" if there are items in earlier groups
+    if focus:
+        earlier_groups = [
+            "OVERDUE",
+            "IN PROGRESS",
+            "DUE TODAY",
+            "DUE TOMORROW",
+            "DUE THIS WEEK",
+        ]
+        has_earlier_items = any(groups[g] for g in earlier_groups)
+        if has_earlier_items:
+            groups["DUE NEXT WEEK"] = []
+
     # Sort todos within each group
     # line_number is used as a tiebreaker to maintain document order for todos from the same source
     def get_sort_key(todo):
@@ -678,6 +697,66 @@ def _list_todos(
 
     for group_todos in groups.values():
         group_todos.sort(key=get_sort_key)
+
+    # Apply offset and limit AFTER grouping and sorting
+    # This ensures the user sees the first N todos in display order
+    if limit is not None or offset > 0:
+        # Flatten groups in display order
+        group_order = [
+            "OVERDUE",
+            "IN PROGRESS",
+            "DUE TODAY",
+            "DUE TOMORROW",
+            "DUE THIS WEEK",
+            "DUE NEXT WEEK",
+            "DUE LATER",
+            "NO DUE DATE",
+        ]
+        all_todos_ordered = []
+        for group_name in group_order:
+            all_todos_ordered.extend(groups[group_name])
+
+        total_count = len(all_todos_ordered)
+
+        # Apply offset and limit
+        if offset > 0:
+            all_todos_ordered = all_todos_ordered[offset:]
+        if limit is not None:
+            all_todos_ordered = all_todos_ordered[:limit]
+
+        if not all_todos_ordered:
+            console.print(
+                f"[dim]No todos in range (offset {offset}, total {total_count}).[/dim]"
+            )
+            return
+
+        # Show pagination info
+        end_idx = min(offset + len(all_todos_ordered), total_count)
+        console.print(
+            f"[dim]Showing {offset + 1}-{end_idx} of {total_count} todos[/dim]"
+        )
+
+        # Rebuild groups from the sliced list
+        groups = {name: [] for name in group_order}
+        for t in all_todos_ordered:
+            if t.in_progress:
+                groups["IN PROGRESS"].append(t)
+            elif t.due_date is None:
+                groups["NO DUE DATE"].append(t)
+            else:
+                due = t.due_date_only
+                if due < today_date:
+                    groups["OVERDUE"].append(t)
+                elif due == today_date:
+                    groups["DUE TODAY"].append(t)
+                elif due == tomorrow_date:
+                    groups["DUE TOMORROW"].append(t)
+                elif due <= week_end:
+                    groups["DUE THIS WEEK"].append(t)
+                elif due <= next_week_end:
+                    groups["DUE NEXT WEEK"].append(t)
+                else:
+                    groups["DUE LATER"].append(t)
 
     # Collect all visible todos for column width calculation
     all_visible_todos = []
@@ -2007,19 +2086,19 @@ def todo_delete(todo_id: tuple[str, ...], force: bool) -> None:
     "--notebook",
     "-n",
     multiple=True,
-    help="Filter by notebook (can be used multiple times)",
+    help="Filter by notebook (repeatable)",
     shell_complete=complete_notebook,
 )
 @click.option(
     "--note",
     multiple=True,
-    help="Filter by note path (can be used multiple times)",
+    help="Filter by note path (repeatable)",
 )
 @click.option(
     "--exclude-notebook",
     "-N",
     multiple=True,
-    help="Exclude todos from this notebook (can be used multiple times)",
+    help="Exclude todos from this notebook (repeatable)",
     shell_complete=complete_notebook,
 )
 def todo_review(

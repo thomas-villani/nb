@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlparse
 from nb.config import get_config
 from nb.core.links import list_linked_notes, scan_linked_note_files
 from nb.core.notebooks import get_notebook_notes_with_linked, list_notebooks
-from nb.core.notes import get_note
+from nb.core.notes import get_note, get_sections_for_path
 
 
 def get_alias_for_path(note_path: Path) -> str | None:
@@ -455,6 +455,10 @@ TEMPLATE = """<!DOCTYPE html>
         /* Loading state */
         .loading { color: var(--text-dim); }
 
+        /* Note table rows */
+        .note-row { cursor: pointer; transition: background 0.15s; }
+        .note-row:hover { background: var(--surface); }
+
         /* Mobile */
         @media (max-width: 768px) {
             .sidebar { width: 100%; height: auto; position: relative; border-right: none; border-bottom: 1px solid var(--border); }
@@ -472,6 +476,7 @@ TEMPLATE = """<!DOCTYPE html>
             <div class="nav-section">
                 <h3>Navigation</h3>
                 <a class="nav-link" onclick="loadHome()">Home</a>
+                <a class="nav-link" onclick="loadHistory()">History</a>
                 <a class="nav-link" onclick="loadTodos()">Todos</a>
                 <a class="nav-link" onclick="loadGraph()">Graph</a>
             </div>
@@ -553,18 +558,91 @@ TEMPLATE = """<!DOCTYPE html>
         let currentNotePath = null;
         let searchTimeout = null;
         let notebooksCache = [];
-        let notebookSortBy = 'date-desc'; // 'date-desc', 'date-asc', 'title-asc', 'title-desc', 'filename'
         let notebookFilter = '';
         let notebookFilterTimeout = null;
         let cachedNotebookNotes = []; // Cache notes for current notebook
+
+        // Load preferences from localStorage with defaults
+        function loadPreferences() {
+            try {
+                const prefs = JSON.parse(localStorage.getItem('nb-web-prefs') || '{}');
+                return {
+                    homeSortBy: prefs.homeSortBy || 'alpha',
+                    notebookSortBy: prefs.notebookSortBy || 'mtime-desc',
+                    historySortBy: prefs.historySortBy || 'viewed',
+                    todoSortBy: prefs.todoSortBy || 'section',
+                };
+            } catch (e) {
+                return {
+                    homeSortBy: 'alpha',
+                    notebookSortBy: 'mtime-desc',
+                    historySortBy: 'viewed',
+                    todoSortBy: 'section',
+                };
+            }
+        }
+
+        function savePreferences() {
+            try {
+                localStorage.setItem('nb-web-prefs', JSON.stringify({
+                    homeSortBy,
+                    notebookSortBy,
+                    historySortBy,
+                    todoSortBy,
+                }));
+            } catch (e) {
+                // Ignore localStorage errors
+            }
+        }
+
+        // Initialize preferences from localStorage
+        const prefs = loadPreferences();
+        let homeSortBy = prefs.homeSortBy;
+        let notebookSortBy = prefs.notebookSortBy;
+        let historySortBy = prefs.historySortBy;
+        let todoSortBy = prefs.todoSortBy;
+
+        function sortNotebooks(notebooks, sortBy) {
+            return [...notebooks].sort((a, b) => {
+                if (sortBy === 'alpha') return (a.name || '').localeCompare(b.name || '');
+                if (sortBy === 'modified') return (b.lastModified || 0) - (a.lastModified || 0);
+                if (sortBy === 'viewed') {
+                    // Parse ISO date strings for comparison
+                    const aViewed = a.lastViewed ? new Date(a.lastViewed).getTime() : 0;
+                    const bViewed = b.lastViewed ? new Date(b.lastViewed).getTime() : 0;
+                    return bViewed - aViewed;
+                }
+                return 0;
+            });
+        }
 
         function sortNotes(notes, sortBy) {
             return [...notes].sort((a, b) => {
                 if (sortBy === 'date-desc') return (b.date || '').localeCompare(a.date || '');
                 if (sortBy === 'date-asc') return (a.date || '9999').localeCompare(b.date || '9999');
+                if (sortBy === 'mtime-desc') return (b.mtime || 0) - (a.mtime || 0);
+                if (sortBy === 'mtime-asc') return (a.mtime || 0) - (b.mtime || 0);
+                if (sortBy === 'viewed-desc') {
+                    const aViewed = a.lastViewed ? new Date(a.lastViewed).getTime() : 0;
+                    const bViewed = b.lastViewed ? new Date(b.lastViewed).getTime() : 0;
+                    return bViewed - aViewed;
+                }
+                if (sortBy === 'viewed-asc') {
+                    const aViewed = a.lastViewed ? new Date(a.lastViewed).getTime() : Infinity;
+                    const bViewed = b.lastViewed ? new Date(b.lastViewed).getTime() : Infinity;
+                    return aViewed - bViewed;
+                }
                 if (sortBy === 'title-asc') return (a.title || '').localeCompare(b.title || '');
                 if (sortBy === 'title-desc') return (b.title || '').localeCompare(a.title || '');
                 if (sortBy === 'filename') return (a.filename || '').localeCompare(b.filename || '');
+                if (sortBy === 'section') {
+                    // Sort by section path first, then by mtime within each section
+                    const aSection = (a.sections || []).join('/');
+                    const bSection = (b.sections || []).join('/');
+                    const sectionCmp = aSection.localeCompare(bSection);
+                    if (sectionCmp !== 0) return sectionCmp;
+                    return (b.mtime || 0) - (a.mtime || 0);
+                }
                 return 0;
             });
         }
@@ -586,6 +664,23 @@ TEMPLATE = """<!DOCTYPE html>
             return d.getFullYear() + '-' +
                 String(d.getMonth() + 1).padStart(2, '0') + '-' +
                 String(d.getDate()).padStart(2, '0');
+        }
+
+        // Format timestamp as relative time (e.g., "5 min ago", "2 days ago")
+        function formatRelativeTime(timestampMs) {
+            if (!timestampMs) return '-';
+            const now = Date.now();
+            const diffMs = now - timestampMs;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+
+            if (diffMins < 1) return 'just now';
+            if (diffMins < 60) return diffMins + 'm ago';
+            if (diffHours < 24) return diffHours + 'h ago';
+            if (diffDays < 7) return diffDays + 'd ago';
+            if (diffDays < 30) return Math.floor(diffDays / 7) + 'w ago';
+            return new Date(timestampMs).toLocaleDateString();
         }
 
         async function api(endpoint, options = {}) {
@@ -623,17 +718,30 @@ TEMPLATE = """<!DOCTYPE html>
             }
         }
 
-        async function loadHome(pushHistory = true) {
+        async function loadHome(pushHistory = true, fetchNotebooks = true) {
             currentNotebook = null;
             currentNotePath = null;
             document.getElementById('notes-section').style.display = 'none';
             if (pushHistory) history.pushState({ view: 'home' }, '', '#');
 
-            const nbs = notebooksCache.length ? notebooksCache : await api('/notebooks');
+            if (fetchNotebooks || !notebooksCache.length) {
+                notebooksCache = await api('/notebooks');
+            }
+
+            const sortedNbs = sortNotebooks(notebooksCache, homeSortBy);
+
             document.getElementById('content').innerHTML = `
                 <h1>Notebooks</h1>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+                    <p style="color:var(--text-dim)">${sortedNbs.length} notebooks</p>
+                    <select id="homeSort" style="padding:0.3rem 0.5rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem">
+                        <option value="alpha" ${homeSortBy === 'alpha' ? 'selected' : ''}>Alphabetical</option>
+                        <option value="modified" ${homeSortBy === 'modified' ? 'selected' : ''}>Recently Modified</option>
+                        <option value="viewed" ${homeSortBy === 'viewed' ? 'selected' : ''}>Recently Viewed</option>
+                    </select>
+                </div>
                 <div class="notebook-grid">
-                    ${nbs.map(nb => `
+                    ${sortedNbs.map(nb => `
                         <div class="notebook-card" onclick="loadNotebook('${escapeJs(nb.name)}')">
                             ${nb.color ? `<div class="color-bar" style="background:${nb.color}"></div>` : ''}
                             <h3>${escapeHtml(nb.name)}</h3>
@@ -642,6 +750,16 @@ TEMPLATE = """<!DOCTYPE html>
                     `).join('')}
                 </div>
             `;
+
+            // Add event listener for sort change
+            const sortSelect = document.getElementById('homeSort');
+            if (sortSelect) {
+                sortSelect.addEventListener('change', (e) => {
+                    homeSortBy = e.target.value;
+                    savePreferences();
+                    loadHome(false, false);
+                });
+            }
         }
 
         async function loadNotebook(name, pushHistory = true, fetchNotes = true) {
@@ -679,28 +797,60 @@ TEMPLATE = """<!DOCTYPE html>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
                     <p style="color:var(--text-dim)">${displayNotes.length} of ${cachedNotebookNotes.length} notes</p>
                     <select id="notebookSort" style="padding:0.3rem 0.5rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem">
+                        <option value="mtime-desc" ${notebookSortBy === 'mtime-desc' ? 'selected' : ''}>Modified (Newest)</option>
+                        <option value="mtime-asc" ${notebookSortBy === 'mtime-asc' ? 'selected' : ''}>Modified (Oldest)</option>
+                        <option value="viewed-desc" ${notebookSortBy === 'viewed-desc' ? 'selected' : ''}>Viewed (Newest)</option>
+                        <option value="viewed-asc" ${notebookSortBy === 'viewed-asc' ? 'selected' : ''}>Viewed (Oldest)</option>
                         <option value="date-desc" ${notebookSortBy === 'date-desc' ? 'selected' : ''}>Date (Newest)</option>
                         <option value="date-asc" ${notebookSortBy === 'date-asc' ? 'selected' : ''}>Date (Oldest)</option>
                         <option value="title-asc" ${notebookSortBy === 'title-asc' ? 'selected' : ''}>Title (A-Z)</option>
                         <option value="title-desc" ${notebookSortBy === 'title-desc' ? 'selected' : ''}>Title (Z-A)</option>
                         <option value="filename" ${notebookSortBy === 'filename' ? 'selected' : ''}>Filename</option>
+                        <option value="section" ${notebookSortBy === 'section' ? 'selected' : ''}>Section</option>
                     </select>
                 </div>
-                <ul style="margin-top:1rem">
-                    ${displayNotes.map(n => {
-                        const aliasTag = n.alias ? `<span style="color:var(--accent);margin-left:0.5rem">@${escapeHtml(n.alias)}</span>` : '';
-                        const linkedIcon = n.isLinked ? '<span style="color:var(--text-dim)" title="Linked note">↗</span> ' : '';
-                        const tagsHtml = (n.tags || []).length > 0 ?
-                            `<span style="margin-left:0.5rem">${n.tags.map(t => `<span style="color:var(--text-dim);font-size:0.8rem;background:var(--surface);padding:0.1rem 0.3rem;border-radius:3px;margin-right:0.25rem">#${escapeHtml(t)}</span>`).join('')}</span>` : '';
-                        return `
-                        <li style="margin:0.5rem 0">
-                            <a href="javascript:void(0)" onclick="loadNote('${escapeJs(n.path)}')">${linkedIcon}${escapeHtml(n.title)}</a>${aliasTag}
-                            <span style="color:var(--text-dim);margin-left:0.5rem;font-size:0.85rem">${escapeHtml(n.filename)}</span>
-                            ${n.date ? `<span style="color:var(--text-dim);margin-left:0.5rem">${n.date}</span>` : ''}
-                            ${tagsHtml}
-                        </li>
-                    `;}).join('')}
-                </ul>
+                <div style="overflow-x:auto">
+                    <table style="width:100%;border-collapse:collapse;font-size:0.9rem">
+                        <thead>
+                            <tr style="border-bottom:1px solid var(--border);text-align:left">
+                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500">Title</th>
+                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500">Path</th>
+                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500;white-space:nowrap">Date</th>
+                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500;white-space:nowrap">Modified</th>
+                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500;white-space:nowrap">Viewed</th>
+                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500">Tags</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${displayNotes.map(n => {
+                                const aliasTag = n.alias ? ` <span style="color:var(--accent);font-size:0.8em">@${escapeHtml(n.alias)}</span>` : '';
+                                const linkedIcon = n.isLinked ? '<span style="color:var(--text-dim)" title="Linked note">↗</span> ' : '';
+                                // Format mtime as relative or date
+                                const mtimeStr = n.mtime ? formatRelativeTime(n.mtime * 1000) : '-';
+                                // Format lastViewed
+                                const viewedStr = n.lastViewed ? formatRelativeTime(new Date(n.lastViewed).getTime()) : '-';
+                                // Tags - limit to first 5
+                                const tags = n.tags || [];
+                                const displayTags = tags.slice(0, 5);
+                                const moreTags = tags.length > 5 ? ` <span style="color:var(--text-dim)">+${tags.length - 5} more</span>` : '';
+                                const tagsHtml = displayTags.map(t => `<span style="color:var(--text-dim);font-size:0.8rem;background:var(--surface);padding:0.1rem 0.3rem;border-radius:3px;margin-right:0.25rem">#${escapeHtml(t)}</span>`).join('') + moreTags;
+                                // Path relative to notebook (sections + filename)
+                                const relPath = (n.sections || []).length > 0 ? (n.sections.join('/') + '/' + n.filename) : n.filename;
+                                return `
+                                <tr style="border-bottom:1px solid var(--border)" class="note-row" onclick="loadNote('${escapeJs(n.path)}')">
+                                    <td style="padding:0.5rem">
+                                        <a href="javascript:void(0)" style="color:var(--accent);text-decoration:none">${linkedIcon}${escapeHtml(n.title)}</a>${aliasTag}
+                                    </td>
+                                    <td style="padding:0.5rem;color:var(--text-dim);font-size:0.85rem">${escapeHtml(relPath)}</td>
+                                    <td style="padding:0.5rem;color:var(--text-dim);white-space:nowrap">${n.date || '-'}</td>
+                                    <td style="padding:0.5rem;color:var(--text-dim);white-space:nowrap">${mtimeStr}</td>
+                                    <td style="padding:0.5rem;color:var(--text-dim);white-space:nowrap">${viewedStr}</td>
+                                    <td style="padding:0.5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tagsHtml || '-'}</td>
+                                </tr>
+                            `;}).join('')}
+                        </tbody>
+                    </table>
+                </div>
             `;
 
             // Add event listeners for sort and filter
@@ -708,6 +858,7 @@ TEMPLATE = """<!DOCTYPE html>
             if (sortSelect) {
                 sortSelect.addEventListener('change', (e) => {
                     notebookSortBy = e.target.value;
+                    savePreferences();
                     loadNotebook(name, false, false);
                 });
             }
@@ -726,6 +877,7 @@ TEMPLATE = """<!DOCTYPE html>
                     filterInput.setSelectionRange(filterInput.value.length, filterInput.value.length);
                 }
             }
+
         }
 
         let currentNoteMarkdown = ''; // Store markdown for copy function
@@ -897,7 +1049,6 @@ TEMPLATE = """<!DOCTYPE html>
             }
         }
 
-        let todoSortBy = 'section'; // 'section', 'notebook', 'due', 'priority', 'created'
         let todoFilter = ''; // Filter text for todos
         let todoFilterTimeout = null;
 
@@ -1075,6 +1226,7 @@ TEMPLATE = """<!DOCTYPE html>
 
         function changeTodoSort(value) {
             todoSortBy = value;
+            savePreferences();
             loadTodos();
         }
 
@@ -1381,6 +1533,68 @@ TEMPLATE = """<!DOCTYPE html>
             }
         }
 
+        async function loadHistory(pushHistory = true) {
+            currentNotebook = null;
+            currentNotePath = null;
+            document.getElementById('notes-section').style.display = 'none';
+            if (pushHistory) history.pushState({ view: 'history' }, '', '#history');
+
+            const historyData = await api('/history?type=' + historySortBy + '&limit=100');
+
+            // Format timestamp for display
+            function formatTimestamp(isoStr) {
+                const d = new Date(isoStr);
+                const now = new Date();
+                const diffMs = now - d;
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffHours = Math.floor(diffMs / 3600000);
+                const diffDays = Math.floor(diffMs / 86400000);
+
+                if (diffMins < 1) return 'just now';
+                if (diffMins < 60) return diffMins + ' min ago';
+                if (diffHours < 24) return diffHours + ' hour' + (diffHours > 1 ? 's' : '') + ' ago';
+                if (diffDays < 7) return diffDays + ' day' + (diffDays > 1 ? 's' : '') + ' ago';
+                return d.toLocaleDateString();
+            }
+
+            document.getElementById('content').innerHTML = `
+                <h1>History</h1>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+                    <p style="color:var(--text-dim)">${historyData.length} entries</p>
+                    <select id="historySort" style="padding:0.3rem 0.5rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem">
+                        <option value="viewed" ${historySortBy === 'viewed' ? 'selected' : ''}>Recently Viewed</option>
+                        <option value="modified" ${historySortBy === 'modified' ? 'selected' : ''}>Recently Modified</option>
+                    </select>
+                </div>
+                <div class="search-results">
+                    ${historyData.length === 0 ? '<p style="color:var(--text-dim)">No history yet. View some notes to build your history.</p>' : ''}
+                    ${historyData.map(h => {
+                        const nb = notebooksCache.find(n => n.name === h.notebook);
+                        const nbColor = nb && nb.color ? nb.color : 'var(--text-dim)';
+                        return `
+                            <div class="search-result" onclick="loadNote('${escapeJs(h.path)}')">
+                                <h4>${escapeHtml(h.title || h.path.split('/').pop().replace('.md', ''))}</h4>
+                                <div class="snippet">
+                                    ${h.notebook ? '<span class="color-dot" style="background:' + nbColor + '"></span><span style="color:var(--accent)">' + escapeHtml(h.notebook) + '</span> · ' : ''}
+                                    <span style="color:var(--text-dim)">${formatTimestamp(h.timestamp)}</span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+
+            // Add event listener for sort change
+            const sortSelect = document.getElementById('historySort');
+            if (sortSelect) {
+                sortSelect.addEventListener('change', (e) => {
+                    historySortBy = e.target.value;
+                    savePreferences();
+                    loadHistory(false);
+                });
+            }
+        }
+
         async function doSearch(query) {
             if (!query.trim()) {
                 loadHome();
@@ -1425,6 +1639,7 @@ TEMPLATE = """<!DOCTYPE html>
             else if (state.view === 'note') loadNote(state.path, false);
             else if (state.view === 'todos') loadTodos(false);
             else if (state.view === 'graph') loadGraph(false);
+            else if (state.view === 'history') loadHistory(false);
         });
 
         // Init - set initial state and load based on hash
@@ -1444,6 +1659,9 @@ TEMPLATE = """<!DOCTYPE html>
         } else if (hash === '#graph') {
             history.replaceState({ view: 'graph' }, '', hash);
             loadGraph(false);
+        } else if (hash === '#history') {
+            history.replaceState({ view: 'history' }, '', hash);
+            loadHistory(false);
         } else {
             history.replaceState({ view: 'home' }, '', '#');
             loadHome(false);
@@ -1491,7 +1709,46 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
 
         # API: List notebooks
         if path == "/api/notebooks":
+            from nb.index.db import get_db
+
+            db = get_db()
             nbs = []
+
+            # Get notebook stats from database
+            notebook_stats = {}
+            # Get max mtime per notebook
+            mtime_rows = db.fetchall(
+                """SELECT notebook, MAX(mtime) as last_modified
+                   FROM notes WHERE notebook IS NOT NULL
+                   GROUP BY notebook"""
+            )
+            for row in mtime_rows:
+                if row["notebook"]:
+                    notebook_stats[row["notebook"]] = {
+                        "last_modified": row["last_modified"],
+                        "last_viewed": None,
+                    }
+
+            # Get max viewed_at per notebook
+            view_rows = db.fetchall(
+                """SELECT n.notebook, MAX(nv.viewed_at) as last_viewed
+                   FROM note_views nv
+                   JOIN notes n ON nv.note_path = n.path
+                   WHERE n.notebook IS NOT NULL
+                   GROUP BY n.notebook"""
+            )
+            for row in view_rows:
+                if row["notebook"]:
+                    if row["notebook"] in notebook_stats:
+                        notebook_stats[row["notebook"]]["last_viewed"] = row[
+                            "last_viewed"
+                        ]
+                    else:
+                        notebook_stats[row["notebook"]] = {
+                            "last_modified": None,
+                            "last_viewed": row["last_viewed"],
+                        }
+
             # Regular notebooks
             for name in list_notebooks(config.notes_root):
                 notes_with_linked = get_notebook_notes_with_linked(
@@ -1499,12 +1756,15 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 )
                 nb_config = config.get_notebook(name)
                 color = get_color_hex(nb_config.color) if nb_config else None
+                stats = notebook_stats.get(name, {})
                 nbs.append(
                     {
                         "name": name,
                         "count": len(notes_with_linked),
                         "color": color,
                         "isLinked": False,
+                        "lastModified": stats.get("last_modified"),
+                        "lastViewed": stats.get("last_viewed"),
                     }
                 )
 
@@ -1515,6 +1775,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 virtual_nb = linked.notebook or f"@{linked.alias}"
                 if virtual_nb not in seen_notebooks:
                     files = scan_linked_note_files(linked)
+                    stats = notebook_stats.get(virtual_nb, {})
                     nbs.append(
                         {
                             "name": virtual_nb,
@@ -1522,6 +1783,8 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                             "color": "#39c5cf",  # Cyan for linked notebooks
                             "isLinked": True,
                             "alias": linked.alias,
+                            "lastModified": stats.get("last_modified"),
+                            "lastViewed": stats.get("last_viewed"),
                         }
                     )
                     seen_notebooks.add(virtual_nb)
@@ -1556,11 +1819,26 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
 
                 # Query notes for this virtual notebook from the database
                 note_rows = db.fetchall(
-                    """SELECT path, title, date, source_alias
+                    """SELECT path, title, date, source_alias, mtime
                        FROM notes WHERE notebook = ? AND external = 1
                        ORDER BY COALESCE(date, '') DESC, mtime DESC""",
                     (notebook,),
                 )
+
+                # Get lastViewed for all notes
+                # Note: note_views stores paths with OS separators, notes table uses forward slashes
+                from nb.utils.hashing import normalize_path
+
+                view_rows = db.fetchall(
+                    """SELECT note_path, MAX(viewed_at) as last_viewed
+                       FROM note_views
+                       GROUP BY note_path""",
+                )
+                # Normalize paths to forward slashes for lookup
+                last_viewed_map = {
+                    normalize_path(row["note_path"]): row["last_viewed"]
+                    for row in view_rows
+                }
 
                 if note_rows:
                     for row in note_rows:
@@ -1584,9 +1862,12 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                                 "title": row["title"] or note_path.stem,
                                 "filename": note_path.name,
                                 "date": row["date"],  # Already in YYYY-MM-DD format
+                                "mtime": row["mtime"],  # Unix timestamp
+                                "lastViewed": last_viewed_map.get(row["path"]),
                                 "tags": tags,
                                 "alias": note_alias,
                                 "isLinked": True,
+                                "sections": get_sections_for_path(note_path),
                             }
                         )
                 else:
@@ -1596,6 +1877,11 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                         note = get_note(file_path, config.notes_root)
                         path_str = str(file_path).replace("\\", "/")
                         note_alias = get_alias_for_path(file_path)
+                        # Get mtime from file stat
+                        try:
+                            file_mtime = file_path.stat().st_mtime
+                        except OSError:
+                            file_mtime = None
                         result.append(
                             {
                                 "path": path_str,
@@ -1606,9 +1892,12 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                                     if note and note.date
                                     else None
                                 ),
+                                "mtime": file_mtime,
+                                "lastViewed": last_viewed_map.get(path_str),
                                 "tags": note.tags if note else [],
                                 "alias": note_alias,
                                 "isLinked": True,
+                                "sections": get_sections_for_path(file_path),
                             }
                         )
             else:
@@ -1619,11 +1908,26 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
 
                 # Query notes with their dates from the database
                 note_rows = db.fetchall(
-                    """SELECT path, title, date, external, source_alias
+                    """SELECT path, title, date, external, source_alias, mtime
                        FROM notes WHERE notebook = ?
                        ORDER BY COALESCE(date, '') DESC, mtime DESC""",
                     (notebook,),
                 )
+
+                # Get lastViewed for all notes in this notebook
+                # Note: note_views stores paths with OS separators, notes table uses forward slashes
+                from nb.utils.hashing import normalize_path
+
+                view_rows = db.fetchall(
+                    """SELECT note_path, MAX(viewed_at) as last_viewed
+                       FROM note_views
+                       GROUP BY note_path""",
+                )
+                # Normalize paths to forward slashes for lookup
+                last_viewed_map = {
+                    normalize_path(row["note_path"]): row["last_viewed"]
+                    for row in view_rows
+                }
 
                 if note_rows:
                     # Use database results (faster, includes indexed dates)
@@ -1665,9 +1969,12 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                                 "title": row["title"] or note_path.stem,
                                 "filename": note_path.name,
                                 "date": row["date"],  # Already in YYYY-MM-DD format
+                                "mtime": row["mtime"],  # Unix timestamp
+                                "lastViewed": last_viewed_map.get(row["path"]),
                                 "tags": tags,
                                 "alias": note_alias,
                                 "isLinked": is_external,
+                                "sections": get_sections_for_path(note_path),
                             }
                         )
                 else:
@@ -1687,6 +1994,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                             note = get_note(full_path, config.notes_root)
                             path_str = str(full_path).replace("\\", "/")
                         else:
+                            full_path = config.notes_root / note_path
                             note = get_note(note_path, config.notes_root)
                             path_str = str(note_path).replace("\\", "/")
 
@@ -1696,6 +2004,12 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                             else config.notes_root / note_path
                         )
                         note_alias = get_alias_for_path(check_path) or linked_alias
+
+                        # Get mtime from file stat
+                        try:
+                            file_mtime = full_path.stat().st_mtime
+                        except OSError:
+                            file_mtime = None
 
                         result.append(
                             {
@@ -1707,9 +2021,14 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                                     if note and note.date
                                     else None
                                 ),
+                                "mtime": file_mtime,
+                                "lastViewed": last_viewed_map.get(
+                                    str(note_path).replace("\\", "/")
+                                ),
                                 "tags": note.tags if note else [],
                                 "alias": note_alias,
                                 "isLinked": is_linked,
+                                "sections": get_sections_for_path(note_path),
                             }
                         )
 
@@ -1736,6 +2055,11 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             content = full_path.read_text(encoding="utf-8")
             note = get_note(full_path, config.notes_root)
             note_alias = get_alias_for_path(full_path)
+
+            # Record the view for history tracking
+            from nb.core.notes import record_note_view
+
+            record_note_view(full_path, config.notes_root)
 
             self.send_json(
                 {
@@ -1995,6 +2319,80 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             )
             return
 
+        # API: History - recently viewed and modified notes
+        if path == "/api/history":
+            from nb.core.notes import (
+                get_recently_modified_notes,
+                get_recently_viewed_notes,
+            )
+
+            limit = int(query.get("limit", [50])[0])
+            history_type = query.get("type", ["viewed"])[0]  # 'viewed' or 'modified'
+
+            result = []
+
+            if history_type == "modified":
+                # Get recently modified notes
+                notes = get_recently_modified_notes(limit=limit)
+                for note_path, mtime in notes:
+                    try:
+                        rel_path = note_path.relative_to(config.notes_root)
+                        path_str = str(rel_path).replace("\\", "/")
+                    except ValueError:
+                        # External path
+                        path_str = str(note_path).replace("\\", "/")
+
+                    # Get note metadata from database
+                    from nb.index.db import get_db
+
+                    db = get_db()
+                    row = db.fetchone(
+                        "SELECT title, notebook FROM notes WHERE path = ?",
+                        (path_str,),
+                    )
+
+                    result.append(
+                        {
+                            "path": path_str,
+                            "title": row["title"] if row else note_path.stem,
+                            "notebook": row["notebook"] if row else None,
+                            "timestamp": mtime.isoformat(),
+                            "type": "modified",
+                        }
+                    )
+            else:
+                # Get recently viewed notes
+                views = get_recently_viewed_notes(limit=limit)
+                for note_path, viewed_at in views:
+                    try:
+                        rel_path = note_path.relative_to(config.notes_root)
+                        path_str = str(rel_path).replace("\\", "/")
+                    except ValueError:
+                        # External path
+                        path_str = str(note_path).replace("\\", "/")
+
+                    # Get note metadata from database
+                    from nb.index.db import get_db
+
+                    db = get_db()
+                    row = db.fetchone(
+                        "SELECT title, notebook FROM notes WHERE path = ?",
+                        (path_str,),
+                    )
+
+                    result.append(
+                        {
+                            "path": path_str,
+                            "title": row["title"] if row else note_path.stem,
+                            "notebook": row["notebook"] if row else None,
+                            "timestamp": viewed_at.isoformat(),
+                            "type": "viewed",
+                        }
+                    )
+
+            self.send_json(result)
+            return
+
         # 404
         self.send_response(404)
         self.end_headers()
@@ -2177,9 +2575,6 @@ def run_server(
             webbrowser.open(f"http://localhost:{port}")
 
         threading.Thread(target=open_delayed, daemon=True).start()
-
-    print(f"Serving at http://localhost:{port}")
-    print("Press Ctrl+C to stop")
 
     try:
         # poll_interval=0.5 allows Ctrl+C to be detected on Windows

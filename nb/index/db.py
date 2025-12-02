@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 # Current schema version
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -270,6 +270,31 @@ CREATE INDEX IF NOT EXISTS idx_note_links_target ON note_links(target_path);
 CREATE INDEX IF NOT EXISTS idx_note_links_external ON note_links(is_external);
 """
 
+# Phase 14 additions: path-based sections for notes and todos
+SCHEMA_V15 = """
+-- Note sections (subdirectory hierarchy from path)
+CREATE TABLE IF NOT EXISTS note_sections (
+    note_path TEXT NOT NULL,
+    section TEXT NOT NULL,
+    depth INTEGER NOT NULL,
+    PRIMARY KEY (note_path, section),
+    FOREIGN KEY (note_path) REFERENCES notes(path) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_note_sections_section ON note_sections(section);
+
+-- Todo sections (inherited from note path)
+CREATE TABLE IF NOT EXISTS todo_sections (
+    todo_id TEXT NOT NULL,
+    section TEXT NOT NULL,
+    depth INTEGER NOT NULL,
+    PRIMARY KEY (todo_id, section),
+    FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_todo_sections_section ON todo_sections(section);
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -286,6 +311,7 @@ MIGRATIONS: dict[int, str] = {
     12: SCHEMA_V12,
     13: SCHEMA_V13,
     14: SCHEMA_V14,
+    15: SCHEMA_V15,
 }
 
 
@@ -418,6 +444,8 @@ def rebuild_db(db: Database) -> None:
     """
     # Drop all tables in reverse dependency order
     tables = [
+        "todo_sections",
+        "note_sections",
         "todo_tags",
         "note_tags",
         "note_links",

@@ -17,6 +17,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 
    installation
    quickstart
+   best-practices
 
 .. toctree::
    :maxdepth: 2
