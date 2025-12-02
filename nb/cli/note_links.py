@@ -181,7 +181,6 @@ def _check_broken_links(
     from nb.core.note_links import get_broken_links
 
     # config = get_config()
-
     # Resolve specific note if provided
     note_path = None
     if note_ref:

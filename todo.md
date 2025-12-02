@@ -102,14 +102,14 @@ todo_exclude: true
 
 ### Active
 - [x] Add a 'recently viewed/edited notes' page on nb web
-- [^] Add a way to title a new note from command line
-- [^] Figure out how to handle subdirs in notes better and include in hierarchy, perhaps as a 'section' in a notebook?
+- [x] Add a way to title a new note from command line
+- [x] Figure out how to handle subdirs in notes better and include in hierarchy, perhaps as a 'section' in a notebook?
 - [ ] kanban view for nb todo and nb web
 - [x] for links: Web UI - clickable links, backlinks panel, graph view
 - [x] for links: ASCII graph - nb graph <note>
 - [x] for links: Related notes - nb related <note> combining links + tags + embeddings
 - [ ] Capture url and other file attachments as markdown using all2md #feature
-- [^] Add `nb where <notebook|note|note-alias>` command that simply prints the path to stdout
+- [x] Add `nb where <notebook|note|note-alias>` command that simply prints the path to stdout
 - [ ] Need some kind of display of the frontmatter stuff on the `nb web` page
 - [ ] Allow search within specific notebooks as well in `nb web` command
 - [^] Allow opening notes by title partial match

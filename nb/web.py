@@ -237,6 +237,42 @@ TEMPLATE = """<!DOCTYPE html>
         #content th { background: var(--surface); }
         #content img { max-width: 100%; }
 
+        /* Frontmatter panel */
+        .frontmatter-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .frontmatter-panel h4 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            margin-bottom: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+        .frontmatter-panel dl {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 0.5rem;
+            margin: 0;
+        }
+        .frontmatter-panel .fm-row {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .frontmatter-panel dt {
+            color: var(--text-dim);
+            font-size: 0.85rem;
+            min-width: 80px;
+        }
+        .frontmatter-panel dd {
+            color: var(--text);
+            font-size: 0.85rem;
+            margin: 0;
+        }
+
         /* Backlinks panel */
         .backlinks-panel {
             margin-top: 2rem;
@@ -929,11 +965,32 @@ TEMPLATE = """<!DOCTYPE html>
                 `;
             }
 
+            // Build frontmatter panel if present
+            let frontmatterHtml = '';
+            if (note.frontmatter && Object.keys(note.frontmatter).length > 0) {
+                const formatValue = (val) => {
+                    if (Array.isArray(val)) return val.join(', ');
+                    if (typeof val === 'object') return JSON.stringify(val);
+                    return String(val);
+                };
+                frontmatterHtml = `
+                    <div class="frontmatter-panel">
+                        <h4>Properties</h4>
+                        <dl>
+                            ${Object.entries(note.frontmatter).map(([key, val]) =>
+                                `<div class="fm-row"><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(formatValue(val))}</dd></div>`
+                            ).join('')}
+                        </dl>
+                    </div>
+                `;
+            }
+
             document.getElementById('content').innerHTML = `
                 <div class="header-actions">
                     <button class="btn" onclick="editNote('${escapeJs(path)}')">Edit</button>
                     <button class="btn" id="copyNoteBtn" onclick="copyNote()">Copy</button>
                 </div>
+                ${frontmatterHtml}
                 <div id="note-content">${marked.parse(content)}${aliasBadge ? `<p style="margin-top:1rem;color:var(--text-dim);font-size:0.85rem">Alias: <span style="color:var(--accent)">@${escapeHtml(note.alias || '')}</span></p>` : ''}</div>
                 ${backlinksHtml}
             `;
@@ -2056,6 +2113,32 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             note = get_note(full_path, config.notes_root)
             note_alias = get_alias_for_path(full_path)
 
+            # Parse frontmatter for display
+            from datetime import date, datetime
+
+            from nb.utils.markdown import parse_note_file
+
+            def serialize_frontmatter(fm: dict) -> dict:
+                """Convert frontmatter values to JSON-serializable types."""
+                result = {}
+                for key, val in fm.items():
+                    if isinstance(val, (date, datetime)):
+                        result[key] = val.isoformat()
+                    elif isinstance(val, list):
+                        result[key] = [
+                            v.isoformat() if isinstance(v, (date, datetime)) else v
+                            for v in val
+                        ]
+                    else:
+                        result[key] = val
+                return result
+
+            try:
+                frontmatter_dict, _ = parse_note_file(full_path)
+                frontmatter_dict = serialize_frontmatter(frontmatter_dict)
+            except Exception:
+                frontmatter_dict = {}
+
             # Record the view for history tracking
             from nb.core.notes import record_note_view
 
@@ -2067,6 +2150,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                     "title": note.title if note else full_path.stem,
                     "path": note_path_str,
                     "alias": note_alias,
+                    "frontmatter": frontmatter_dict,
                 }
             )
             return
@@ -2543,6 +2627,19 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             # Ensure parent directory exists
             full_path.parent.mkdir(parents=True, exist_ok=True)
             full_path.write_text(content, encoding="utf-8")
+
+            # Reindex the note in a separate thread (can be slow for large files)
+            import threading
+
+            def reindex_note():
+                try:
+                    from nb.index.scanner import index_note
+
+                    index_note(full_path, config.notes_root, index_vectors=True)
+                except Exception:
+                    pass  # Save succeeded, don't fail if indexing fails
+
+            threading.Thread(target=reindex_note, daemon=True).start()
 
             self.send_json({"success": True, "path": note_path})
             return

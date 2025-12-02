@@ -354,6 +354,8 @@ nb todo due abc def friday     # Set multiple todos at once
 nb todo all-done friday        # Mark all todos in Friday's daily note complete
 nb todo all-done work/project  # Mark all in work/project.md
 nb todo all-done friday -f     # Skip confirmation
+nb todo all-done friday -i     # Only mark in-progress todos as complete
+nb todo all-done friday -i -f  # In-progress only, skip confirmation
 
 # Saved views
 nb todo -n work -t urgent --create-view work-urgent  # Save current filters as a view

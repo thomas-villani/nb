@@ -2409,14 +2409,26 @@ def todo_review(
     help="Notebook to search in",
     shell_complete=complete_notebook,
 )
+@click.option(
+    "--in-progress",
+    "-i",
+    "in_progress_only",
+    is_flag=True,
+    help="Only mark in-progress todos as completed (not pending)",
+)
 @click.option("--force", "-f", is_flag=True, help="Skip confirmation")
-def todo_all_done(note_ref: str, notebook: str | None, force: bool) -> None:
+def todo_all_done(
+    note_ref: str, notebook: str | None, in_progress_only: bool, force: bool
+) -> None:
     """Mark all todos in a note as completed.
 
     NOTE_REF can be:
     - A note name: "myproject", "friday"
     - A notebook/note path: "work/myproject", "daily/friday"
     - A note alias (from 'nb alias')
+
+    Use --in-progress to only mark in-progress todos as completed,
+    leaving pending todos unchanged.
 
     \b
     Examples:
@@ -2425,6 +2437,7 @@ def todo_all_done(note_ref: str, notebook: str | None, force: bool) -> None:
       nb todo all-done work/myproject         # Same as above
       nb todo all-done myalias                # By alias
       nb todo all-done friday -f              # Skip confirmation
+      nb todo all-done friday --in-progress   # Only complete in-progress todos
     """
     from rich.prompt import Confirm
 
@@ -2451,21 +2464,40 @@ def todo_all_done(note_ref: str, notebook: str | None, force: bool) -> None:
 
     # Query incomplete todos for this note
     normalized_path = normalize_path(note_path)
-    todos = query_todos(
-        completed=False,
-        notes=[normalized_path],
-        parent_only=False,  # Include subtasks
-        exclude_note_excluded=False,  # Don't exclude - user explicitly asked
-    )
+    if in_progress_only:
+        # Only get IN_PROGRESS todos (not PENDING)
+        todos = query_todos(
+            status=TodoStatus.IN_PROGRESS,
+            notes=[normalized_path],
+            parent_only=False,  # Include subtasks
+            exclude_note_excluded=False,  # Don't exclude - user explicitly asked
+        )
+    else:
+        # Get all incomplete todos (PENDING + IN_PROGRESS)
+        todos = query_todos(
+            completed=False,
+            notes=[normalized_path],
+            parent_only=False,  # Include subtasks
+            exclude_note_excluded=False,  # Don't exclude - user explicitly asked
+        )
 
     if not todos:
-        console.print(f"[dim]No incomplete todos in {note_path.name}[/dim]")
+        if in_progress_only:
+            console.print(f"[dim]No in-progress todos in {note_path.name}[/dim]")
+        else:
+            console.print(f"[dim]No incomplete todos in {note_path.name}[/dim]")
         return
 
     # Show confirmation unless --force
     if not force:
-        console.print(f"\n[bold]Mark all todos as done in:[/bold] {note_path.name}")
-        console.print(f"[dim]Found {len(todos)} incomplete todo(s)[/dim]")
+        if in_progress_only:
+            console.print(
+                f"\n[bold]Mark in-progress todos as done in:[/bold] {note_path.name}"
+            )
+            console.print(f"[dim]Found {len(todos)} in-progress todo(s)[/dim]")
+        else:
+            console.print(f"\n[bold]Mark all todos as done in:[/bold] {note_path.name}")
+            console.print(f"[dim]Found {len(todos)} incomplete todo(s)[/dim]")
 
         for t in todos[:5]:
             console.print(

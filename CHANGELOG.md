@@ -1,4 +1,4 @@
-# v0.2.1 - 2025-12-02
+# v0.2.2 - 2025-12-02
 
 ## New Features
 
@@ -25,6 +25,12 @@
   nb open "quarterly report"  # Opens note with matching title
   ```
 
+- **`nb todo all-done --in-progress`**: New flag to mark only in-progress (`[^]`) todos as completed, leaving pending (`[ ]`) todos unchanged. Useful for bulk-completing items you've been actively working on.
+  ```bash
+  nb todo all-done friday -i     # Only complete in-progress todos
+  nb todo all-done friday -i -f  # Skip confirmation
+  ```
+
 
 ### Note Linking Enhancements
 
@@ -47,6 +53,14 @@
   - Semantic similarity (0.5 × similarity score)
 
   Options: `--links-only`, `--tags-only`, `--semantic-only` to filter by signal type.
+
+
+### Web UI Enhancements
+
+- **Frontmatter display**: Notes with YAML frontmatter now show a "Properties" panel above the content, displaying all metadata fields (title, date, tags, custom fields, etc.) in a clean grid layout.
+
+- **Auto-reindex on save**: When editing and saving a note via the web UI, the note is now automatically reindexed in the background. This ensures todos, tags, links, and search results stay current without needing to manually run `nb index`.
+
 
 ### Web API Additions
 
