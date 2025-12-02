@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 # Current schema version
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -208,6 +208,50 @@ UPDATE todos SET completed_date = created_date WHERE status = 'completed' AND co
 CREATE INDEX IF NOT EXISTS idx_todos_completed_date ON todos(completed_date);
 """
 
+# Phase 12 additions: per-notebook alias uniqueness
+SCHEMA_V13 = """
+-- Migrate note_aliases to allow same alias in different notebooks
+-- Create new table with composite primary key
+CREATE TABLE IF NOT EXISTS note_aliases_new (
+    alias TEXT NOT NULL,
+    path TEXT NOT NULL,
+    notebook TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (alias, notebook)
+);
+
+-- Copy existing data (use empty string for NULL notebooks)
+INSERT OR IGNORE INTO note_aliases_new (alias, path, notebook)
+SELECT alias, path, COALESCE(notebook, '') FROM note_aliases;
+
+-- Drop old table and rename
+DROP TABLE IF EXISTS note_aliases;
+ALTER TABLE note_aliases_new RENAME TO note_aliases;
+
+-- Recreate index
+CREATE INDEX IF NOT EXISTS idx_note_aliases_path ON note_aliases(path);
+
+-- Migrate linked_notes to allow same alias in different notebooks
+CREATE TABLE IF NOT EXISTS linked_notes_new (
+    alias TEXT NOT NULL,
+    path TEXT NOT NULL,
+    notebook TEXT NOT NULL DEFAULT '',
+    recursive INTEGER DEFAULT 1,
+    todo_exclude INTEGER DEFAULT 0,
+    sync INTEGER DEFAULT 1,
+    PRIMARY KEY (alias, notebook)
+);
+
+-- Copy existing data (use empty string for NULL notebooks)
+INSERT OR IGNORE INTO linked_notes_new (alias, path, notebook, recursive, todo_exclude, sync)
+SELECT alias, path, COALESCE(notebook, ''), recursive, COALESCE(todo_exclude, 0), COALESCE(sync, 1) FROM linked_notes;
+
+-- Drop old table and rename
+DROP TABLE IF EXISTS linked_notes;
+ALTER TABLE linked_notes_new RENAME TO linked_notes;
+
+-- Note: removed UNIQUE constraint on path - same file can be linked multiple times with different aliases
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -222,6 +266,7 @@ MIGRATIONS: dict[int, str] = {
     10: SCHEMA_V10,
     11: SCHEMA_V11,
     12: SCHEMA_V12,
+    13: SCHEMA_V13,
 }
 
 

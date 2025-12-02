@@ -531,6 +531,7 @@ def _list_todos(
 
     # Calculate date ranges for filters
     today_date = date.today()
+    tomorrow_date = today_date + timedelta(days=1)
     week_start, week_end = get_week_range()
 
     # Build query parameters based on filters
@@ -617,6 +618,7 @@ def _list_todos(
         "OVERDUE": [],
         "IN PROGRESS": [],
         "DUE TODAY": [],
+        "DUE TOMORROW": [],
         "DUE THIS WEEK": [],
         "DUE NEXT WEEK": [],
         "DUE LATER": [],
@@ -636,6 +638,8 @@ def _list_todos(
                 groups["OVERDUE"].append(t)
             elif due == today_date:
                 groups["DUE TODAY"].append(t)
+            elif due == tomorrow_date:
+                groups["DUE TOMORROW"].append(t)
             elif due <= week_end:
                 groups["DUE THIS WEEK"].append(t)
             elif due <= next_week_end:
@@ -668,10 +672,9 @@ def _list_todos(
                 todo.content.lower(),
                 todo.line_number,
             )
-        else:  # source (default)
-            # For source sorting, put line_number before content to maintain document order
-            source_str = _format_todo_source(todo)
-            return (source_str.lower(), todo.line_number, todo.content.lower())
+        else:  # default: sort by due date, then line_number to preserve document order
+            due = todo.due_date_only if todo.due_date else date.max
+            return (due, todo.line_number, todo.content.lower())
 
     for group_todos in groups.values():
         group_todos.sort(key=get_sort_key)
@@ -703,28 +706,30 @@ def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
     """Calculate column widths for aligned todo output.
 
     Uses dynamic terminal width with progressive truncation:
-    1. First, try full layout with all columns
-    2. If too wide, eliminate "created" column
-    3. If still too wide, shrink source to notebook only
-    4. If still too wide, hide due date column
+    1. Full layout with all columns + tags (wide terminals, >130)
+    2. No created/tags, no-section source (medium terminals, 90-130)
+    3. No created/tags, compact source - notebook only (narrower)
+    4. Minimal - hide due date column (very narrow)
 
     Returns dict with column widths and visibility flags:
     - content, source, created, due, priority: int widths
-    - show_created, show_due, compact_source: bool flags
+    - show_created, show_due, compact_source, nosection_source: bool flags
     """
     terminal_width = console.width or 120
     # Cap terminal width to prevent excessively long lines
     # (some terminals/environments report width larger than visible area)
-    terminal_width = min(terminal_width, 120)
+    terminal_width = min(terminal_width, 150)
     min_content_width = 25
     max_content_width = 60  # Don't pad content beyond this for readability
 
     # Calculate full source width based on actual content (min 15, max 30)
     # Account for icons which add ~2 visual chars (emoji + space)
     max_source_full = 15
+    max_source_nosection = 12  # notebook/note without section
     max_source_compact = 8  # notebook only
     for t in todos:
         source_str = _format_todo_source(t)
+        nosection_str = _format_nosection_source(t)
         # Check if notebook has an icon
         parts = _get_todo_source_parts(t)
         _, icon = (
@@ -736,11 +741,16 @@ def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
 
         # Full source includes icon width
         max_source_full = max(max_source_full, len(source_str) + icon_width)
+        # No-section source (notebook/note)
+        max_source_nosection = max(
+            max_source_nosection, len(nosection_str) + icon_width
+        )
         # Compact is notebook + icon
         notebook_len = len(parts["notebook"]) if parts["notebook"] else 0
         max_source_compact = max(max_source_compact, notebook_len + icon_width)
 
     source_width_full = min(max_source_full, 30)
+    source_width_nosection = min(max_source_nosection, 25)
     source_width_compact = min(max_source_compact, 15)
 
     # Fixed widths
@@ -767,9 +777,16 @@ def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
         return total
 
     # Try configurations in order of preference
-    # 1. Full layout with all columns
+    # Use explicit width thresholds for better control over medium-width terminals
+    #
+    # Tags add variable width (only shown in full layout with show_created=True)
+    # so we need extra buffer for step 1 to avoid wrapping
+
+    # 1. Full layout with all columns (wide terminals, typically > 130)
+    # Requires extra room for tags (estimate ~20 chars for up to 3 tags)
     fixed_total = calc_total(source_width_full, show_created=True, show_due=True)
-    content_width = min(terminal_width - fixed_total, max_content_width)
+    tags_buffer = 20  # Space for tags which aren't in calc_total
+    content_width = min(terminal_width - fixed_total - tags_buffer, max_content_width)
     if content_width >= min_content_width:
         return {
             "content": content_width,
@@ -780,24 +797,27 @@ def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
             "show_created": True,
             "show_due": True,
             "compact_source": False,
+            "nosection_source": False,
         }
 
-    # 2. Remove created column
-    fixed_total = calc_total(source_width_full, show_created=False, show_due=True)
+    # 2. Remove created/tags and use no-section source (medium terminals, 90-130)
+    # Tags are not shown when show_created=False, so no buffer needed
+    fixed_total = calc_total(source_width_nosection, show_created=False, show_due=True)
     content_width = min(terminal_width - fixed_total, max_content_width)
     if content_width >= min_content_width:
         return {
             "content": content_width,
-            "source": source_width_full,
+            "source": source_width_nosection,
             "created": 0,
             "due": due_width,
             "priority": priority_width,
             "show_created": False,
             "show_due": True,
             "compact_source": False,
+            "nosection_source": True,
         }
 
-    # 3. Remove created and use compact source (notebook only)
+    # 3. Remove created and use compact source (notebook only, narrower terminals)
     fixed_total = calc_total(source_width_compact, show_created=False, show_due=True)
     content_width = min(terminal_width - fixed_total, max_content_width)
     if content_width >= min_content_width:
@@ -810,9 +830,10 @@ def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
             "show_created": False,
             "show_due": True,
             "compact_source": True,
+            "nosection_source": False,
         }
 
-    # 4. Remove created, compact source, and hide due date
+    # 4. Remove created, compact source, and hide due date (very narrow)
     fixed_total = calc_total(source_width_compact, show_created=False, show_due=False)
     content_width = min(
         max(terminal_width - fixed_total, min_content_width), max_content_width
@@ -826,6 +847,7 @@ def _calculate_column_widths(todos: list) -> dict[str, int | bool]:
         "show_created": False,
         "show_due": False,
         "compact_source": True,
+        "nosection_source": False,
     }
 
 
@@ -1031,6 +1053,110 @@ def _format_colored_todo_source(t, width: int = 0, max_section_len: int = 15) ->
     return colored
 
 
+def _format_nosection_source(t, max_width: int = 0) -> str:
+    """Format the source of a todo without section (notebook/note only).
+
+    Used for medium-width terminals where full source with section is too wide,
+    but compact (notebook only) loses too much context.
+
+    Args:
+        t: Todo object
+        max_width: Maximum width (0 = no limit)
+    """
+    parts = _get_todo_source_parts(t)
+    if not parts["notebook"] and not parts["note"]:
+        return ""
+
+    if parts["notebook"] and parts["note"]:
+        result = f"{parts['notebook']}/{parts['note']}"
+    elif parts["notebook"]:
+        result = parts["notebook"]
+    else:
+        result = parts["note"]
+
+    if max_width > 0 and len(result) > max_width:
+        result = result[: max_width - 1] + "…"
+
+    return result
+
+
+def _format_colored_nosection_source(t, width: int = 0) -> str:
+    """Format source without section (notebook/note) with colors.
+
+    Args:
+        t: Todo object
+        width: Width for the column (pads if shorter, truncates if longer)
+
+    Returns:
+        Rich-formatted string with colors.
+    """
+    parts = _get_todo_source_parts(t)
+
+    if not parts["notebook"] and not parts["note"]:
+        return " " * width if width > 0 else ""
+
+    notebook = parts["notebook"]
+    note = parts["note"]
+    color, icon = get_notebook_display_info(notebook) if notebook else ("white", None)
+
+    # Icons take ~2 visual chars (emoji + space)
+    icon_width = 2 if icon else 0
+
+    # Build plain source for width calculation
+    if notebook and note:
+        plain_source = f"{notebook}/{note}"
+    elif notebook:
+        plain_source = notebook
+    else:
+        plain_source = note
+
+    # Adjust available width for text (reserve space for icon)
+    text_width = max(width - icon_width, 10) if width > 0 else 0
+
+    # Truncate if needed
+    if text_width > 0 and len(plain_source) > text_width:
+        # Try to keep at least some of both parts
+        truncated = plain_source[: text_width - 1] + "…"
+    else:
+        truncated = plain_source
+
+    # Build colored version
+    colored_parts = []
+    remaining = truncated
+
+    if notebook and remaining.startswith(notebook):
+        icon_prefix = f"{icon} " if icon else ""
+        colored_parts.append(f"[{color}]{icon_prefix}{notebook}[/{color}]")
+        remaining = remaining[len(notebook) :]
+    elif notebook:
+        # Notebook was truncated
+        icon_prefix = f"{icon} " if icon else ""
+        colored_parts.append(f"[{color}]{icon_prefix}{remaining}[/{color}]")
+        remaining = ""
+
+    if remaining.startswith("/") and note:
+        colored_parts.append("/")
+        remaining = remaining[1:]
+        if remaining.endswith("…"):
+            colored_parts.append(f"[blue]{remaining}[/blue]")
+        elif remaining:
+            colored_parts.append(f"[blue]{remaining}[/blue]")
+        remaining = ""
+
+    if remaining:
+        colored_parts.append(remaining)
+
+    colored = "".join(colored_parts)
+
+    # Calculate visual length for padding (text + icon)
+    if width > 0:
+        visual_len = len(truncated) + icon_width
+        if visual_len < width:
+            colored += " " * (width - visual_len)
+
+    return colored
+
+
 def _format_compact_source(t, max_width: int = 0) -> str:
     """Format the source of a todo in compact mode (notebook only).
 
@@ -1107,6 +1233,7 @@ def _print_todo(
     show_created = widths.get("show_created", True) if widths else True
     show_due = widths.get("show_due", True) if widths else True
     compact_source = widths.get("compact_source", False) if widths else False
+    nosection_source = widths.get("nosection_source", False) if widths else False
 
     # Build content - truncate if needed for alignment
     # Reduce content width by indent amount to keep columns aligned
@@ -1118,11 +1245,18 @@ def _print_todo(
     else:
         content_display = content.ljust(content_width)
 
-    # Build source column (colored) - compact mode shows only notebook
+    # Build source column (colored) - different modes for different widths
     source_width = widths["source"] if widths else 15
     if compact_source:
         source_str = _format_compact_source(t)
         source_part = _format_colored_compact_source(t, source_width)
+    elif nosection_source:
+        source_str = _format_nosection_source(t)
+        source_part = (
+            _format_colored_nosection_source(t, source_width)
+            if source_str
+            else " " * source_width
+        )
     else:
         source_str = _format_todo_source(t)
         source_part = (
@@ -1172,8 +1306,9 @@ def _print_todo(
     tags_part = f"  [cyan]{tags_str}[/cyan]" if tags_str else ""
 
     # Build line based on visible columns
+    # ID stays left-aligned, indent comes after ID before checkbox
     line_parts = [
-        f"{prefix}[dim]{short_id}[/dim] {checkbox} {content_part}  {source_part}"
+        f"[dim]{short_id}[/dim] {prefix}{checkbox} {content_part}  {source_part}"
     ]
 
     if show_created:
@@ -1198,6 +1333,7 @@ def _print_todo(
 @click.argument("text", required=False)
 @click.option(
     "--today",
+    "-t",
     "add_today",
     is_flag=True,
     help="Add to today's daily note instead of inbox",

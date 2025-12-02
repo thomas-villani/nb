@@ -414,6 +414,32 @@ TEMPLATE = """<!DOCTYPE html>
         let currentNotePath = null;
         let searchTimeout = null;
         let notebooksCache = [];
+        let notebookSortBy = 'date-desc'; // 'date-desc', 'date-asc', 'title-asc', 'title-desc', 'filename'
+        let notebookFilter = '';
+        let notebookFilterTimeout = null;
+        let cachedNotebookNotes = []; // Cache notes for current notebook
+
+        function sortNotes(notes, sortBy) {
+            return [...notes].sort((a, b) => {
+                if (sortBy === 'date-desc') return (b.date || '').localeCompare(a.date || '');
+                if (sortBy === 'date-asc') return (a.date || '9999').localeCompare(b.date || '9999');
+                if (sortBy === 'title-asc') return (a.title || '').localeCompare(b.title || '');
+                if (sortBy === 'title-desc') return (b.title || '').localeCompare(a.title || '');
+                if (sortBy === 'filename') return (a.filename || '').localeCompare(b.filename || '');
+                return 0;
+            });
+        }
+
+        function filterNotes(notes, filter) {
+            if (!filter.trim()) return notes;
+            const f = filter.trim().toLowerCase();
+            return notes.filter(n => {
+                return (n.title || '').toLowerCase().includes(f) ||
+                    (n.filename || '').toLowerCase().includes(f) ||
+                    (n.alias || '').toLowerCase().includes(f) ||
+                    (n.tags || []).some(t => t.toLowerCase().includes(f));
+            });
+        }
 
         // Get today's date in local timezone (YYYY-MM-DD)
         function getToday() {
@@ -467,14 +493,21 @@ TEMPLATE = """<!DOCTYPE html>
             `;
         }
 
-        async function loadNotebook(name, pushHistory = true) {
+        async function loadNotebook(name, pushHistory = true, fetchNotes = true) {
             currentNotebook = name;
             currentNotePath = null;
             if (pushHistory) history.pushState({ view: 'notebook', name }, '', '#notebook/' + encodeURIComponent(name));
-            const notes = await api('/notebooks/' + encodeURIComponent(name));
+
+            if (fetchNotes) {
+                cachedNotebookNotes = await api('/notebooks/' + encodeURIComponent(name));
+            }
+
+            // Apply filter and sort
+            let displayNotes = filterNotes(cachedNotebookNotes, notebookFilter);
+            displayNotes = sortNotes(displayNotes, notebookSortBy);
 
             document.getElementById('notes-section').style.display = 'block';
-            document.getElementById('notes').innerHTML = notes
+            document.getElementById('notes').innerHTML = displayNotes
                 .map(n => {
                     const aliasTag = n.alias ? ` <span style="color:var(--accent);font-size:0.8em">@${escapeHtml(n.alias)}</span>` : '';
                     const linkedIcon = n.isLinked ? '<span style="color:var(--text-dim)" title="Linked note">↗</span> ' : '';
@@ -491,20 +524,60 @@ TEMPLATE = """<!DOCTYPE html>
                 <div class="header-actions">
                     ${!isVirtualNb ? `<button class="btn btn-primary" onclick="showNewNoteForm('${escapeJs(name)}')">+ New Note</button>` : ''}
                 </div>
-                <p style="color:var(--text-dim)">${notes.length} notes</p>
+                <input type="text" class="search-box" id="notebookFilterInput" placeholder="Filter notes by title, filename, alias, or tag..." value="${escapeHtml(notebookFilter)}" style="margin:0.5rem 0">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+                    <p style="color:var(--text-dim)">${displayNotes.length} of ${cachedNotebookNotes.length} notes</p>
+                    <select id="notebookSort" style="padding:0.3rem 0.5rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem">
+                        <option value="date-desc" ${notebookSortBy === 'date-desc' ? 'selected' : ''}>Date (Newest)</option>
+                        <option value="date-asc" ${notebookSortBy === 'date-asc' ? 'selected' : ''}>Date (Oldest)</option>
+                        <option value="title-asc" ${notebookSortBy === 'title-asc' ? 'selected' : ''}>Title (A-Z)</option>
+                        <option value="title-desc" ${notebookSortBy === 'title-desc' ? 'selected' : ''}>Title (Z-A)</option>
+                        <option value="filename" ${notebookSortBy === 'filename' ? 'selected' : ''}>Filename</option>
+                    </select>
+                </div>
                 <ul style="margin-top:1rem">
-                    ${notes.map(n => {
+                    ${displayNotes.map(n => {
                         const aliasTag = n.alias ? `<span style="color:var(--accent);margin-left:0.5rem">@${escapeHtml(n.alias)}</span>` : '';
                         const linkedIcon = n.isLinked ? '<span style="color:var(--text-dim)" title="Linked note">↗</span> ' : '';
+                        const tagsHtml = (n.tags || []).length > 0 ?
+                            `<span style="margin-left:0.5rem">${n.tags.map(t => `<span style="color:var(--text-dim);font-size:0.8rem;background:var(--surface);padding:0.1rem 0.3rem;border-radius:3px;margin-right:0.25rem">#${escapeHtml(t)}</span>`).join('')}</span>` : '';
                         return `
                         <li style="margin:0.5rem 0">
                             <a href="javascript:void(0)" onclick="loadNote('${escapeJs(n.path)}')">${linkedIcon}${escapeHtml(n.title)}</a>${aliasTag}
+                            <span style="color:var(--text-dim);margin-left:0.5rem;font-size:0.85rem">${escapeHtml(n.filename)}</span>
                             ${n.date ? `<span style="color:var(--text-dim);margin-left:0.5rem">${n.date}</span>` : ''}
+                            ${tagsHtml}
                         </li>
                     `;}).join('')}
                 </ul>
             `;
+
+            // Add event listeners for sort and filter
+            const sortSelect = document.getElementById('notebookSort');
+            if (sortSelect) {
+                sortSelect.addEventListener('change', (e) => {
+                    notebookSortBy = e.target.value;
+                    loadNotebook(name, false, false);
+                });
+            }
+
+            const filterInput = document.getElementById('notebookFilterInput');
+            if (filterInput) {
+                filterInput.addEventListener('input', (e) => {
+                    clearTimeout(notebookFilterTimeout);
+                    notebookFilterTimeout = setTimeout(() => {
+                        notebookFilter = e.target.value;
+                        loadNotebook(name, false, false);
+                    }, 300);
+                });
+                if (notebookFilter) {
+                    filterInput.focus();
+                    filterInput.setSelectionRange(filterInput.value.length, filterInput.value.length);
+                }
+            }
         }
+
+        let currentNoteMarkdown = ''; // Store markdown for copy function
 
         async function loadNote(path, pushHistory = true) {
             currentNotePath = path;
@@ -520,11 +593,15 @@ TEMPLATE = """<!DOCTYPE html>
                 }
             }
 
+            // Store markdown for copy function
+            currentNoteMarkdown = content;
+
             const aliasBadge = note.alias ? `<span style="color:var(--accent);font-size:0.7em;margin-left:0.75rem;vertical-align:middle">@${escapeHtml(note.alias)}</span>` : '';
 
             document.getElementById('content').innerHTML = `
                 <div class="header-actions">
                     <button class="btn" onclick="editNote('${escapeJs(path)}')">Edit</button>
+                    <button class="btn" id="copyNoteBtn" onclick="copyNote()">Copy</button>
                 </div>
                 <div id="note-content">${marked.parse(content)}${aliasBadge ? `<p style="margin-top:1rem;color:var(--text-dim);font-size:0.85rem">Alias: <span style="color:var(--accent)">@${escapeHtml(note.alias || '')}</span></p>` : ''}</div>
             `;
@@ -533,6 +610,47 @@ TEMPLATE = """<!DOCTYPE html>
             document.querySelectorAll('#notes .nav-link').forEach(el => {
                 el.classList.toggle('active', el.textContent === note.title);
             });
+        }
+
+        async function copyNote() {
+            const btn = document.getElementById('copyNoteBtn');
+            const noteContent = document.getElementById('note-content');
+            if (!noteContent || !currentNoteMarkdown) return;
+
+            try {
+                // Get HTML content (rendered)
+                const htmlContent = noteContent.innerHTML;
+
+                // Create clipboard items with both HTML and plain text (markdown)
+                const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
+                const textBlob = new Blob([currentNoteMarkdown], { type: 'text/plain' });
+
+                await navigator.clipboard.write([
+                    new ClipboardItem({
+                        'text/html': htmlBlob,
+                        'text/plain': textBlob
+                    })
+                ]);
+
+                // Show success feedback
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                btn.style.color = 'var(--green)';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.color = '';
+                }, 1500);
+            } catch (err) {
+                // Fallback to plain text copy
+                try {
+                    await navigator.clipboard.writeText(currentNoteMarkdown);
+                    btn.textContent = 'Copied!';
+                    setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+                } catch (e) {
+                    btn.textContent = 'Failed';
+                    setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+                }
+            }
         }
 
         async function editNote(path) {
@@ -600,6 +718,33 @@ TEMPLATE = """<!DOCTYPE html>
         }
 
         let todoSortBy = 'section'; // 'section', 'notebook', 'due', 'priority', 'created'
+        let todoFilter = ''; // Filter text for todos
+        let todoFilterTimeout = null;
+
+        function filterTodos(todos, filter) {
+            if (!filter.trim()) return todos;
+            const f = filter.trim().toLowerCase();
+            return todos.filter(t => {
+                // Filter by notebook: "notebook:name" or "@name"
+                if (f.startsWith('notebook:')) {
+                    const nb = f.slice(9);
+                    return (t.notebook || '').toLowerCase().includes(nb);
+                }
+                if (f.startsWith('@')) {
+                    const nb = f.slice(1);
+                    return (t.notebook || '').toLowerCase().includes(nb);
+                }
+                // Filter by tag: "#tag"
+                if (f.startsWith('#')) {
+                    const tag = f.slice(1);
+                    return (t.tags || []).some(tg => tg.toLowerCase().includes(tag));
+                }
+                // Plain text: search content, notebook, and tags
+                return t.content.toLowerCase().includes(f) ||
+                    (t.notebook || '').toLowerCase().includes(f) ||
+                    (t.tags || []).some(tg => tg.toLowerCase().includes(f));
+            });
+        }
 
         async function loadTodos(pushHistory = true) {
             currentNotebook = null;
@@ -607,8 +752,11 @@ TEMPLATE = """<!DOCTYPE html>
             document.getElementById('notes-section').style.display = 'none';
             if (pushHistory) history.pushState({ view: 'todos' }, '', '#todos');
 
-            const todos = await api('/todos');
+            let todos = await api('/todos');
             const today = getToday();
+
+            // Apply filter
+            todos = filterTodos(todos, todoFilter);
             const checkIcon = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2"><path d="M2 6l3 3 5-5"/></svg>';
 
             // Group todos into sections
@@ -662,6 +810,18 @@ TEMPLATE = """<!DOCTYPE html>
                 const nb = notebooksCache.find(n => n.name === t.notebook);
                 const nbColor = nb && nb.color ? nb.color : 'var(--text-dim)';
 
+                // Build editable due date element
+                let dueDateHtml;
+                if (t.due) {
+                    if (t.isOverdue && !isCompleted) {
+                        dueDateHtml = `<span class="due-date-edit" style="color:var(--red);cursor:pointer" onclick="editDueDate('${t.id}', '${t.due}')" title="Click to edit">Overdue: ${t.due}</span>`;
+                    } else {
+                        dueDateHtml = `<span class="due-date-edit" style="cursor:pointer" onclick="editDueDate('${t.id}', '${t.due}')" title="Click to edit">Due: ${t.due}</span>`;
+                    }
+                } else {
+                    dueDateHtml = `<span class="due-date-edit" style="cursor:pointer;color:var(--text-dim)" onclick="editDueDate('${t.id}', '')" title="Click to add due date">No due date</span>`;
+                }
+
                 return `
                     <div class="${cls}" data-id="${t.id}">
                         <div class="checkbox" onclick="toggleTodo('${t.id}')">${checkIcon}</div>
@@ -670,7 +830,8 @@ TEMPLATE = """<!DOCTYPE html>
                             <div class="meta">
                                 ${t.status === 'in_progress' ? '<span style="color:var(--green)">In Progress</span> · ' : ''}
                                 ${t.notebook ? '<span class="color-dot" style="background:' + nbColor + '"></span><span style="color:var(--accent)">' + escapeHtml(t.notebook) + '</span> · ' : ''}
-                                ${t.due ? (t.isOverdue && !isCompleted ? '<span style="color:var(--red)">Overdue: ' + t.due + '</span>' : 'Due: ' + t.due) : 'No due date'}
+                                ${dueDateHtml}
+                                · <span style="font-family:monospace;color:var(--text-dim);font-size:0.75rem" title="Todo ID">${t.id}</span>
                             </div>
                         </div>
                     </div>
@@ -693,6 +854,7 @@ TEMPLATE = """<!DOCTYPE html>
 
             document.getElementById('content').innerHTML = `
                 <h1>Todos</h1>
+                <input type="text" class="search-box" id="todoFilterInput" placeholder="Filter: notebook:name, @name, #tag, or text..." value="${escapeHtml(todoFilter)}" style="margin-bottom:0.5rem">
                 <form class="add-todo-form" onsubmit="addTodo(event)">
                     <input type="text" id="newTodoInput" placeholder="Add a new todo... (use @due(date), @priority(1-3), #tags)">
                     <button type="submit">Add</button>
@@ -712,6 +874,23 @@ TEMPLATE = """<!DOCTYPE html>
                     : sortTodos(todos).map(renderTodo).join('')
                 }
             `;
+
+            // Add event listener for filter input (live filtering with debounce)
+            const filterInput = document.getElementById('todoFilterInput');
+            if (filterInput) {
+                filterInput.addEventListener('input', (e) => {
+                    clearTimeout(todoFilterTimeout);
+                    todoFilterTimeout = setTimeout(() => {
+                        todoFilter = e.target.value;
+                        loadTodos(false);
+                    }, 300);
+                });
+                // Focus at end of input if filter has value
+                if (todoFilter) {
+                    filterInput.focus();
+                    filterInput.setSelectionRange(filterInput.value.length, filterInput.value.length);
+                }
+            }
         }
 
         function changeTodoSort(value) {
@@ -738,6 +917,68 @@ TEMPLATE = """<!DOCTYPE html>
 
             input.value = '';
             loadTodos();
+        }
+
+        function editDueDate(todoId, currentDate) {
+            // Find the todo item and replace the due date span with an input
+            const todoItem = document.querySelector(`[data-id="${todoId}"]`);
+            if (!todoItem) return;
+
+            const dueDateSpan = todoItem.querySelector('.due-date-edit');
+            if (!dueDateSpan) return;
+
+            // Create a container with date input and clear button
+            const container = document.createElement('span');
+            container.className = 'due-date-editor';
+            container.style.cssText = 'display:inline-flex;align-items:center;gap:0.25rem';
+
+            const input = document.createElement('input');
+            input.type = 'date';
+            input.value = currentDate || '';
+            input.style.cssText = 'padding:0.15rem 0.3rem;background:var(--surface);border:1px solid var(--accent);border-radius:3px;color:var(--text);font-size:0.8rem';
+
+            const clearBtn = document.createElement('button');
+            clearBtn.textContent = '✕';
+            clearBtn.title = 'Clear due date';
+            clearBtn.style.cssText = 'padding:0.1rem 0.3rem;background:var(--surface);border:1px solid var(--border);border-radius:3px;color:var(--text-dim);font-size:0.7rem;cursor:pointer';
+            clearBtn.onclick = (e) => {
+                e.stopPropagation();
+                saveDueDate(todoId, '');
+            };
+
+            input.onchange = () => saveDueDate(todoId, input.value);
+            input.onblur = (e) => {
+                // Don't reload if clicking on clear button
+                if (e.relatedTarget === clearBtn) return;
+                // Small delay to allow change event to fire first
+                setTimeout(() => {
+                    if (document.querySelector('.due-date-editor')) {
+                        loadTodos(false);
+                    }
+                }, 100);
+            };
+
+            container.appendChild(input);
+            container.appendChild(clearBtn);
+            dueDateSpan.replaceWith(container);
+
+            // Focus the input and open the picker
+            input.focus();
+            try { input.showPicker(); } catch(e) { /* ignore if not supported */ }
+        }
+
+        async function saveDueDate(todoId, newDate) {
+            try {
+                await api('/todos/' + todoId + '/due', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ due: newDate || null })
+                });
+                loadTodos(false);
+            } catch (err) {
+                console.error('Failed to update due date:', err);
+                loadTodos(false);
+            }
         }
 
         async function doSearch(query) {
@@ -904,68 +1145,169 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                         break
 
             if linked_config:
-                # List files from linked note
-                files = scan_linked_note_files(linked_config)
-                for file_path in sorted(files, reverse=True):
-                    note = get_note(file_path, config.notes_root)
-                    # Use absolute path for linked notes
-                    path_str = str(file_path).replace("\\", "/")
-                    note_alias = get_alias_for_path(file_path)
-                    result.append(
-                        {
-                            "path": path_str,
-                            "title": note.title if note else file_path.stem,
-                            "date": (
-                                note.date.strftime("%Y-%m-%d")
-                                if note and note.date
-                                else None
-                            ),
-                            "alias": note_alias,
-                            "isLinked": True,
-                        }
-                    )
-            else:
-                # Regular notebook - use get_notebook_notes_with_linked to include linked notes
-                notes_with_linked = get_notebook_notes_with_linked(
-                    notebook, config.notes_root
+                # List files from linked note - query database for indexed data
+                from nb.index.db import get_db
+
+                db = get_db()
+
+                # Query notes for this virtual notebook from the database
+                note_rows = db.fetchall(
+                    """SELECT path, title, date, source_alias
+                       FROM notes WHERE notebook = ? AND external = 1
+                       ORDER BY COALESCE(date, '') DESC, mtime DESC""",
+                    (notebook,),
                 )
-                for note_path, is_linked, linked_alias in sorted(
-                    notes_with_linked, reverse=True
-                ):
-                    if is_linked:
-                        # Linked note - use absolute path
-                        full_path = (
+
+                if note_rows:
+                    for row in note_rows:
+                        note_path = Path(row["path"])
+                        path_str = str(note_path).replace("\\", "/")
+
+                        # Get tags for this note from database
+                        tag_rows = db.fetchall(
+                            "SELECT tag FROM note_tags WHERE note_path = ?",
+                            (row["path"],),
+                        )
+                        tags = [t["tag"] for t in tag_rows]
+
+                        note_alias = (
+                            get_alias_for_path(note_path) or row["source_alias"]
+                        )
+
+                        result.append(
+                            {
+                                "path": path_str,
+                                "title": row["title"] or note_path.stem,
+                                "filename": note_path.name,
+                                "date": row["date"],  # Already in YYYY-MM-DD format
+                                "tags": tags,
+                                "alias": note_alias,
+                                "isLinked": True,
+                            }
+                        )
+                else:
+                    # Fall back to file-based scan
+                    files = scan_linked_note_files(linked_config)
+                    for file_path in sorted(files, reverse=True):
+                        note = get_note(file_path, config.notes_root)
+                        path_str = str(file_path).replace("\\", "/")
+                        note_alias = get_alias_for_path(file_path)
+                        result.append(
+                            {
+                                "path": path_str,
+                                "title": note.title if note else file_path.stem,
+                                "filename": file_path.name,
+                                "date": (
+                                    note.date.strftime("%Y-%m-%d")
+                                    if note and note.date
+                                    else None
+                                ),
+                                "tags": note.tags if note else [],
+                                "alias": note_alias,
+                                "isLinked": True,
+                            }
+                        )
+            else:
+                # Regular notebook - query database for notes with metadata
+                from nb.index.db import get_db
+
+                db = get_db()
+
+                # Query notes with their dates from the database
+                note_rows = db.fetchall(
+                    """SELECT path, title, date, external, source_alias
+                       FROM notes WHERE notebook = ?
+                       ORDER BY COALESCE(date, '') DESC, mtime DESC""",
+                    (notebook,),
+                )
+
+                if note_rows:
+                    # Use database results (faster, includes indexed dates)
+                    for row in note_rows:
+                        note_path = Path(row["path"])
+                        is_external = bool(row["external"])
+
+                        if is_external or note_path.is_absolute():
+                            # Linked/external note - use absolute path
+                            full_path = (
+                                note_path
+                                if note_path.is_absolute()
+                                else config.notes_root / note_path
+                            )
+                            path_str = str(full_path).replace("\\", "/")
+                        else:
+                            path_str = str(note_path).replace("\\", "/")
+
+                        # Get tags for this note from database
+                        tag_rows = db.fetchall(
+                            "SELECT tag FROM note_tags WHERE note_path = ?",
+                            (row["path"],),
+                        )
+                        tags = [t["tag"] for t in tag_rows]
+
+                        # Get alias
+                        check_path = (
                             note_path
                             if note_path.is_absolute()
                             else config.notes_root / note_path
                         )
-                        note = get_note(full_path, config.notes_root)
-                        path_str = str(full_path).replace("\\", "/")
-                    else:
-                        note = get_note(note_path, config.notes_root)
-                        path_str = str(note_path).replace("\\", "/")
+                        note_alias = (
+                            get_alias_for_path(check_path) or row["source_alias"]
+                        )
 
-                    # Check for note alias
-                    check_path = (
-                        note_path
-                        if note_path.is_absolute()
-                        else config.notes_root / note_path
+                        result.append(
+                            {
+                                "path": path_str,
+                                "title": row["title"] or note_path.stem,
+                                "filename": note_path.name,
+                                "date": row["date"],  # Already in YYYY-MM-DD format
+                                "tags": tags,
+                                "alias": note_alias,
+                                "isLinked": is_external,
+                            }
+                        )
+                else:
+                    # Fall back to file-based scan (for un-indexed notes)
+                    notes_with_linked = get_notebook_notes_with_linked(
+                        notebook, config.notes_root
                     )
-                    note_alias = get_alias_for_path(check_path) or linked_alias
+                    for note_path, is_linked, linked_alias in sorted(
+                        notes_with_linked, reverse=True
+                    ):
+                        if is_linked:
+                            full_path = (
+                                note_path
+                                if note_path.is_absolute()
+                                else config.notes_root / note_path
+                            )
+                            note = get_note(full_path, config.notes_root)
+                            path_str = str(full_path).replace("\\", "/")
+                        else:
+                            note = get_note(note_path, config.notes_root)
+                            path_str = str(note_path).replace("\\", "/")
 
-                    result.append(
-                        {
-                            "path": path_str,
-                            "title": note.title if note else note_path.stem,
-                            "date": (
-                                note.date.strftime("%Y-%m-%d")
-                                if note and note.date
-                                else None
-                            ),
-                            "alias": note_alias,
-                            "isLinked": is_linked,
-                        }
-                    )
+                        check_path = (
+                            note_path
+                            if note_path.is_absolute()
+                            else config.notes_root / note_path
+                        )
+                        note_alias = get_alias_for_path(check_path) or linked_alias
+
+                        result.append(
+                            {
+                                "path": path_str,
+                                "title": note.title if note else note_path.stem,
+                                "filename": note_path.name,
+                                "date": (
+                                    note.date.strftime("%Y-%m-%d")
+                                    if note and note.date
+                                    else None
+                                ),
+                                "tags": note.tags if note else [],
+                                "alias": note_alias,
+                                "isLinked": is_linked,
+                            }
+                        )
 
             self.send_json(result)
             return
@@ -1041,6 +1383,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                         "priority": t.priority.value if t.priority else None,
                         "status": t.status.value,
                         "notebook": t.notebook or "unknown",
+                        "tags": t.tags or [],
                         "created": (
                             t.created_date.isoformat() if t.created_date else None
                         ),
@@ -1104,6 +1447,66 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({"success": True})
             except PermissionError as e:
                 self.send_json({"error": str(e)}, 403)
+            return
+
+        # API: Update todo due date
+        if path.startswith("/api/todos/") and path.endswith("/due"):
+            todo_id = path.split("/")[-2]
+            body = self.read_body()
+            new_date_str = body.get("due")  # ISO date string or null/empty
+
+            from nb.core.todos import remove_todo_due_date, update_todo_due_date
+            from nb.index.todos_repo import get_todo_by_id, update_todo_due_date_db
+
+            todo = get_todo_by_id(todo_id)
+            if not todo:
+                self.send_json({"error": "Todo not found"}, 404)
+                return
+
+            # Get absolute path for the todo's source file
+            source_path = todo.source.path
+            if not source_path.is_absolute():
+                source_path = config.notes_root / source_path
+
+            try:
+                if new_date_str:
+                    # Parse the date string (ISO format: YYYY-MM-DD)
+                    from datetime import date as date_type
+
+                    new_date = date_type.fromisoformat(new_date_str)
+                    actual_line = update_todo_due_date(
+                        source_path,
+                        todo.line_number,
+                        new_date,
+                        expected_content=todo.content,
+                    )
+                    if actual_line is None:
+                        self.send_json(
+                            {"error": "Todo not found at expected location"}, 404
+                        )
+                        return
+                    # Update the database
+                    update_todo_due_date_db(todo_id, new_date)
+                else:
+                    # Remove due date
+                    actual_line = remove_todo_due_date(
+                        source_path,
+                        todo.line_number,
+                        expected_content=todo.content,
+                    )
+                    if actual_line is None:
+                        self.send_json(
+                            {"error": "Todo not found at expected location"}, 404
+                        )
+                        return
+                    # Update the database
+                    update_todo_due_date_db(todo_id, None)
+
+                self.send_json({"success": True})
+            except PermissionError as e:
+                self.send_json({"error": str(e)}, 403)
+            except ValueError as e:
+                self.send_json({"error": f"Invalid date: {e}"}, 400)
             return
 
         # API: Create todo

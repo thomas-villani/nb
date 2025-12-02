@@ -99,7 +99,11 @@ todo_exclude: true
 - [x] Add command to mark all todos in a note as complete
 - [x] Add a `nb config edit` command to open the config file with the editor
 - [x] When trying to open note that doesn't exist, prompt to create it
-- [ ] Make the output of nbtodo sorted by due date within sections (then line number)
+- [x] Make the output of nbtodo sorted by due date within sections (then line number)
+- [x] Show filename too in nb web, not just title
+- [ ] Add a 'recently viewed/edited notes' page on nb web
+- [ ] Add a way to title a new note from command line
+- [ ] Figure out how to handle subdirs in notes better and include in hierarchy, perhaps as a 'section' in a notebook?
 
 ### Phase 5: Advanced TUI
 - [ ] Full Wijjit-based todo list view with richer interactions #feature
@@ -122,6 +126,7 @@ todo_exclude: true
   - [x] Simplify `list_linked_files()` and `list_linked_notes()` to DB-only
 - [ ] Optimize imports and startup speed of cli #performance
 - [x] Evaluate test suite and add e2e tests on actual CLI (if not existing) #testing
+- [ ] Allow opening notes by title partial match
 
 
 ### Phase 6: Future Enhancements

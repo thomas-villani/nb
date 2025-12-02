@@ -199,21 +199,29 @@ def list_linked_notes() -> list[LinkedNoteConfig]:
     ]
 
 
-def get_linked_note(alias: str) -> LinkedNoteConfig | None:
+def get_linked_note(alias: str, notebook: str | None = None) -> LinkedNoteConfig | None:
     """Get a linked note by alias.
 
     Args:
         alias: The alias of the linked note.
+        notebook: Optional notebook to scope the lookup (if None, returns first match).
 
     Returns:
         The linked note config, or None if not found.
 
     """
     db = get_db()
-    row = db.fetchone(
-        "SELECT alias, path, notebook, recursive, todo_exclude, sync FROM linked_notes WHERE alias = ?",
-        (alias,),
-    )
+    if notebook is not None:
+        notebook_key = notebook or ""
+        row = db.fetchone(
+            "SELECT alias, path, notebook, recursive, todo_exclude, sync FROM linked_notes WHERE alias = ? AND notebook = ?",
+            (alias, notebook_key),
+        )
+    else:
+        row = db.fetchone(
+            "SELECT alias, path, notebook, recursive, todo_exclude, sync FROM linked_notes WHERE alias = ?",
+            (alias,),
+        )
 
     if row:
         return LinkedNoteConfig(
@@ -226,6 +234,34 @@ def get_linked_note(alias: str) -> LinkedNoteConfig | None:
         )
 
     return None
+
+
+def get_linked_notes_by_alias(alias: str) -> list[LinkedNoteConfig]:
+    """Get all linked notes with a given alias (across all notebooks).
+
+    Args:
+        alias: The alias name to look up.
+
+    Returns:
+        List of LinkedNoteConfig for all matching aliases.
+    """
+    db = get_db()
+    rows = db.fetchall(
+        "SELECT alias, path, notebook, recursive, todo_exclude, sync FROM linked_notes WHERE alias = ?",
+        (alias,),
+    )
+
+    return [
+        LinkedNoteConfig(
+            path=Path(row["path"]),
+            alias=row["alias"],
+            notebook=row["notebook"],
+            recursive=bool(row["recursive"]),
+            todo_exclude=bool(row["todo_exclude"]) if row["todo_exclude"] else False,
+            sync=bool(row["sync"]) if row["sync"] is not None else True,
+        )
+        for row in rows
+    ]
 
 
 def add_linked_note(
@@ -241,7 +277,7 @@ def add_linked_note(
     Args:
         path: Path to the external note file or directory.
         alias: Short name for the link (defaults to filename/dirname).
-        notebook: Virtual notebook name (defaults to alias).
+        notebook: Virtual notebook name (defaults to @alias). Aliases are unique per-notebook.
         recursive: For directories, whether to scan recursively.
         todo_exclude: Exclude todos from nb todo by default.
         sync: Sync todo completions back to source file.
@@ -251,7 +287,7 @@ def add_linked_note(
 
     Raises:
         FileNotFoundError: If the path doesn't exist.
-        ValueError: If the alias is already in use.
+        ValueError: If the alias is already in use in this notebook.
 
     """
     # Resolve and validate path
@@ -263,14 +299,17 @@ def add_linked_note(
     if alias is None:
         alias = path.stem if path.is_file() else path.name
 
-    # Check for existing alias
-    existing = get_linked_note(alias)
-    if existing:
-        raise ValueError(f"Alias '{alias}' is already in use for: {existing.path}")
-
     # Default notebook to alias with @ prefix
     if notebook is None:
         notebook = f"@{alias}"
+
+    # Check for existing alias in this notebook (use empty string for NULL)
+    notebook_key = notebook or ""
+    existing = get_linked_note(alias, notebook=notebook_key)
+    if existing:
+        raise ValueError(
+            f"Alias '{alias}' is already in use in notebook '{notebook_key}' for: {existing.path}"
+        )
 
     linked = LinkedNoteConfig(
         path=path,
@@ -295,63 +334,91 @@ def add_linked_note(
     return linked
 
 
-def remove_linked_note(alias: str) -> bool:
+def remove_linked_note(alias: str, notebook: str | None = None) -> bool:
     """Remove a linked external note file/directory.
 
     Args:
         alias: The alias of the link to remove.
+        notebook: Optional notebook to scope the removal (if None, removes all with this alias).
 
     Returns:
         True if the link was removed, False if not found.
 
     """
     db = get_db()
-    cursor = db.execute(
-        "DELETE FROM linked_notes WHERE alias = ?",
-        (alias,),
-    )
+    if notebook is not None:
+        notebook_key = notebook or ""
+        cursor = db.execute(
+            "DELETE FROM linked_notes WHERE alias = ? AND notebook = ?",
+            (alias, notebook_key),
+        )
+    else:
+        cursor = db.execute(
+            "DELETE FROM linked_notes WHERE alias = ?",
+            (alias,),
+        )
     db.commit()
 
     return cursor.rowcount > 0
 
 
-def update_linked_note_sync(alias: str, sync: bool) -> bool:
+def update_linked_note_sync(
+    alias: str, sync: bool, notebook: str | None = None
+) -> bool:
     """Update the sync setting for a linked note.
 
     Args:
         alias: The alias of the link to update.
         sync: New sync setting.
+        notebook: Notebook to scope the update (if None, updates all with this alias).
 
     Returns:
         True if updated, False if not found.
 
     """
     db = get_db()
-    cursor = db.execute(
-        "UPDATE linked_notes SET sync = ? WHERE alias = ?",
-        (int(sync), alias),
-    )
+    if notebook is not None:
+        notebook_key = notebook or ""
+        cursor = db.execute(
+            "UPDATE linked_notes SET sync = ? WHERE alias = ? AND notebook = ?",
+            (int(sync), alias, notebook_key),
+        )
+    else:
+        cursor = db.execute(
+            "UPDATE linked_notes SET sync = ? WHERE alias = ?",
+            (int(sync), alias),
+        )
     db.commit()
 
     return cursor.rowcount > 0
 
 
-def update_linked_note_todo_exclude(alias: str, todo_exclude: bool) -> bool:
+def update_linked_note_todo_exclude(
+    alias: str, todo_exclude: bool, notebook: str | None = None
+) -> bool:
     """Update the todo_exclude setting for a linked note.
 
     Args:
         alias: The alias of the link to update.
         todo_exclude: New todo_exclude setting.
+        notebook: Notebook to scope the update (if None, updates all with this alias).
 
     Returns:
         True if updated, False if not found.
 
     """
     db = get_db()
-    cursor = db.execute(
-        "UPDATE linked_notes SET todo_exclude = ? WHERE alias = ?",
-        (int(todo_exclude), alias),
-    )
+    if notebook is not None:
+        notebook_key = notebook or ""
+        cursor = db.execute(
+            "UPDATE linked_notes SET todo_exclude = ? WHERE alias = ? AND notebook = ?",
+            (int(todo_exclude), alias, notebook_key),
+        )
+    else:
+        cursor = db.execute(
+            "UPDATE linked_notes SET todo_exclude = ? WHERE alias = ?",
+            (int(todo_exclude), alias),
+        )
     db.commit()
 
     return cursor.rowcount > 0

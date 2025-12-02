@@ -581,6 +581,7 @@ Auto-migrates on startup; backward compatible. Migration history:
 - v10: Added `status` column (pending/in_progress/completed), migrated from boolean
 - v11: Added `note_aliases` table for quick note access
 - v12: Added `completed_date` column for activity tracking
+- v13: Per-notebook alias uniqueness (composite primary keys for aliases)
 
 ### Tables
 
@@ -635,24 +636,26 @@ CREATE TABLE note_views (
 );
 ```
 
-#### note_aliases (v11)
+#### note_aliases (v11, updated v13)
 ```sql
 CREATE TABLE note_aliases (
-    alias TEXT PRIMARY KEY,
-    note_path TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (note_path) REFERENCES notes(path) ON DELETE CASCADE
+    alias TEXT NOT NULL,
+    path TEXT NOT NULL,
+    notebook TEXT NOT NULL DEFAULT '',  -- Aliases are unique per-notebook
+    PRIMARY KEY (alias, notebook)
 );
 ```
 
-#### linked_notes
+#### linked_notes (updated v13)
 ```sql
 CREATE TABLE linked_notes (
-    path TEXT PRIMARY KEY,
-    alias TEXT,
-    recursive INTEGER,
-    todo_exclude INTEGER,   -- (v8)
-    sync INTEGER            -- (v8)
+    alias TEXT NOT NULL,
+    path TEXT NOT NULL,
+    notebook TEXT NOT NULL DEFAULT '',  -- Aliases are unique per-notebook
+    recursive INTEGER DEFAULT 1,
+    todo_exclude INTEGER DEFAULT 0,     -- (v8)
+    sync INTEGER DEFAULT 1,             -- (v8)
+    PRIMARY KEY (alias, notebook)
 );
 ```
 
@@ -1233,7 +1236,7 @@ nb alias list    # List all aliases
 nb alias remove standup
 ```
 
-Aliases are stored in the `note_aliases` database table (schema v11).
+Aliases are unique per-notebook, meaning the same alias name can exist in different notebooks. When resolving an ambiguous alias (same name in multiple notebooks), the system will prompt for disambiguation. Aliases are stored in the `note_aliases` database table (schema v11, updated v13).
 
 ---
 
