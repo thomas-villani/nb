@@ -1379,7 +1379,7 @@ def where_cmd(ref: str, notebook: str | None) -> None:
 
     # Output results
     if not paths_found:
-        console.print(f"[red]Not found: {ref}[/red]", err=True)
+        console.print(f"[red]Not found: {ref}[/red]")
         raise SystemExit(1)
 
     for p in paths_found:
