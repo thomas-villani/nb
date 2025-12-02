@@ -1,3 +1,42 @@
+# v0.2.1 - 2025-12-02
+
+## New Features
+
+### Note Linking Enhancements
+
+- **Clickable links in web UI**: Wiki links `[[note]]` and internal markdown links now navigate between notes in the browser. External links open in new tabs. Visual styling distinguishes link types (wiki links in green, internal links in blue).
+
+- **Backlinks panel**: When viewing a note in the web UI, a backlinks panel shows all notes that link to the current note, with link type indicators and line numbers.
+
+- **Knowledge graph (web)**: Interactive D3.js force-directed graph visualization accessible via the "Graph" navigation link or `#graph` URL hash. Shows three node types:
+  - Notes (colored by notebook)
+  - Tags (purple, toggleable)
+  - Notebooks (larger circles, using configured colors)
+
+  Edge types: solid (note-to-note links), dashed (note-to-tag), dotted (note-to-notebook). Supports drag, zoom, and filtering controls.
+
+- **`nb graph` command**: ASCII visualization of note connections in the terminal. Shows overview stats without arguments, or detailed graph for a specific note with outgoing links, backlinks, and tag connections. Supports `--depth` for multi-level display.
+
+- **`nb related` command**: Find related notes by combining multiple signals with weighted scoring:
+  - Direct links (1.0 outgoing, 0.9 backlinks)
+  - Shared tags (0.3 per shared tag)
+  - Semantic similarity (0.5 × similarity score)
+
+  Options: `--links-only`, `--tags-only`, `--semantic-only` to filter by signal type.
+
+### Web API Additions
+
+- `/api/resolve-link` - Resolve wiki/markdown link targets with suggestions for broken links
+- `/api/backlinks` - Get notes linking to a given note
+- `/api/graph` - Get graph data (nodes and edges) for visualization
+
+## Files Added
+
+- `nb/cli/graph.py` - Graph CLI command
+- `nb/cli/related.py` - Related notes CLI command
+
+---
+
 # v0.2.0 - 2025-12-01
 
 This release completes a large phase of development: it stabilizes the todos/workflow model, adds rich UIs (TUI + web), recorder + transcription support, vector search & attachments, and a broad set of CLI ergonomics and automation improvements. It also includes multiple database schema upgrades and several breaking changes — follow the migration guidance below before upgrading production deployments.

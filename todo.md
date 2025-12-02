@@ -82,7 +82,6 @@ todo_exclude: true
 - [x] Make `nb history` not group by notebook by default, instead have the notebook source colored in the same line as the history line. Allow grouping with a `--group` flag
 - [x] If parent todo completed, auto complete child todos
 - [x] What else should be configurable?
-
 - [x] Must reindex file after 'nb todo add --note'
 - [x] Add --note and --notebook filter to grep command
 - [x] Need progress / spinners for long-running tasks (syncing and reindexing and search)
@@ -91,7 +90,6 @@ todo_exclude: true
 - [x] Be able to define date format of note titles, and display, prefer day of week included in most cases
 - [x] Interactive todo review function
 - [x] Show id in second column in 'nb todo' rather than source. #UX
-- [ ] Capture url and other file attachments as markdown using all2md #feature
 - [x] Add more details about notes in 'nb list', e.g. todo count, last modified, etc.
 - [x] Allow due dates to have times, and to auto parse @due(today) and other relative dates to fill the date on indexing
 - [x] Update help command to launch real docs
@@ -101,15 +99,18 @@ todo_exclude: true
 - [x] When trying to open note that doesn't exist, prompt to create it
 - [x] Make the output of nbtodo sorted by due date within sections (then line number)
 - [x] Show filename too in nb web, not just title
+
+### Active
 - [ ] Add a 'recently viewed/edited notes' page on nb web
 - [ ] Add a way to title a new note from command line
 - [ ] Figure out how to handle subdirs in notes better and include in hierarchy, perhaps as a 'section' in a notebook?
 - [ ] kanban view for nb todo
-- [ ] for links: Web UI - clickable links, backlinks panel, graph view
-- [ ] for links: ASCII graph - nb graph <note>
-- [ ] for links: Related notes - nb related <note> combining links + tags + embeddings
+- [^] for links: Web UI - clickable links, backlinks panel, graph view
+- [^] for links: ASCII graph - nb graph <note>
+- [^] for links: Related notes - nb related <note> combining links + tags + embeddings
+- [ ] Capture url and other file attachments as markdown using all2md #feature
 
-### Phase 5: Advanced TUI
+### Phase 5: Wijjit TUI
 - [ ] Full Wijjit-based todo list view with richer interactions #feature
 - [ ] Full Wijjit based editor for notes #feature
 - [x] Stream/continuous view (`nb stream`) with lazy loading

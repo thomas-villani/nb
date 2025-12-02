@@ -120,6 +120,7 @@ TEMPLATE = """<!DOCTYPE html>
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/bash.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/sql.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/yaml.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark.min.css">
     <style>
         :root {
@@ -221,6 +222,10 @@ TEMPLATE = """<!DOCTYPE html>
         #content h1 { border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 1rem; }
         #content h1, #content h2, #content h3 { margin-top: 1.5em; color: var(--text); }
         #content a { color: var(--accent); }
+        #content a.wiki-link { color: var(--green); text-decoration: none; border-bottom: 1px dashed var(--green); }
+        #content a.wiki-link:hover { border-bottom-style: solid; }
+        #content a.note-link { text-decoration: none; border-bottom: 1px dotted var(--accent); }
+        #content a.note-link:hover { border-bottom-style: solid; }
         #content pre { background: var(--surface); padding: 1rem; border-radius: 6px; overflow-x: auto; }
         #content code { background: var(--surface); padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
         #content pre code { background: none; padding: 0; }
@@ -231,6 +236,91 @@ TEMPLATE = """<!DOCTYPE html>
         #content th, #content td { border: 1px solid var(--border); padding: 0.5rem; text-align: left; }
         #content th { background: var(--surface); }
         #content img { max-width: 100%; }
+
+        /* Backlinks panel */
+        .backlinks-panel {
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+        .backlinks-panel h3 {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            margin-bottom: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+        .backlinks-panel ul {
+            list-style: none;
+            padding: 0;
+        }
+        .backlinks-panel li {
+            padding: 0.4rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .backlinks-panel li a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .backlinks-panel li a:hover { text-decoration: underline; }
+        .backlinks-panel .meta {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        /* Graph view */
+        .graph-container {
+            width: 100%;
+            height: calc(100vh - 150px);
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .graph-container svg {
+            width: 100%;
+            height: 100%;
+        }
+        .graph-node {
+            cursor: pointer;
+        }
+        .graph-node circle {
+            stroke: var(--border);
+            stroke-width: 1.5px;
+        }
+        .graph-node:hover circle {
+            stroke: var(--accent);
+            stroke-width: 2px;
+        }
+        .graph-node text {
+            font-size: 10px;
+            fill: var(--text);
+            pointer-events: none;
+        }
+        .graph-link {
+            stroke: var(--border);
+            stroke-opacity: 0.6;
+        }
+        .graph-link:hover {
+            stroke: var(--accent);
+            stroke-opacity: 1;
+        }
+        .graph-controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .graph-controls label {
+            color: var(--text-dim);
+            font-size: 0.85rem;
+        }
+        .graph-controls input[type="range"] {
+            width: 100px;
+        }
 
         /* Notebook grid for home */
         .notebook-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
@@ -383,6 +473,7 @@ TEMPLATE = """<!DOCTYPE html>
                 <h3>Navigation</h3>
                 <a class="nav-link" onclick="loadHome()">Home</a>
                 <a class="nav-link" onclick="loadTodos()">Todos</a>
+                <a class="nav-link" onclick="loadGraph()">Graph</a>
             </div>
             <div class="nav-section">
                 <h3>Notebooks</h3>
@@ -399,6 +490,54 @@ TEMPLATE = """<!DOCTYPE html>
     </div>
 
     <script>
+        // Wiki link extension for marked.js
+        const wikiLinkExtension = {
+            name: 'wikiLink',
+            level: 'inline',
+            start(src) { return src.indexOf('[['); },
+            tokenizer(src) {
+                const match = /^\\[\\[([^\\]|]+)(?:\\|([^\\]]+))?\\]\\]/.exec(src);
+                if (match) {
+                    return {
+                        type: 'wikiLink',
+                        raw: match[0],
+                        target: match[1].trim(),
+                        display: (match[2] || match[1]).trim()
+                    };
+                }
+            },
+            renderer(token) {
+                const target = escapeHtml(token.target);
+                const display = escapeHtml(token.display);
+                return `<a href="javascript:void(0)" class="wiki-link" data-target="${target}" onclick="navigateToNote('${escapeJs(token.target)}')">${display}</a>`;
+            }
+        };
+
+        // Custom renderer for markdown links to handle internal notes
+        const renderer = new marked.Renderer();
+        const originalLinkRenderer = renderer.link.bind(renderer);
+        renderer.link = function(href, title, text) {
+            // Handle both object form (newer marked) and positional args (older marked)
+            if (typeof href === 'object') {
+                const token = href;
+                href = token.href;
+                title = token.title;
+                text = token.text;
+            }
+
+            const isExternal = /^(https?:|mailto:|ftp:|file:)/i.test(href);
+            if (isExternal) {
+                // External link - open in new tab
+                const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
+                return `<a href="${escapeHtml(href)}"${titleAttr} target="_blank" rel="noopener">${text}</a>`;
+            } else {
+                // Internal link - navigate to note
+                const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
+                return `<a href="javascript:void(0)" class="note-link" data-target="${escapeHtml(href)}"${titleAttr} onclick="navigateToNote('${escapeJs(href)}')">${text}</a>`;
+            }
+        };
+
+        marked.use({ extensions: [wikiLinkExtension], renderer: renderer });
         marked.setOptions({
             highlight: function(code, lang) {
                 if (lang && hljs.getLanguage(lang)) {
@@ -470,6 +609,18 @@ TEMPLATE = """<!DOCTYPE html>
 
         function escapeJs(str) {
             return str.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "\\\\'").replace(/"/g, '\\\\"');
+        }
+
+        // Navigate to a note from a wiki link or internal markdown link
+        async function navigateToNote(target) {
+            // Try to resolve the link target to an actual note path
+            const result = await api('/resolve-link?target=' + encodeURIComponent(target) + (currentNotePath ? '&source=' + encodeURIComponent(currentNotePath) : ''));
+            if (result.path) {
+                loadNote(result.path);
+            } else {
+                // Link could not be resolved - show a message
+                alert('Note not found: ' + target + (result.suggestion ? '\\n\\nDid you mean: ' + result.suggestion + '?' : ''));
+            }
         }
 
         async function loadHome(pushHistory = true) {
@@ -582,7 +733,12 @@ TEMPLATE = """<!DOCTYPE html>
         async function loadNote(path, pushHistory = true) {
             currentNotePath = path;
             if (pushHistory) history.pushState({ view: 'note', path }, '', '#note/' + encodeURIComponent(path));
-            const note = await api('/note?path=' + encodeURIComponent(path));
+
+            // Fetch note and backlinks in parallel
+            const [note, backlinks] = await Promise.all([
+                api('/note?path=' + encodeURIComponent(path)),
+                api('/backlinks?path=' + encodeURIComponent(path))
+            ]);
 
             // Strip frontmatter for display
             let content = note.content;
@@ -598,12 +754,36 @@ TEMPLATE = """<!DOCTYPE html>
 
             const aliasBadge = note.alias ? `<span style="color:var(--accent);font-size:0.7em;margin-left:0.75rem;vertical-align:middle">@${escapeHtml(note.alias)}</span>` : '';
 
+            // Build backlinks panel
+            let backlinksHtml = '';
+            if (backlinks && backlinks.length > 0) {
+                const linkTypeIcon = (type) => {
+                    if (type === 'wiki') return '<span title="Wiki link" style="color:var(--green)">[[]]</span>';
+                    if (type === 'markdown') return '<span title="Markdown link" style="color:var(--accent)">[]()</span>';
+                    return '<span title="Frontmatter" style="color:var(--text-dim)">fm</span>';
+                };
+                backlinksHtml = `
+                    <div class="backlinks-panel">
+                        <h3>Backlinks <span style="color:var(--text-dim);font-weight:normal">(${backlinks.length})</span></h3>
+                        <ul>
+                            ${backlinks.map(b => `
+                                <li>
+                                    <a href="javascript:void(0)" onclick="loadNote('${escapeJs(b.source_path)}')">${escapeHtml(b.source_path.split('/').pop().replace('.md', ''))}</a>
+                                    <span class="meta">${linkTypeIcon(b.link_type)}${b.line_number ? ` line ${b.line_number}` : ''}</span>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
             document.getElementById('content').innerHTML = `
                 <div class="header-actions">
                     <button class="btn" onclick="editNote('${escapeJs(path)}')">Edit</button>
                     <button class="btn" id="copyNoteBtn" onclick="copyNote()">Copy</button>
                 </div>
                 <div id="note-content">${marked.parse(content)}${aliasBadge ? `<p style="margin-top:1rem;color:var(--text-dim);font-size:0.85rem">Alias: <span style="color:var(--accent)">@${escapeHtml(note.alias || '')}</span></p>` : ''}</div>
+                ${backlinksHtml}
             `;
 
             // Update active state in sidebar
@@ -981,6 +1161,226 @@ TEMPLATE = """<!DOCTYPE html>
             }
         }
 
+        let graphShowTags = true;
+        let graphShowNotebooks = true;
+
+        async function loadGraph(pushHistory = true) {
+            currentNotebook = null;
+            currentNotePath = null;
+            document.getElementById('notes-section').style.display = 'none';
+            if (pushHistory) history.pushState({ view: 'graph' }, '', '#graph');
+
+            document.getElementById('content').innerHTML = `
+                <h1>Knowledge Graph</h1>
+                <div class="graph-controls">
+                    <label><input type="checkbox" id="showTags" ${graphShowTags ? 'checked' : ''}> Show tags</label>
+                    <label><input type="checkbox" id="showNotebooks" ${graphShowNotebooks ? 'checked' : ''}> Show notebooks</label>
+                    <label>Zoom: <input type="range" id="graphZoom" min="0.1" max="3" step="0.1" value="1"></label>
+                    <button class="btn" onclick="resetGraphZoom()">Reset View</button>
+                </div>
+                <div class="graph-container" id="graphContainer">
+                    <p class="loading" style="padding:1rem">Loading graph...</p>
+                </div>
+            `;
+
+            const data = await api('/graph');
+            renderGraph(data);
+
+            // Add event listeners for controls
+            document.getElementById('showTags').addEventListener('change', (e) => {
+                graphShowTags = e.target.checked;
+                loadGraph(false);
+            });
+            document.getElementById('showNotebooks').addEventListener('change', (e) => {
+                graphShowNotebooks = e.target.checked;
+                loadGraph(false);
+            });
+        }
+
+        let graphZoomBehavior = null;
+        let graphSvg = null;
+
+        function resetGraphZoom() {
+            if (graphSvg && graphZoomBehavior) {
+                graphSvg.transition().duration(300).call(graphZoomBehavior.transform, d3.zoomIdentity);
+                document.getElementById('graphZoom').value = 1;
+            }
+        }
+
+        function renderGraph(data) {
+            const container = document.getElementById('graphContainer');
+            container.innerHTML = '';
+
+            // Filter nodes and edges based on controls
+            let nodes = data.nodes.filter(n => {
+                if (n.type === 'tag' && !graphShowTags) return false;
+                if (n.type === 'notebook' && !graphShowNotebooks) return false;
+                return true;
+            });
+
+            const nodeIds = new Set(nodes.map(n => n.id));
+            let edges = data.edges.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target));
+
+            if (nodes.length === 0) {
+                container.innerHTML = '<p style="padding:1rem;color:var(--text-dim)">No nodes to display. Index your notes first.</p>';
+                return;
+            }
+
+            const width = container.clientWidth;
+            const height = container.clientHeight || 600;
+
+            // Color scheme
+            const colors = {
+                note: '#58a6ff',      // accent blue
+                tag: '#a371f7',       // purple
+                notebook: '#3fb950', // green (default, will use config color)
+                link: '#58a6ff',
+                tagEdge: '#a371f7',
+                notebookEdge: '#3fb950'
+            };
+
+            // Create SVG
+            const svg = d3.select(container)
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            graphSvg = svg;
+
+            // Add zoom behavior
+            const g = svg.append('g');
+            graphZoomBehavior = d3.zoom()
+                .scaleExtent([0.1, 4])
+                .on('zoom', (event) => {
+                    g.attr('transform', event.transform);
+                    document.getElementById('graphZoom').value = event.transform.k;
+                });
+            svg.call(graphZoomBehavior);
+
+            // Zoom slider control
+            document.getElementById('graphZoom').addEventListener('input', (e) => {
+                const scale = parseFloat(e.target.value);
+                svg.transition().duration(100).call(graphZoomBehavior.scaleTo, scale);
+            });
+
+            // Create force simulation
+            const simulation = d3.forceSimulation(nodes)
+                .force('link', d3.forceLink(edges).id(d => d.id).distance(d => {
+                    if (d.type === 'link') return 80;
+                    if (d.type === 'tag') return 60;
+                    return 100;
+                }))
+                .force('charge', d3.forceManyBody().strength(d => {
+                    if (d.type === 'notebook') return -300;
+                    if (d.type === 'tag') return -100;
+                    return -150;
+                }))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(d => getNodeRadius(d) + 5));
+
+            // Draw edges
+            const link = g.append('g')
+                .selectAll('line')
+                .data(edges)
+                .join('line')
+                .attr('class', 'graph-link')
+                .attr('stroke', d => {
+                    if (d.type === 'link') return colors.link;
+                    if (d.type === 'tag') return colors.tagEdge;
+                    return colors.notebookEdge;
+                })
+                .attr('stroke-dasharray', d => {
+                    if (d.type === 'tag') return '3,3';
+                    if (d.type === 'notebook') return '5,5';
+                    return null;
+                })
+                .attr('stroke-width', d => d.type === 'link' ? 1.5 : 1);
+
+            // Draw nodes
+            const node = g.append('g')
+                .selectAll('g')
+                .data(nodes)
+                .join('g')
+                .attr('class', 'graph-node')
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended));
+
+            // Node circles
+            node.append('circle')
+                .attr('r', d => getNodeRadius(d))
+                .attr('fill', d => {
+                    if (d.type === 'notebook') return d.color || colors.notebook;
+                    if (d.type === 'tag') return colors.tag;
+                    // For notes, use notebook color if available
+                    const nb = notebooksCache.find(n => n.name === d.notebook);
+                    return nb && nb.color ? nb.color : colors.note;
+                })
+                .attr('opacity', d => d.type === 'note' ? 0.9 : 0.7);
+
+            // Node labels
+            node.append('text')
+                .attr('dx', d => getNodeRadius(d) + 4)
+                .attr('dy', 4)
+                .text(d => d.title.length > 25 ? d.title.substring(0, 25) + '...' : d.title)
+                .attr('font-size', d => d.type === 'notebook' ? '12px' : '10px')
+                .attr('font-weight', d => d.type === 'notebook' ? 'bold' : 'normal');
+
+            // Click handler for notes
+            node.on('click', (event, d) => {
+                if (d.type === 'note') {
+                    loadNote(d.id);
+                } else if (d.type === 'notebook') {
+                    loadNotebook(d.title);
+                }
+                // Tags don't navigate anywhere
+            });
+
+            // Tooltip on hover
+            node.append('title')
+                .text(d => {
+                    if (d.type === 'note') return `${d.title}\n(${d.notebook})`;
+                    if (d.type === 'tag') return `Tag: ${d.title}`;
+                    return `Notebook: ${d.title}`;
+                });
+
+            function getNodeRadius(d) {
+                if (d.type === 'notebook') return 12;
+                if (d.type === 'tag') return 6;
+                return 8;
+            }
+
+            // Update positions on tick
+            simulation.on('tick', () => {
+                link
+                    .attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+
+                node.attr('transform', d => `translate(${d.x},${d.y})`);
+            });
+
+            // Drag functions
+            function dragstarted(event) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                event.subject.fx = event.subject.x;
+                event.subject.fy = event.subject.y;
+            }
+
+            function dragged(event) {
+                event.subject.fx = event.x;
+                event.subject.fy = event.y;
+            }
+
+            function dragended(event) {
+                if (!event.active) simulation.alphaTarget(0);
+                event.subject.fx = null;
+                event.subject.fy = null;
+            }
+        }
+
         async function doSearch(query) {
             if (!query.trim()) {
                 loadHome();
@@ -1024,6 +1424,7 @@ TEMPLATE = """<!DOCTYPE html>
             else if (state.view === 'notebook') loadNotebook(state.name, false);
             else if (state.view === 'note') loadNote(state.path, false);
             else if (state.view === 'todos') loadTodos(false);
+            else if (state.view === 'graph') loadGraph(false);
         });
 
         // Init - set initial state and load based on hash
@@ -1040,6 +1441,9 @@ TEMPLATE = """<!DOCTYPE html>
         } else if (hash === '#todos') {
             history.replaceState({ view: 'todos' }, '', hash);
             loadTodos(false);
+        } else if (hash === '#graph') {
+            history.replaceState({ view: 'graph' }, '', hash);
+            loadGraph(false);
         } else {
             history.replaceState({ view: 'home' }, '', '#');
             loadHome(false);
@@ -1340,6 +1744,195 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                     "path": note_path_str,
                     "alias": note_alias,
                 }
+            )
+            return
+
+        # API: Resolve link target to note path
+        if path == "/api/resolve-link":
+            from nb.core.note_links import _find_similar_note, resolve_link_target
+
+            target = query.get("target", [None])[0]
+            source = query.get("source", [None])[0]
+
+            if not target:
+                self.send_json({"error": "Missing target"}, 400)
+                return
+
+            # Determine source path for relative link resolution
+            source_path = None
+            if source:
+                source_path = Path(source)
+                if not source_path.is_absolute():
+                    source_path = config.notes_root / source_path
+
+            resolved = resolve_link_target(
+                target,
+                source_path or config.notes_root,
+                config.notes_root,
+            )
+
+            if resolved and resolved.exists():
+                # Return the path relative to notes_root or absolute for external
+                try:
+                    rel_path = resolved.relative_to(config.notes_root)
+                    self.send_json({"path": str(rel_path).replace("\\", "/")})
+                except ValueError:
+                    # External path - return absolute
+                    self.send_json({"path": str(resolved).replace("\\", "/")})
+            else:
+                # Not found - try to suggest a similar note
+                suggestion = _find_similar_note(target, config.notes_root)
+                self.send_json({"path": None, "suggestion": suggestion})
+            return
+
+        # API: Get graph data for visualization
+        if path == "/api/graph":
+            from nb.index.db import get_db
+
+            db = get_db()
+
+            nodes = []
+            edges = []
+            node_ids = set()
+
+            # Get all notes as nodes
+            note_rows = db.fetchall(
+                "SELECT path, title, notebook FROM notes WHERE external = 0"
+            )
+
+            for row in note_rows:
+                path_str = row["path"].replace("\\", "/")
+                node_ids.add(path_str)
+                nodes.append(
+                    {
+                        "id": path_str,
+                        "title": row["title"] or Path(row["path"]).stem,
+                        "type": "note",
+                        "notebook": row["notebook"],
+                    }
+                )
+
+            # Get all notebooks as nodes
+            notebook_rows = db.fetchall(
+                "SELECT DISTINCT notebook FROM notes WHERE external = 0 AND notebook IS NOT NULL"
+            )
+            notebook_ids = set()
+            nb_config_map = {}
+            for row in notebook_rows:
+                nb_name = row["notebook"]
+                if nb_name and nb_name not in notebook_ids:
+                    notebook_ids.add(nb_name)
+                    nb_id = f"notebook:{nb_name}"
+                    nb_conf = config.get_notebook(nb_name)
+                    color = get_color_hex(nb_conf.color) if nb_conf else None
+                    nb_config_map[nb_name] = color
+                    nodes.append(
+                        {
+                            "id": nb_id,
+                            "title": nb_name,
+                            "type": "notebook",
+                            "color": color,
+                        }
+                    )
+
+            # Get all tags as nodes
+            tag_rows = db.fetchall("SELECT DISTINCT tag FROM note_tags")
+            tag_ids = set()
+            for row in tag_rows:
+                tag = row["tag"]
+                if tag and tag not in tag_ids:
+                    tag_ids.add(tag)
+                    nodes.append(
+                        {
+                            "id": f"tag:{tag}",
+                            "title": f"#{tag}",
+                            "type": "tag",
+                        }
+                    )
+
+            # Add note → notebook edges
+            for row in note_rows:
+                path_str = row["path"].replace("\\", "/")
+                nb_name = row["notebook"]
+                if nb_name:
+                    edges.append(
+                        {
+                            "source": path_str,
+                            "target": f"notebook:{nb_name}",
+                            "type": "notebook",
+                        }
+                    )
+
+            # Add note → tag edges
+            note_tag_rows = db.fetchall("SELECT note_path, tag FROM note_tags")
+            for row in note_tag_rows:
+                path_str = row["note_path"].replace("\\", "/")
+                if path_str in node_ids:
+                    edges.append(
+                        {
+                            "source": path_str,
+                            "target": f"tag:{row['tag']}",
+                            "type": "tag",
+                        }
+                    )
+
+            # Add note → note edges (from links)
+            link_rows = db.fetchall(
+                """SELECT source_path, target_path FROM note_links
+                   WHERE is_external = 0"""
+            )
+
+            for row in link_rows:
+                source = row["source_path"].replace("\\", "/")
+                target = row["target_path"].replace("\\", "/")
+
+                # Resolve target to actual path if it's a partial reference
+                if target not in node_ids:
+                    # Try to find matching node
+                    target_stem = Path(target).stem
+                    for node_id in node_ids:
+                        if Path(node_id).stem == target_stem:
+                            target = node_id
+                            break
+
+                if source in node_ids and target in node_ids:
+                    edges.append(
+                        {
+                            "source": source,
+                            "target": target,
+                            "type": "link",
+                        }
+                    )
+
+            self.send_json({"nodes": nodes, "edges": edges})
+            return
+
+        # API: Get backlinks for a note
+        if path == "/api/backlinks":
+            from nb.core.note_links import get_backlinks
+
+            note_path_str = query.get("path", [None])[0]
+            if not note_path_str:
+                self.send_json({"error": "Missing path"}, 400)
+                return
+
+            # Resolve to full path
+            full_path = _safe_note_path(config.notes_root, note_path_str)
+            if not full_path or not full_path.exists():
+                self.send_json([])
+                return
+
+            backlinks = get_backlinks(full_path)
+            self.send_json(
+                [
+                    {
+                        "source_path": str(b.source_path).replace("\\", "/"),
+                        "display_text": b.display_text,
+                        "link_type": b.link_type,
+                        "line_number": b.line_number,
+                    }
+                    for b in backlinks
+                ]
             )
             return
 

@@ -16,9 +16,11 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Note streaming** - Browse notes interactively with keyboard navigation
 - **Linked files** - Index external todo files and note directories
 - **Note linking** - Wiki-style and markdown links between notes with backlink tracking
+- **Knowledge graph** - Interactive D3.js visualization in web UI, ASCII graph in CLI
+- **Related notes** - Find connected notes by links, tags, and semantic similarity
 - **Attachments** - Attach files and URLs to notes and todos
 - **Interactive mode** - Keyboard-driven todo management
-- **Web viewer** - Browse notes in a browser with search and todos
+- **Web viewer** - Browse notes with clickable links, backlinks panel, and graph view
 - **Meeting recording** - Record audio and transcribe with speaker diarization (optional)
 
 ## Installation
@@ -583,6 +585,94 @@ Notes linking to projects/myproject.md:
 3 backlinks
 ```
 
+### Knowledge Graph (CLI)
+
+Visualize note connections in the terminal:
+
+```bash
+# Overview of entire knowledge graph
+nb graph                    # Stats: nodes, edges, most connected notes
+
+# Graph for a specific note
+nb graph today              # Show connections for today's note
+nb graph myproject          # Show connections for myproject
+nb graph projects/idea -d 2 # Show 2 levels of connections
+
+# Options
+nb graph --no-tags          # Don't show tag connections
+nb graph --links-only       # Only show note-to-note links
+```
+
+#### Example Output
+
+```bash
+$ nb graph projects/myproject
+
+Graph for myproject
+
+┌─ myproject ─┐
+
+↓ Links to:
+  ├── api-docs (wiki)
+  ├── config (markdown)
+  └── roadmap (wiki)
+
+↑ Linked from:
+  ├── 2025-11-27:15 (wiki)
+  └── standup:23 (markdown)
+
+# Tags:
+  ├── #project (5 other notes)
+  └── #active (3 other notes)
+
+3 outgoing, 2 incoming, 2 tags
+```
+
+### Related Notes
+
+Find notes related to a given note by combining multiple signals:
+
+```bash
+# Find related notes
+nb related today              # Related to today's note
+nb related myproject          # Related to myproject
+nb related today -l 5         # Show top 5 related
+
+# Filter by signal type
+nb related today --links-only     # Only by direct links
+nb related today --tags-only      # Only by shared tags
+nb related today --semantic-only  # Only by content similarity
+```
+
+The `related` command combines three signals with weighted scoring:
+- **Direct links** (weight: 1.0 outgoing, 0.9 backlinks) - notes you link to or that link to you
+- **Shared tags** (weight: 0.3 per tag) - notes with common tags
+- **Semantic similarity** (weight: 0.5 × score) - notes with similar content
+
+#### Example Output
+
+```bash
+$ nb related projects/myproject
+
+Notes related to myproject
+
+ 1. ██████████ api-docs
+    projects/api-docs.md
+    linked to, shared tags: #project, #docs
+
+ 2. ████████   roadmap
+    projects/roadmap.md
+    linked to, similar content (78%)
+
+ 3. ██████     2025-11-27
+    daily/2025/Nov25-Dec01/2025-11-27.md
+    links here, shared tags: #project
+
+ 4. ████       config-guide
+    projects/config-guide.md
+    shared tags: #project, #docs, similar content (65%)
+```
+
 ### Attachments
 
 ```bash
@@ -621,11 +711,34 @@ Features:
 - Create and edit notes directly in the browser
 - Markdown rendering with syntax highlighting for code blocks
 - Full-text search across all notes
+- **Clickable links**: Wiki links `[[note]]` and internal markdown links navigate between notes
+- **Backlinks panel**: See which notes link to the current note
+- **Knowledge graph**: Interactive D3.js visualization of note connections
 - Todo management: add new todos, toggle completion, view by section
 - Todo sections: Overdue, In Progress, Due Today, Due This Week, Due Later, No Due Date
 - Sort todos by status, notebook, due date, priority, or created date
 - Dark theme, mobile responsive
-- Zero additional dependencies (stdlib HTTP server + CDN for markdown/highlighting)
+- Zero additional dependencies (stdlib HTTP server + CDN for markdown/highlighting/D3)
+
+#### Graph View
+
+Access the interactive knowledge graph from the "Graph" link in the navigation sidebar, or directly at `http://localhost:3000/#graph`.
+
+The graph shows three types of nodes:
+- **Notes** (colored by notebook) - click to view the note
+- **Tags** (purple) - toggle visibility with checkbox
+- **Notebooks** (larger, notebook color) - click to browse
+
+Edge types:
+- **Solid lines**: Direct note-to-note links
+- **Dashed lines**: Note-to-tag associations
+- **Dotted lines**: Note-to-notebook membership
+
+Controls:
+- Drag nodes to rearrange the layout
+- Scroll to zoom, or use the zoom slider
+- Toggle tags/notebooks visibility with checkboxes
+- Click "Reset View" to restore default zoom
 
 Press `Ctrl+C` to stop the server.
 
