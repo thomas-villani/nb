@@ -1,3 +1,25 @@
+# v0.2.2 - 2025-12-02
+
+Patch release addressing todo timestamp preservation during re-indexing and a few maintenance fixes.
+
+## Bug Fixes
+
+- [4eff321] Preserve todo created/completed dates during re-index
+  - Capture created_date and completed_date for a file before deleting its todos to avoid resetting timestamps on re-index.
+  - Added get_todo_dates_for_source helper to fetch date mappings for a source file.
+  - Extended upsert_todo and upsert_todos_batch to accept preserved_dates and prefer preserved values when present, falling back to DB values or today's date as needed.
+  - Updated scanner/indexing logic to preserve dates across multiple indexing flows (including linked files/notes and threaded indexing).
+  - Added tests verifying:
+    - created_date and completed_date are preserved across re-indexes.
+    - new todos receive today's date when no prior date exists.
+
+## Maintenance
+
+- [05225a1] Fixed issue in pyproject.toml to correct packaging/metadata.
+- [4f57e8e] Bump version: 0.2.1 → 0.2.2.
+- [9590f4a] Updated conf.py version and adjusted bump-my-version settings to update pyproject.toml automatically in future.
+- [7dcca86] Updated CHANGELOG.md.
+
 # v0.2.1 - 2025-12-02
 
 Patch release with several CLI and web UI improvements, todo-list UX enhancements, and two breaking DB-related changes (see "Breaking Changes" below). Developers should read the migration guidance before upgrading.
