@@ -14,6 +14,7 @@ from click.testing import CliRunner
 from nb import config as config_module
 from nb.cli import cli
 from nb.config import Config, EmbeddingsConfig, NotebookConfig
+from nb.index.db import reset_db
 from nb.web import TEMPLATE, NBHandler
 
 
@@ -50,13 +51,17 @@ def web_config(tmp_path: Path):
 
     yield cfg
 
+    # Cleanup: reset config and database singletons to avoid test interference
     config_module.reset_config()
+    reset_db()
 
 
 @pytest.fixture
 def mock_web_config(web_config: Config, monkeypatch: pytest.MonkeyPatch):
     """Mock get_config() for web tests."""
+    # Reset any cached singletons before test
     config_module.reset_config()
+    reset_db()
     monkeypatch.setattr(config_module, "_config", web_config)
     return web_config
 

@@ -661,20 +661,20 @@ def open_note(path: Path, line: int | None = None) -> None:
 def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
     """Re-index a note after it has been edited.
 
-    For internal notes, this extracts and updates todos.
-    For linked notes, this does a full re-index (note metadata + todos).
+    Performs a full re-index of the note, updating:
+    - Note metadata (title, date, content hash)
+    - Tags
+    - Links
+    - Todos
 
     Args:
         path: Absolute path to the note
         notes_root: Notes root directory
 
     """
-    from nb.core.todos import extract_todos
-    from nb.index.todos_repo import delete_todos_for_source, upsert_todos_batch
-
     # Check if this is a linked note (external file)
     try:
-        rel_path = path.relative_to(notes_root)
+        path.relative_to(notes_root)
         is_external = False
     except ValueError:
         is_external = True
@@ -714,27 +714,10 @@ def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
         # Not a linked note, nothing to do
         return
 
-    # Internal note - determine source type and re-extract todos
-    from nb.config import get_config as get_cfg
+    # Internal note - do a full re-index (note metadata + todos)
+    from nb.index.scanner import index_note
 
-    cfg = get_cfg()
-    if rel_path.name == cfg.todo.inbox_file and len(rel_path.parts) == 1:
-        source_type = "inbox"
-    else:
-        source_type = "note"
-
-    # Delete existing todos and re-extract
-    delete_todos_for_source(path)
-    todos = extract_todos(
-        path,
-        source_type=source_type,
-        external=False,
-        alias=None,
-        notes_root=notes_root,
-        notebook=None,
-    )
-    # Batch insert for performance (single commit instead of one per todo)
-    upsert_todos_batch(todos)
+    index_note(path, notes_root, index_vectors=True)
 
 
 def get_note(path: Path, notes_root: Path | None = None) -> Note | None:

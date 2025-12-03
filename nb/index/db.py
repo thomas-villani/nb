@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 # Current schema version
 SCHEMA_VERSION = 15
@@ -481,8 +484,8 @@ def rebuild_db(db: Database) -> None:
         from nb.index.search import reset_search
 
         reset_search()
-    except Exception:
-        pass  # Don't fail rebuild if vector clearing fails
+    except Exception as e:
+        _logger.debug("Failed to clear vector index during rebuild: %s", e)
 
     # Recreate schema from scratch
     apply_migrations(db)

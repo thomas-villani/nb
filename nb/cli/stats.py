@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import date, timedelta
 
 import click
@@ -35,7 +36,17 @@ def _get_week_start(target_date: date, week_start_day: str) -> date:
         The first day of the calendar week containing target_date.
     """
     # Monday = 0, Sunday = 6
-    start_weekday = 0 if week_start_day == "monday" else 6
+    week_start_day_lower = week_start_day.lower()
+    if week_start_day_lower == "monday":
+        start_weekday = 0
+    elif week_start_day_lower == "sunday":
+        start_weekday = 6
+    else:
+        print(
+            f"Warning: Invalid week_start_day '{week_start_day}', defaulting to monday",
+            file=sys.stderr,
+        )
+        start_weekday = 0
     current_weekday = target_date.weekday()
 
     # Calculate days back to week start

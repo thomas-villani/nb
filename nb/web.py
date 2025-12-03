@@ -20,29 +20,29 @@ from nb.core.notes import get_note, get_sections_for_path
 def get_alias_for_path(note_path: Path) -> str | None:
     """Get the alias for a given note path, if one exists.
 
-    Uses a fresh SQLite connection for thread safety with ThreadingTCPServer.
+    Uses a fresh SQLite connection to avoid issues with connection sharing.
     """
     config = get_config()
     try:
-        # Create a fresh connection for thread safety
+        # Create a fresh connection to avoid connection sharing issues
         conn = sqlite3.connect(config.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.execute("SELECT alias, path FROM note_aliases")
         rows = cursor.fetchall()
         conn.close()
 
-        # Normalize the path for comparison
-        normalized = note_path.resolve() if note_path.is_absolute() else note_path
-        normalized_str = str(normalized).replace("\\", "/")
+        # Always resolve to absolute path for comparison
+        # For relative paths, prepend notes_root before resolving
+        if note_path.is_absolute():
+            target = note_path.resolve()
+        else:
+            target = (config.notes_root / note_path).resolve()
 
         for row in rows:
             alias_path = Path(row["path"])
             if not alias_path.is_absolute():
                 alias_path = config.notes_root / alias_path
-            if (
-                alias_path.resolve() == normalized
-                or str(alias_path).replace("\\", "/") == normalized_str
-            ):
+            if alias_path.resolve() == target:
                 return row["alias"]
     except Exception:
         # If database doesn't exist or table missing, just return None
@@ -75,27 +75,73 @@ def get_color_hex(color: str | None) -> str | None:
     return COLOR_MAP.get(color.lower())
 
 
+def _is_allowed_external_path(path: Path) -> bool:
+    """Check if an absolute path belongs to a configured linked note or file.
+
+    This prevents arbitrary file read by ensuring absolute paths are only
+    allowed if they're part of a linked notes directory or linked todo file.
+
+    Args:
+        path: The absolute path to validate.
+
+    Returns:
+        True if the path belongs to a linked note/file, False otherwise.
+    """
+    from nb.core.links import list_linked_files, list_linked_notes
+
+    resolved = path.resolve()
+
+    # Check linked notes (files and directories)
+    for linked_note in list_linked_notes():
+        if not linked_note.path.exists():
+            continue
+        linked_resolved = linked_note.path.resolve()
+        if linked_note.path.is_file():
+            # Single file - must match exactly
+            if resolved == linked_resolved:
+                return True
+        else:
+            # Directory - check if path is inside it
+            try:
+                resolved.relative_to(linked_resolved)
+                return True
+            except ValueError:
+                continue
+
+    # Check linked todo files
+    for linked_file in list_linked_files():
+        if not linked_file.path.exists():
+            continue
+        if resolved == linked_file.path.resolve():
+            return True
+
+    return False
+
+
 def _safe_note_path(notes_root: Path, rel: str) -> Path | None:
-    """Validate and resolve a note path, ensuring it stays within notes_root.
+    """Validate and resolve a note path, ensuring it's an allowed location.
 
     For internal notes (relative paths), ensures the resolved path doesn't
     escape notes_root via path traversal (e.g., "../../etc/passwd").
 
-    For linked/external notes (absolute paths), returns the path as-is since
-    they are intentionally outside notes_root.
+    For linked/external notes (absolute paths), validates that the path
+    belongs to a configured linked note or file to prevent arbitrary file read.
 
     Args:
         notes_root: The notes root directory.
         rel: The relative or absolute path string from the request.
 
     Returns:
-        Resolved Path if valid, None if path traversal detected.
+        Resolved Path if valid, None if path traversal detected or
+        absolute path is not an allowed linked location.
     """
     path = Path(rel)
 
-    # Absolute paths are allowed for linked/external notes
+    # Absolute paths must belong to a configured linked note/file
     if path.is_absolute():
-        return path
+        if _is_allowed_external_path(path):
+            return path
+        return None  # Reject absolute paths not in linked locations
 
     # For relative paths, resolve and check containment
     resolved = (notes_root / rel).resolve()
@@ -3035,13 +3081,16 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             full_path.write_text(content, encoding="utf-8")
 
             # Reindex the note in a separate thread (can be slow for large files)
+            # Uses thread-safe version to avoid SQLite threading issues
             import threading
 
             def reindex_note():
                 try:
-                    from nb.index.scanner import index_note
+                    from nb.index.scanner import index_note_threadsafe
 
-                    index_note(full_path, config.notes_root, index_vectors=True)
+                    index_note_threadsafe(
+                        full_path, config.notes_root, index_vectors=True
+                    )
                 except Exception:
                     pass  # Save succeeded, don't fail if indexing fails
 
@@ -3067,7 +3116,7 @@ def run_server(
     class Server(socketserver.TCPServer):
         allow_reuse_address = True
 
-    httpd = Server(("", port), NBHandler)
+    httpd = Server(("127.0.0.1", port), NBHandler)
 
     if open_browser:
 

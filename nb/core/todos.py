@@ -8,7 +8,12 @@ from pathlib import Path
 
 from nb.config import get_config
 from nb.models import Attachment, Priority, Todo, TodoSource, TodoStatus
-from nb.utils.dates import format_datetime, is_relative_date, parse_fuzzy_datetime
+from nb.utils.dates import (
+    format_datetime,
+    is_relative_date,
+    parse_fuzzy_datetime,
+    parse_fuzzy_datetime_future,
+)
 from nb.utils.hashing import make_attachment_id, make_todo_id
 
 # Regex patterns for todo parsing
@@ -47,11 +52,16 @@ def clean_todo_content(content: str) -> str:
 
 
 def parse_due_date(content: str) -> datetime | None:
-    """Extract due date (with optional time) from todo content."""
+    """Extract due date (with optional time) from todo content.
+
+    Uses future-oriented parsing so that "@due(Friday)" on a Monday
+    returns next Friday, not last Friday. This matches user expectations
+    when setting due dates.
+    """
     match = DUE_PATTERN.search(content)
     if match:
         date_str = match.group("date")
-        return parse_fuzzy_datetime(date_str)
+        return parse_fuzzy_datetime_future(date_str)
     return None
 
 

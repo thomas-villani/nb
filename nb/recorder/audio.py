@@ -195,90 +195,184 @@ def find_default_devices() -> tuple[int | None, int | None]:
     return mic_device, loopback_device
 
 
+def _process_stereo_chunk(mic_data: Any, loopback_data: Any, np: Any) -> Any:
+    """Process mic and loopback data into a stereo chunk.
+
+    Args:
+        mic_data: Microphone audio data (mono or multi-channel)
+        loopback_data: Loopback audio data (stereo or mono)
+        np: numpy module
+
+    Returns:
+        Stereo numpy array with mic on left, loopback on right
+    """
+    # Ensure same length (pad shorter with zeros)
+    max_len = max(len(mic_data), len(loopback_data))
+    if len(mic_data) < max_len:
+        pad_width = [(0, max_len - len(mic_data))]
+        if mic_data.ndim > 1:
+            pad_width.append((0, 0))
+        mic_data = np.pad(mic_data, pad_width)
+    if len(loopback_data) < max_len:
+        pad_width = [(0, max_len - len(loopback_data))]
+        if loopback_data.ndim > 1:
+            pad_width.append((0, 0))
+        loopback_data = np.pad(loopback_data, pad_width)
+
+    # Mic is mono -> left channel
+    left_channel = mic_data[:, 0] if mic_data.ndim > 1 else mic_data.flatten()
+
+    # Loopback stereo -> mix to mono for right channel
+    if loopback_data.ndim > 1 and loopback_data.shape[1] >= 2:
+        right_channel = (loopback_data[:, 0] + loopback_data[:, 1]) / 2
+    else:
+        right_channel = loopback_data.flatten()
+
+    # Ensure same length after processing
+    min_len = min(len(left_channel), len(right_channel))
+    return np.column_stack([left_channel[:min_len], right_channel[:min_len]])
+
+
 def _writer_thread(session: RecordingSession) -> None:
-    """Background thread that waits for stop signal and writes the audio file.
+    """Background thread that periodically writes audio to disk.
 
     Streams are started in the main thread (required for WASAPI on Windows).
-    This thread just waits and writes the buffered data when stopped.
+    This thread periodically flushes buffered data to disk to limit memory usage,
+    then finalizes the file when stopped.
     """
     require_recorder()
     import numpy as np
     import soundfile as sf
 
+    # Flush interval in seconds - write to disk every 5 seconds
+    FLUSH_INTERVAL = 5.0
+
+    sample_rate = session.sample_rate
+    mode = session.mode
+
+    # Determine channels and open output file for incremental writing
+    if mode == RecordingMode.BOTH:
+        channels = 2  # Stereo: mic on left, loopback on right
+    elif mode == RecordingMode.SYSTEM_ONLY:
+        channels = 2  # Loopback is typically stereo
+    else:
+        channels = 1  # Mic only is mono
+
     try:
-        # Wait for stop signal
-        while not session._stop_event.is_set():
-            time.sleep(0.1)
+        # Open file for incremental writing
+        with sf.SoundFile(
+            session.output_path,
+            mode="w",
+            samplerate=sample_rate,
+            channels=channels,
+            subtype="PCM_16",
+        ) as outfile:
+            last_flush = time.time()
+            has_written_data = False
 
-        # Stop and close streams
-        if session._mic_stream is not None:
-            session._mic_stream.stop()
-            session._mic_stream.close()
-        if session._loopback_stream is not None:
-            session._loopback_stream.stop()
-            session._loopback_stream.close()
+            # Periodically flush buffers to disk until stop signal
+            while not session._stop_event.is_set():
+                time.sleep(0.1)
 
-        # Write audio data to file
-        mic_buffer = session._mic_buffer
-        loopback_buffer = session._loopback_buffer
-        sample_rate = session.sample_rate
-        mode = session.mode
+                # Check if it's time to flush
+                if time.time() - last_flush >= FLUSH_INTERVAL:
+                    with session._buffer_lock:
+                        mic_buffer = session._mic_buffer
+                        loopback_buffer = session._loopback_buffer
 
-        with session._buffer_lock:
-            if mic_buffer and loopback_buffer and mode == RecordingMode.BOTH:
-                # Combine mic and loopback into stereo
-                mic_data = np.concatenate(mic_buffer, axis=0)
-                loopback_data = np.concatenate(loopback_buffer, axis=0)
+                        if (
+                            mode == RecordingMode.BOTH
+                            and mic_buffer
+                            and loopback_buffer
+                        ):
+                            # Process and write stereo data
+                            mic_data = np.concatenate(mic_buffer, axis=0)
+                            loopback_data = np.concatenate(loopback_buffer, axis=0)
+                            stereo_data = _process_stereo_chunk(
+                                mic_data, loopback_data, np
+                            )
+                            outfile.write(stereo_data)
+                            has_written_data = True
+                            # Clear buffers
+                            session._mic_buffer.clear()
+                            session._loopback_buffer.clear()
 
-                # Ensure same length (pad shorter with zeros)
-                max_len = max(len(mic_data), len(loopback_data))
-                if len(mic_data) < max_len:
-                    pad_width = [(0, max_len - len(mic_data))]
+                        elif mode == RecordingMode.MIC_ONLY and mic_buffer:
+                            mic_data = np.concatenate(mic_buffer, axis=0)
+                            if mic_data.ndim > 1:
+                                mic_data = mic_data[:, 0]
+                            outfile.write(mic_data)
+                            has_written_data = True
+                            session._mic_buffer.clear()
+
+                        elif mode == RecordingMode.SYSTEM_ONLY and loopback_buffer:
+                            loopback_data = np.concatenate(loopback_buffer, axis=0)
+                            outfile.write(loopback_data)
+                            has_written_data = True
+                            session._loopback_buffer.clear()
+
+                    last_flush = time.time()
+
+            # Stop signal received - stop and close streams
+            if session._mic_stream is not None:
+                session._mic_stream.stop()
+                session._mic_stream.close()
+            if session._loopback_stream is not None:
+                session._loopback_stream.stop()
+                session._loopback_stream.close()
+
+            # Write any remaining buffered data
+            with session._buffer_lock:
+                mic_buffer = session._mic_buffer
+                loopback_buffer = session._loopback_buffer
+
+                if mode == RecordingMode.BOTH and mic_buffer and loopback_buffer:
+                    mic_data = np.concatenate(mic_buffer, axis=0)
+                    loopback_data = np.concatenate(loopback_buffer, axis=0)
+                    stereo_data = _process_stereo_chunk(mic_data, loopback_data, np)
+                    outfile.write(stereo_data)
+                    has_written_data = True
+
+                elif mode == RecordingMode.MIC_ONLY and mic_buffer:
+                    mic_data = np.concatenate(mic_buffer, axis=0)
                     if mic_data.ndim > 1:
-                        pad_width.append((0, 0))
-                    mic_data = np.pad(mic_data, pad_width)
-                if len(loopback_data) < max_len:
-                    pad_width = [(0, max_len - len(loopback_data))]
-                    if loopback_data.ndim > 1:
-                        pad_width.append((0, 0))
-                    loopback_data = np.pad(loopback_data, pad_width)
+                        mic_data = mic_data[:, 0]
+                    outfile.write(mic_data)
+                    has_written_data = True
 
-                # Mic is mono -> left channel
-                left_channel = (
-                    mic_data[:, 0] if mic_data.ndim > 1 else mic_data.flatten()
-                )
+                elif mode == RecordingMode.SYSTEM_ONLY and loopback_buffer:
+                    loopback_data = np.concatenate(loopback_buffer, axis=0)
+                    outfile.write(loopback_data)
+                    has_written_data = True
 
-                # Loopback stereo -> mix to mono for right channel
-                if loopback_data.ndim > 1 and loopback_data.shape[1] >= 2:
-                    right_channel = (loopback_data[:, 0] + loopback_data[:, 1]) / 2
-                else:
-                    right_channel = loopback_data.flatten()
+                # Handle edge case: BOTH mode but only one source had data
+                elif mode == RecordingMode.BOTH:
+                    if mic_buffer and not loopback_buffer:
+                        mic_data = np.concatenate(mic_buffer, axis=0)
+                        if mic_data.ndim > 1:
+                            mic_data = mic_data[:, 0]
+                        # Write as left channel only, right channel silent
+                        stereo_data = np.column_stack(
+                            [mic_data, np.zeros_like(mic_data)]
+                        )
+                        outfile.write(stereo_data)
+                        has_written_data = True
+                    elif loopback_buffer and not mic_buffer:
+                        loopback_data = np.concatenate(loopback_buffer, axis=0)
+                        if loopback_data.ndim > 1 and loopback_data.shape[1] >= 2:
+                            right_channel = (
+                                loopback_data[:, 0] + loopback_data[:, 1]
+                            ) / 2
+                        else:
+                            right_channel = loopback_data.flatten()
+                        # Write as right channel only, left channel silent
+                        stereo_data = np.column_stack(
+                            [np.zeros_like(right_channel), right_channel]
+                        )
+                        outfile.write(stereo_data)
+                        has_written_data = True
 
-                # Ensure same length after processing
-                min_len = min(len(left_channel), len(right_channel))
-                stereo_data = np.column_stack(
-                    [left_channel[:min_len], right_channel[:min_len]]
-                )
-
-                sf.write(
-                    session.output_path, stereo_data, sample_rate, subtype="PCM_16"
-                )
-
-            elif mic_buffer:
-                # Only mic data (mono)
-                mic_data = np.concatenate(mic_buffer, axis=0)
-                if mic_data.ndim > 1:
-                    mic_data = mic_data[:, 0]
-                sf.write(session.output_path, mic_data, sample_rate, subtype="PCM_16")
-
-            elif loopback_buffer:
-                # Only loopback data
-                loopback_data = np.concatenate(loopback_buffer, axis=0)
-                sf.write(
-                    session.output_path, loopback_data, sample_rate, subtype="PCM_16"
-                )
-
-            else:
+            if not has_written_data:
                 raise ValueError("No audio data was captured")
 
     except Exception as e:

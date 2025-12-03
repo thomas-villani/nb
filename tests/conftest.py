@@ -49,13 +49,17 @@ def temp_config(temp_notes_root: Path) -> Generator[Config]:
 
     yield cfg
 
-    # Reset the global config singleton after test
+    # Reset global singletons after test to avoid interference
     config_module.reset_config()
+    reset_db()
 
 
 @pytest.fixture
 def mock_config(temp_config: Config, monkeypatch: pytest.MonkeyPatch) -> Config:
     """Mock get_config() to return temp_config."""
+    # Reset any cached singletons before test
+    config_module.reset_config()
+    reset_db()
     monkeypatch.setattr(config_module, "_config", temp_config)
     return temp_config
 

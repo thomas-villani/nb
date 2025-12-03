@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import logging
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -29,6 +30,9 @@ ENABLE_VECTOR_INDEXING = True
 
 # Lock for vector indexing (localvectordb may not be thread-safe)
 _vector_lock = threading.Lock()
+
+# Logger for vector indexing issues
+_logger = logging.getLogger(__name__)
 
 
 def _get_thread_db() -> Database:
@@ -230,22 +234,28 @@ def index_note(
     if notes_root is None:
         notes_root = get_config().notes_root
 
-    note = get_note(path, notes_root)
-    if not note:
-        return
-
-    # Read the full content for storage and vector indexing
+    # Resolve full path first
     if path.is_absolute():
         full_path = path
     else:
         full_path = notes_root / path
 
+    # Normalize relative due dates FIRST (e.g., @due(today) -> @due(2025-12-01))
+    # This must happen before reading content/hash to avoid re-indexing next time
+    normalize_due_dates_in_file(full_path)
+
+    # Now read the normalized content and compute hash
+    note = get_note(path, notes_root)
+    if not note:
+        return
+
+    # Read the full content for storage and vector indexing
     try:
         content = full_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         content = ""
 
-    # Get file mtime for caching
+    # Get file mtime for caching (after normalization)
     try:
         mtime = full_path.stat().st_mtime
     except OSError:
@@ -343,18 +353,12 @@ def index_note(
 
             search = get_search()
             search.index_note(note, content)
-        except Exception:
+        except Exception as e:
             # Don't fail indexing if vector search fails
             # (e.g., embedding service not available)
-            pass
+            _logger.debug("Vector indexing failed for %s: %s", path, e)
 
-    # Index todos
-    if path.is_absolute():
-        full_path = path
-    else:
-        full_path = notes_root / path
-
-    # Determine source type
+    # Index todos (file was already normalized at the start of this function)
     config = get_config()
     if full_path.name == config.todo.inbox_file:
         source_type = "inbox"
@@ -366,9 +370,6 @@ def index_note(
 
     # Delete existing todos for this file
     delete_todos_for_source(full_path)
-
-    # Normalize relative due dates (e.g., @due(today) -> @due(2025-12-01))
-    normalize_due_dates_in_file(full_path)
 
     # Extract and index new todos (batch for performance)
     todos = extract_todos(full_path, source_type=source_type, notes_root=notes_root)
@@ -491,7 +492,7 @@ def index_all_notes(
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(
-                _index_note_thread_safe, path, notes_root, index_vectors
+                index_note_threadsafe, path, notes_root, index_vectors
             ): path
             for path in files_to_index
         }
@@ -508,34 +509,41 @@ def index_all_notes(
     return count
 
 
-def _index_note_thread_safe(
+def index_note_threadsafe(
     path: Path,
     notes_root: Path,
     index_vectors: bool = True,
 ) -> None:
-    """Thread-safe wrapper for index_note.
+    """Thread-safe version of index_note for use from background threads.
 
-    Uses thread-local database connections.
+    Uses thread-local database connections to avoid SQLite threading issues.
+    Call this instead of index_note() when indexing from a background thread.
     """
     if notes_root is None:
         notes_root = get_config().notes_root
 
-    note = get_note(path, notes_root)
-    if not note:
-        return
-
-    # Read the full content for storage and vector indexing
+    # Resolve full path first
     if path.is_absolute():
         full_path = path
     else:
         full_path = notes_root / path
 
+    # Normalize relative due dates FIRST (e.g., @due(today) -> @due(2025-12-01))
+    # This must happen before reading content/hash to avoid re-indexing next time
+    normalize_due_dates_in_file(full_path)
+
+    # Now read the normalized content and compute hash
+    note = get_note(path, notes_root)
+    if not note:
+        return
+
+    # Read the full content for storage and vector indexing
     try:
         content = full_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         content = ""
 
-    # Get file mtime for caching
+    # Get file mtime for caching (after normalization)
     try:
         mtime = full_path.stat().st_mtime
     except OSError:
@@ -635,11 +643,10 @@ def _index_note_thread_safe(
 
                 search = get_search()
                 search.index_note(note, content)
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.debug("Vector indexing failed for %s: %s", path, e)
 
-    # Index todos
-    # Determine source type
+    # Index todos (file was already normalized at the start of this function)
     config = get_config()
     if full_path.name == config.todo.inbox_file:
         source_type = "inbox"
@@ -651,9 +658,6 @@ def _index_note_thread_safe(
 
     # Delete existing todos for this file (use thread-local db for thread safety)
     delete_todos_for_source(full_path, db=db)
-
-    # Normalize relative due dates (e.g., @due(today) -> @due(2025-12-01))
-    normalize_due_dates_in_file(full_path)
 
     # Extract and index new todos (batch for performance, use thread-local db)
     todos = extract_todos(full_path, source_type=source_type, notes_root=notes_root)
@@ -1141,9 +1145,9 @@ def remove_deleted_notes(
                 search = get_search()
                 for path in removed_paths:
                     search.delete_note(path)
-            except Exception:
+            except Exception as e:
                 # Don't fail if vector search cleanup fails
-                pass
+                _logger.debug("Vector cleanup failed: %s", e)
 
     return removed
 
