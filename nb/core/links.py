@@ -10,6 +10,7 @@ from pathlib import Path
 from nb.config import LinkedNoteConfig, LinkedTodoConfig
 from nb.index.db import get_db
 
+
 # =============================================================================
 # Linked Todo Files
 # =============================================================================
@@ -57,9 +58,9 @@ def get_linked_file(alias: str) -> LinkedTodoConfig | None:
 
 
 def add_linked_file(
-    path: Path,
-    alias: str | None = None,
-    sync: bool = True,
+        path: Path,
+        alias: str | None = None,
+        sync: bool = True,
 ) -> LinkedTodoConfig:
     """Add a new linked external todo file.
 
@@ -265,12 +266,12 @@ def get_linked_notes_by_alias(alias: str) -> list[LinkedNoteConfig]:
 
 
 def add_linked_note(
-    path: Path,
-    alias: str | None = None,
-    notebook: str | None = None,
-    recursive: bool = True,
-    todo_exclude: bool = False,
-    sync: bool = True,
+        path: Path,
+        alias: str | None = None,
+        notebook: str | None = None,
+        recursive: bool = True,
+        todo_exclude: bool = False,
+        sync: bool = True,
 ) -> LinkedNoteConfig:
     """Add a new linked external note file or directory.
 
@@ -363,7 +364,7 @@ def remove_linked_note(alias: str, notebook: str | None = None) -> bool:
 
 
 def update_linked_note_sync(
-    alias: str, sync: bool, notebook: str | None = None
+        alias: str, sync: bool, notebook: str | None = None
 ) -> bool:
     """Update the sync setting for a linked note.
 
@@ -394,7 +395,7 @@ def update_linked_note_sync(
 
 
 def update_linked_note_todo_exclude(
-    alias: str, todo_exclude: bool, notebook: str | None = None
+        alias: str, todo_exclude: bool, notebook: str | None = None
 ) -> bool:
     """Update the todo_exclude setting for a linked note.
 

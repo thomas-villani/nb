@@ -98,10 +98,10 @@ def _load_todo_sections(todo_id: str) -> list[str]:
 
 
 def upsert_todo(
-    todo: Todo,
-    commit: bool = True,
-    db: Database | None = None,
-    preserved_dates: dict[str, tuple[str | None, str | None]] | None = None,
+        todo: Todo,
+        commit: bool = True,
+        db: Database | None = None,
+        preserved_dates: dict[str, tuple[str | None, str | None]] | None = None,
 ) -> None:
     """Insert or update a todo in the database.
 
@@ -218,9 +218,9 @@ def upsert_todo(
 
 
 def upsert_todos_batch(
-    todos: list[Todo],
-    db: Database | None = None,
-    preserved_dates: dict[str, tuple[str | None, str | None]] | None = None,
+        todos: list[Todo],
+        db: Database | None = None,
+        preserved_dates: dict[str, tuple[str | None, str | None]] | None = None,
 ) -> None:
     """Insert or update multiple todos in a single transaction.
 
@@ -267,7 +267,7 @@ def delete_todo(todo_id: str) -> None:
 
 
 def get_todo_dates_for_source(
-    source_path: Path, db: Database | None = None
+        source_path: Path, db: Database | None = None
 ) -> dict[str, tuple[str | None, str | None]]:
     """Get created_date and completed_date for all todos in a source file.
 
@@ -396,26 +396,26 @@ def update_todo_due_date_db(todo_id: str, new_date: datetime | date | None) -> N
 
 
 def query_todos(
-    completed: bool | None = None,
-    status: TodoStatus | None = None,
-    include_in_progress: bool = True,
-    due_start: date | None = None,
-    due_end: date | None = None,
-    created_start: date | None = None,
-    created_end: date | None = None,
-    overdue: bool = False,
-    priority: int | None = None,
-    notebooks: list[str] | None = None,
-    notes: list[str] | None = None,
-    sections: list[str] | None = None,
-    exclude_notebooks: list[str] | None = None,
-    tag: str | None = None,
-    exclude_tags: list[str] | None = None,
-    source_path: Path | None = None,
-    parent_only: bool = True,
-    exclude_note_excluded: bool = True,
-    path_sections: list[str] | None = None,
-    exclude_path_sections: list[str] | None = None,
+        completed: bool | None = None,
+        status: TodoStatus | None = None,
+        include_in_progress: bool = True,
+        due_start: date | None = None,
+        due_end: date | None = None,
+        created_start: date | None = None,
+        created_end: date | None = None,
+        overdue: bool = False,
+        priority: int | None = None,
+        notebooks: list[str] | None = None,
+        notes: list[str] | None = None,
+        sections: list[str] | None = None,
+        exclude_notebooks: list[str] | None = None,
+        tag: str | None = None,
+        exclude_tags: list[str] | None = None,
+        source_path: Path | None = None,
+        parent_only: bool = True,
+        exclude_note_excluded: bool = True,
+        path_sections: list[str] | None = None,
+        exclude_path_sections: list[str] | None = None,
 ) -> list[Todo]:
     """Query todos with filters.
 
@@ -536,8 +536,8 @@ def query_todos(
         for note_path in notes:
             # Check if this looks like a full/absolute path (contains drive letter or starts with /)
             is_full_path = (
-                len(note_path) > 2 and note_path[1] == ":"  # Windows: C:/...
-            ) or note_path.startswith(
+                                   len(note_path) > 2 and note_path[1] == ":"  # Windows: C:/...
+                           ) or note_path.startswith(
                 "/"
             )  # Unix: /home/...
 
@@ -642,21 +642,21 @@ def get_todo_children(parent_id: str) -> list[Todo]:
 
 
 def get_sorted_todos(
-    completed: bool | None = False,
-    tag: str | None = None,
-    exclude_tags: list[str] | None = None,
-    notebooks: list[str] | None = None,
-    notes: list[str] | None = None,
-    sections: list[str] | None = None,
-    exclude_notebooks: list[str] | None = None,
-    priority: int | None = None,
-    due_start: date | None = None,
-    due_end: date | None = None,
-    created_start: date | None = None,
-    created_end: date | None = None,
-    exclude_note_excluded: bool = True,
-    path_sections: list[str] | None = None,
-    exclude_path_sections: list[str] | None = None,
+        completed: bool | None = False,
+        tag: str | None = None,
+        exclude_tags: list[str] | None = None,
+        notebooks: list[str] | None = None,
+        notes: list[str] | None = None,
+        sections: list[str] | None = None,
+        exclude_notebooks: list[str] | None = None,
+        priority: int | None = None,
+        due_start: date | None = None,
+        due_end: date | None = None,
+        created_start: date | None = None,
+        created_end: date | None = None,
+        exclude_note_excluded: bool = True,
+        path_sections: list[str] | None = None,
+        exclude_path_sections: list[str] | None = None,
 ) -> list[Todo]:
     """Get todos sorted by the default sorting order.
 
@@ -751,15 +751,15 @@ def get_todo_stats() -> dict[str, int]:
         "completed": completed["count"] if completed else 0,
         "in_progress": in_progress["count"] if in_progress else 0,
         "open": (total["count"] if total else 0)
-        - (completed["count"] if completed else 0),
+                - (completed["count"] if completed else 0),
         "overdue": overdue["count"] if overdue else 0,
         "due_today": due_today["count"] if due_today else 0,
     }
 
 
 def get_extended_todo_stats(
-    notebooks: list[str] | None = None,
-    exclude_notebooks: list[str] | None = None,
+        notebooks: list[str] | None = None,
+        exclude_notebooks: list[str] | None = None,
 ) -> dict:
     """Get extended todo statistics for dashboard.
 
@@ -885,9 +885,9 @@ def get_extended_todo_stats(
 
 
 def get_todo_activity(
-    days: int = 30,
-    notebooks: list[str] | None = None,
-    exclude_notebooks: list[str] | None = None,
+        days: int = 30,
+        notebooks: list[str] | None = None,
+        exclude_notebooks: list[str] | None = None,
 ) -> dict:
     """Get todo creation/completion activity over time.
 
@@ -946,10 +946,10 @@ def get_todo_activity(
 
 
 def get_tag_stats(
-    include_sources: bool = False,
-    notebooks: list[str] | None = None,
-    exclude_notebooks: list[str] | None = None,
-    completed: bool | None = None,
+        include_sources: bool = False,
+        notebooks: list[str] | None = None,
+        exclude_notebooks: list[str] | None = None,
+        completed: bool | None = None,
 ) -> list[dict]:
     """Get tag usage statistics.
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from localvectordb import VectorDB
 from localvectordb.core import MetadataField, MetadataFieldType
@@ -69,10 +69,10 @@ class NoteSearch:
 
         """
         self.config = config
-        self._db: VectorDB | None = None
+        self._db: Any = None
 
     @property
-    def db(self) -> VectorDB:
+    def db(self) -> Any:
         """Lazy-initialize the VectorDB connection."""
         if self._db is None:
             # Build embedding config
@@ -117,8 +117,8 @@ class NoteSearch:
         )
 
     def index_notes_batch(
-        self,
-        notes: list[tuple[Note, str]],
+            self,
+            notes: list[tuple[Note, str]],
     ) -> int:
         """Add or update multiple notes in the search index in a single batch.
 
@@ -177,16 +177,16 @@ class NoteSearch:
             pass
 
     def search(
-        self,
-        query: str,
-        search_type: str = "hybrid",
-        k: int = 10,
-        filters: dict | None = None,
-        vector_weight: float | None = None,
-        date_start: str | None = None,
-        date_end: str | None = None,
-        recency_boost: float = 0.0,
-        score_threshold: float | None = None,
+            self,
+            query: str,
+            search_type: str = "hybrid",
+            k: int = 10,
+            filters: dict | None = None,
+            vector_weight: float | None = None,
+            date_start: str | None = None,
+            date_end: str | None = None,
+            recency_boost: float = 0.0,
+            score_threshold: float | None = None,
     ) -> list[SearchResult]:
         """Search notes using keyword, semantic, or hybrid search.
 
@@ -261,7 +261,7 @@ class NoteSearch:
         return search_results[:k]
 
     def _apply_recency_boost(
-        self, results: list[SearchResult], boost_weight: float
+            self, results: list[SearchResult], boost_weight: float
     ) -> list[SearchResult]:
         """Apply a recency boost to search results.
 
@@ -296,8 +296,8 @@ class NoteSearch:
                     # Combine relevance score with recency
                     # Final score = (1-weight)*relevance + weight*recency
                     r.score = (
-                        1 - boost_weight
-                    ) * r.score + boost_weight * recency_factor
+                                      1 - boost_weight
+                              ) * r.score + boost_weight * recency_factor
                 except (ValueError, TypeError):
                     pass  # Keep original score if date parsing fails
 
@@ -345,12 +345,12 @@ class NoteSearch:
 
 
 def grep_notes(
-    pattern: str,
-    notes_root: Path,
-    context_lines: int = 2,
-    case_sensitive: bool = False,
-    notebook: str | None = None,
-    note_path: Path | None = None,
+        pattern: str,
+        notes_root: Path,
+        context_lines: int = 2,
+        case_sensitive: bool = False,
+        notebook: str | None = None,
+        note_path: Path | None = None,
 ) -> list[GrepResult]:
     """Search notes with regex pattern matching.
 
@@ -406,15 +406,15 @@ def grep_notes(
         for md_file in notes_root.rglob("*.md"):
             # Skip hidden directories and .nb
             if any(
-                part.startswith(".") for part in md_file.relative_to(notes_root).parts
+                    part.startswith(".") for part in md_file.relative_to(notes_root).parts
             ):
                 continue
 
             # Apply notebook filter
             if notebook_path:
                 if (
-                    notebook_path not in md_file.parents
-                    and md_file.parent != notebook_path
+                        notebook_path not in md_file.parents
+                        and md_file.parent != notebook_path
                 ):
                     continue
 
@@ -463,8 +463,8 @@ def grep_notes(
                         path=rel_path,
                         line_number=i + 1,
                         line_content=line,
-                        context_before=lines[max(0, i - context_lines) : i],
-                        context_after=lines[i + 1 : i + 1 + context_lines],
+                        context_before=lines[max(0, i - context_lines): i],
+                        context_after=lines[i + 1: i + 1 + context_lines],
                     )
                 )
 

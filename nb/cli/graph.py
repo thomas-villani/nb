@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
-
 from nb.cli.completion import complete_notebook
 from nb.cli.utils import console, resolve_note_ref
 from nb.config import get_config
@@ -42,11 +41,11 @@ def register_graph_commands(cli: click.Group) -> None:
     help="Only show direct note-to-note links",
 )
 def graph_cmd(
-    note_ref: str | None,
-    notebook: str | None,
-    depth: int,
-    no_tags: bool,
-    links_only: bool,
+        note_ref: str | None,
+        notebook: str | None,
+        depth: int,
+        no_tags: bool,
+        links_only: bool,
 ) -> None:
     """Show an ASCII graph of note connections.
 
@@ -129,11 +128,11 @@ def _show_overview_graph(no_tags: bool) -> None:
 
 
 def _show_note_graph(
-    note_ref: str,
-    notebook: str | None,
-    depth: int,
-    no_tags: bool,
-    links_only: bool,
+        note_ref: str,
+        notebook: str | None,
+        depth: int,
+        no_tags: bool,
+        links_only: bool,
 ) -> None:
     """Show the connection graph for a specific note."""
     from nb.core.note_links import get_backlinks, get_outgoing_links

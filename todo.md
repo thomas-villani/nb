@@ -125,7 +125,7 @@ todo_exclude: true
 - [x] Stream/continuous view (`nb stream`) with lazy loading
 - [ ] Grep search within stream view #feature
 - [ ] Interactive filtering UI #feature
-- [ ] Navigation and links #feature
+- [x] Navigation and links #feature
 
 ## Technical Debt
 - [x] Add comprehensive test suite #testing

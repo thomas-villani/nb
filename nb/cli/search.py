@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
-
 from nb.cli.completion import complete_notebook, complete_tag
 from nb.cli.utils import console
 from nb.config import get_config
@@ -51,17 +50,17 @@ def register_search_commands(cli: click.Group) -> None:
     help="Return results above this score (default 0.4)",
 )
 def search_cmd(
-    query: str,
-    semantic: bool,
-    keyword: bool,
-    tag: str | None,
-    notebook: str | None,
-    when_filter: str | None,
-    since_date: str | None,
-    until_date: str | None,
-    recent: bool,
-    limit: int,
-    threshold: float,
+        query: str,
+        semantic: bool,
+        keyword: bool,
+        tag: str | None,
+        notebook: str | None,
+        when_filter: str | None,
+        since_date: str | None,
+        until_date: str | None,
+        recent: bool,
+        limit: int,
+        threshold: float,
 ) -> None:
     """Search notes by keyword, semantic similarity, or both (hybrid).
 
@@ -96,7 +95,7 @@ def search_cmd(
         search_type = "hybrid"
 
     # Build filters
-    filters = {}
+    filters: dict[str, str | dict[str, str]] = {}
     if tag:
         filters["tags"] = {"$contains": tag}
     if notebook:
@@ -220,11 +219,11 @@ def search_cmd(
 )
 @click.option("--note", help="Filter by specific note (path or alias)")
 def grep_cmd(
-    pattern: str,
-    context_lines: int,
-    ignore_case: bool,
-    notebook: str | None,
-    note: str | None,
+        pattern: str,
+        context_lines: int,
+        ignore_case: bool,
+        notebook: str | None,
+        note: str | None,
 ) -> None:
     """Search notes with regex pattern matching.
 
@@ -324,11 +323,11 @@ def grep_cmd(
     shell_complete=complete_notebook,
 )
 def index_cmd(
-    force: bool,
-    rebuild: bool,
-    embeddings: bool,
-    vectors_only: bool,
-    notebook: str | None,
+        force: bool,
+        rebuild: bool,
+        embeddings: bool,
+        vectors_only: bool,
+        notebook: str | None,
 ) -> None:
     """Rebuild the notes and todos index.
 
@@ -371,7 +370,7 @@ def index_cmd(
             with progress_bar("Rebuilding vectors", total=search_total) as advance:
                 search_count = rebuild_search_index(
                     notebook=notebook,
-                    on_progress=lambda _: advance(),
+                    on_progress=advance,
                 )
             console.print(f"[green]Rebuilt vectors for {search_count} notes.[/green]")
         else:
@@ -405,7 +404,7 @@ def index_cmd(
             indexed = index_all_notes(
                 force=force,
                 notebook=notebook,
-                on_progress=lambda _: advance(),
+                on_progress=advance,
             )
         console.print(f"[green]Indexed {indexed} files.[/green]")
     else:
@@ -417,7 +416,7 @@ def index_cmd(
         with progress_bar("Indexing linked notes", total=linked_total) as advance:
             linked_count = scan_linked_notes(
                 notebook_filter=notebook,
-                on_progress=lambda _: advance(),
+                on_progress=advance,
             )
         if linked_count:
             console.print(f"[green]Indexed {linked_count} linked notes.[/green]")
@@ -431,7 +430,7 @@ def index_cmd(
             with progress_bar("Building embeddings", total=search_total) as advance:
                 search_count = rebuild_search_index(
                     notebook=notebook,
-                    on_progress=lambda _: advance(),
+                    on_progress=advance,
                 )
             console.print(f"[green]Indexed {search_count} notes for search.[/green]")
         else:
@@ -474,14 +473,14 @@ def index_cmd(
     "--limit", "-l", default=50, help="Limit for --recent/--recently-modified"
 )
 def stream_notes(
-    notebook: str | None,
-    when: str | None,
-    since: str | None,
-    until: str | None,
-    reverse: bool,
-    recent: bool,
-    recently_modified: bool,
-    limit: int,
+        notebook: str | None,
+        when: str | None,
+        since: str | None,
+        until: str | None,
+        reverse: bool,
+        recent: bool,
+        recently_modified: bool,
+        limit: int,
 ) -> None:
     """Browse notes interactively in a streaming view.
 

@@ -9,7 +9,6 @@ from typing import Any
 
 import frontmatter
 import yaml.scanner
-
 from nb.config import get_config
 from nb.utils.dates import parse_date_from_filename
 
@@ -281,9 +280,9 @@ def generate_frontmatter(meta: dict[str, Any]) -> str:
 
 
 def create_note_template(
-    title: str | None = None,
-    dt: date | None = None,
-    tags: list[str] | None = None,
+        title: str | None = None,
+        dt: date | None = None,
+        tags: list[str] | None = None,
 ) -> str:
     """Generate a note template with frontmatter.
 

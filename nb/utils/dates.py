@@ -7,10 +7,10 @@ from collections.abc import Callable
 from datetime import date, datetime, time, timedelta
 
 from dateutil import parser as dateutil_parser
-from dateutil.relativedelta import FR, MO, SA, SU, TH, TU, WE, relativedelta
+from dateutil.relativedelta import FR, MO, SA, SU, TH, TU, WE, relativedelta, weekday
 
 # Weekday name to dateutil weekday constant
-WEEKDAYS: dict[str, int] = {
+WEEKDAYS: dict[str, weekday] = {
     "monday": MO,
     "tuesday": TU,
     "wednesday": WE,
@@ -434,7 +434,7 @@ def is_date_in_range(dt: date, start: date | None, end: date | None) -> bool:
 
 
 def get_week_range(
-    dt: date | None = None, week_start_day: str | None = None
+        dt: date | None = None, week_start_day: str | None = None
 ) -> tuple[date, date]:
     """Get the start and end of the week containing dt.
 
@@ -468,7 +468,7 @@ def get_week_range(
 
 
 def get_week_folder_name(
-    dt: date | None = None, week_start_day: str | None = None
+        dt: date | None = None, week_start_day: str | None = None
 ) -> str:
     """Get the week folder name for a date (e.g., 'Nov25-Dec01').
 
@@ -613,17 +613,17 @@ def parse_date_range(text: str) -> tuple[date | None, date | None]:
     # Handle "since <date>"
     since_match = re.match(r"^since\s+(.+)$", text)
     if since_match:
-        start = parse_fuzzy_date(since_match.group(1))
-        if start:
-            return start, today
+        since_date = parse_fuzzy_date(since_match.group(1))
+        if since_date:
+            return since_date, today
 
     # Handle "<date> to <date>"
     range_match = re.match(r"^(.+?)\s+to\s+(.+)$", text)
     if range_match:
-        start = parse_fuzzy_date(range_match.group(1))
-        end = parse_fuzzy_date(range_match.group(2))
-        if start and end:
-            return start, end
+        range_start = parse_fuzzy_date(range_match.group(1))
+        range_end = parse_fuzzy_date(range_match.group(2))
+        if range_start and range_end:
+            return range_start, range_end
 
     # Try parsing as a single date (search that specific day)
     single_date = parse_fuzzy_date(text)

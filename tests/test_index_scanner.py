@@ -479,9 +479,7 @@ class TestTodoDatePreservation:
         original_dates = {t["id"]: t["created_date"] for t in original_todos}
 
         # Manually update created_date to a past date to simulate old todos
-        db.execute(
-            "UPDATE todos SET created_date = '2025-01-01'"
-        )
+        db.execute("UPDATE todos SET created_date = '2025-01-01'")
         db.commit()
 
         # Verify the update worked
@@ -496,9 +494,9 @@ class TestTodoDatePreservation:
         final_todos = db.fetchall("SELECT id, created_date FROM todos ORDER BY id")
         assert len(final_todos) == 2
         for t in final_todos:
-            assert t["created_date"] == "2025-01-01", (
-                f"Todo created_date was reset to {t['created_date']} instead of being preserved"
-            )
+            assert (
+                t["created_date"] == "2025-01-01"
+            ), f"Todo created_date was reset to {t['created_date']} instead of being preserved"
 
     def test_preserves_completed_date_on_reindex(self, db_fixture, create_note):
         """When re-indexing a file, completed todos should keep their original completed_date."""
@@ -556,12 +554,14 @@ class TestTodoDatePreservation:
         db.commit()
 
         # Add a new todo to the file
-        note_path.write_text("""\
+        note_path.write_text(
+            """\
 # Tasks
 
 - [ ] Original task
 - [ ] New task
-""")
+"""
+        )
 
         # Re-index
         index_note(note_path, notes_root, index_vectors=False)
@@ -574,11 +574,11 @@ class TestTodoDatePreservation:
         for t in todos:
             if "New task" in t["content"]:
                 # New todo should have today's date (or the file's date-based name)
-                assert t["created_date"] == date.today().isoformat(), (
-                    f"New todo should have today's date, got {t['created_date']}"
-                )
+                assert (
+                    t["created_date"] == date.today().isoformat()
+                ), f"New todo should have today's date, got {t['created_date']}"
             elif "Original task" in t["content"]:
                 # Original todo should preserve old date
-                assert t["created_date"] == "2025-01-01", (
-                    f"Original todo should preserve its date, got {t['created_date']}"
-                )
+                assert (
+                    t["created_date"] == "2025-01-01"
+                ), f"Original todo should preserve its date, got {t['created_date']}"

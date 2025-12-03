@@ -10,10 +10,9 @@ from datetime import datetime
 from pathlib import Path
 
 import click
-from rich.console import Console
-
 from nb.cli.completion import complete_notebook
 from nb.config import get_config
+from rich.console import Console
 
 console = Console()
 
@@ -33,12 +32,12 @@ console = Console()
     "--copy", "copy_file", is_flag=True, help="Copy audio file to .nb/recordings/"
 )
 def transcribe_cmd(
-    audio_file: Path,
-    name: str | None,
-    notebook: str | None,
-    speakers: str | None,
-    attendees: str | None,
-    copy_file: bool,
+        audio_file: Path,
+        name: str | None,
+        notebook: str | None,
+        speakers: str | None,
+        attendees: str | None,
+        copy_file: bool,
 ) -> None:
     """Transcribe an audio file using Deepgram.
 

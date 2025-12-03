@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 from datetime import date
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlparse
 
 from nb.config import get_config
@@ -100,11 +101,11 @@ def copy_file_to_attachments(source: Path, target_name: str | None = None) -> Pa
 
 
 def create_attachment(
-    path_or_url: str,
-    owner_type: str,
-    owner_id: str,
-    title: str | None = None,
-    copy: bool = False,
+        path_or_url: str,
+        owner_type: str,
+        owner_id: str,
+        title: str | None = None,
+        copy: bool = False,
 ) -> Attachment:
     """Create an attachment for a note or todo.
 
@@ -123,6 +124,7 @@ def create_attachment(
 
     """
     # Determine type
+    attachment_type: Literal["file", "url", "conversation"]
     if is_url(path_or_url):
         attachment_type = "url"
         final_path = path_or_url
@@ -160,10 +162,10 @@ def create_attachment(
 
 
 def attach_to_note(
-    note_path: Path,
-    path_or_url: str,
-    title: str | None = None,
-    copy: bool = False,
+        note_path: Path,
+        path_or_url: str,
+        title: str | None = None,
+        copy: bool = False,
 ) -> Attachment:
     """Attach a file or URL to a note by appending @attach line.
 
@@ -203,11 +205,11 @@ def attach_to_note(
 
 
 def attach_to_todo(
-    note_path: Path,
-    line_number: int,
-    path_or_url: str,
-    title: str | None = None,
-    copy: bool = False,
+        note_path: Path,
+        line_number: int,
+        path_or_url: str,
+        title: str | None = None,
+        copy: bool = False,
 ) -> Attachment:
     """Attach a file or URL to a todo by inserting @attach line after it.
 

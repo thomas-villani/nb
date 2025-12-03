@@ -6,11 +6,6 @@ import sys
 from dataclasses import dataclass
 from datetime import date
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
-
 from nb.config import get_config
 from nb.core.todos import set_todo_status_in_file, toggle_todo_in_file
 from nb.index.todos_repo import (
@@ -20,6 +15,10 @@ from nb.index.todos_repo import (
 )
 from nb.models import Todo, TodoStatus
 from nb.utils.dates import get_week_range
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 
 def _format_todo_source(t: Todo) -> str:
@@ -167,6 +166,7 @@ def render_todo_table(state: TodoViewState) -> Table:
             else:
                 due_str = todo.due_date.strftime("%b %d")
             due = todo.due_date_only
+            assert due is not None  # guaranteed since todo.due_date is not None
             if due < today:
                 due_style = "red bold"
             elif due == today:
@@ -245,6 +245,7 @@ def render_view(state: TodoViewState) -> Panel:
     header.append(f" [{len(state.todos)} items]", style="dim")
 
     # Build content
+    content: Table | Text
     if state.todos:
         table = render_todo_table(state)
         content = table
@@ -306,10 +307,10 @@ def get_key() -> str:
 
 
 def run_interactive_todos(
-    show_completed: bool = False,
-    tag: str | None = None,
-    notebooks: list[str] | None = None,
-    exclude_notebooks: list[str] | None = None,
+        show_completed: bool = False,
+        tag: str | None = None,
+        notebooks: list[str] | None = None,
+        exclude_notebooks: list[str] | None = None,
 ) -> None:
     """Run the interactive todo viewer.
 
@@ -382,9 +383,9 @@ def run_interactive_todos(
                         expected_content=todo.content,
                     )
                     if actual_line is not None:
-                        new_status = not todo.completed
-                        update_todo_completion(todo.id, new_status)
-                        action = "Completed" if new_status else "Reopened"
+                        is_completed = not todo.completed
+                        update_todo_completion(todo.id, is_completed)
+                        action = "Completed" if is_completed else "Reopened"
                         state.message = f"{action}: {todo.content[:40]}"
                         state.refresh_todos()
                 except PermissionError as e:
@@ -411,19 +412,19 @@ def run_interactive_todos(
                     try:
                         # Toggle between pending and in-progress
                         if todo.in_progress:
-                            new_status = TodoStatus.PENDING
+                            todo_status = TodoStatus.PENDING
                             action = "Paused"
                         else:
-                            new_status = TodoStatus.IN_PROGRESS
+                            todo_status = TodoStatus.IN_PROGRESS
                             action = "Started"
                         actual_line = set_todo_status_in_file(
                             todo.source.path,
                             todo.line_number,
-                            new_status,
+                            todo_status,
                             expected_content=todo.content,
                         )
                         if actual_line is not None:
-                            update_todo_status(todo.id, new_status)
+                            update_todo_status(todo.id, todo_status)
                             state.message = f"{action}: {todo.content[:40]}"
                             state.refresh_todos()
                     except PermissionError as e:

@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
-
 from nb.cli.utils import console
 from nb.config import get_config, init_config
 from nb.utils.editor import open_in_editor

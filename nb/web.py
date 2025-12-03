@@ -40,8 +40,8 @@ def get_alias_for_path(note_path: Path) -> str | None:
             if not alias_path.is_absolute():
                 alias_path = config.notes_root / alias_path
             if (
-                alias_path.resolve() == normalized
-                or str(alias_path).replace("\\", "/") == normalized_str
+                    alias_path.resolve() == normalized
+                    or str(alias_path).replace("\\", "/") == normalized_str
             ):
                 return row["alias"]
     except Exception:
@@ -1910,7 +1910,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                         tags = [t["tag"] for t in tag_rows]
 
                         note_alias = (
-                            get_alias_for_path(note_path) or row["source_alias"]
+                                get_alias_for_path(note_path) or row["source_alias"]
                         )
 
                         result.append(
@@ -2017,7 +2017,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                             else config.notes_root / note_path
                         )
                         note_alias = (
-                            get_alias_for_path(check_path) or row["source_alias"]
+                                get_alias_for_path(check_path) or row["source_alias"]
                         )
 
                         result.append(
@@ -2040,7 +2040,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                         notebook, config.notes_root
                     )
                     for note_path, is_linked, linked_alias in sorted(
-                        notes_with_linked, reverse=True
+                            notes_with_linked, reverse=True
                     ):
                         if is_linked:
                             full_path = (
@@ -2100,18 +2100,18 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 return
 
             # Validate path to prevent path traversal attacks
-            full_path = _safe_note_path(config.notes_root, note_path_str)
-            if not full_path:
+            note_full_path = _safe_note_path(config.notes_root, note_path_str)
+            if not note_full_path:
                 self.send_json({"error": "Invalid path"}, 400)
                 return
 
-            if not full_path.exists():
+            if not note_full_path.exists():
                 self.send_json({"error": "Not found"})
                 return
 
-            content = full_path.read_text(encoding="utf-8")
-            note = get_note(full_path, config.notes_root)
-            note_alias = get_alias_for_path(full_path)
+            content = note_full_path.read_text(encoding="utf-8")
+            note = get_note(note_full_path, config.notes_root)
+            note_alias = get_alias_for_path(note_full_path)
 
             # Parse frontmatter for display
             from datetime import date, datetime
@@ -2120,7 +2120,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
 
             def serialize_frontmatter(fm: dict) -> dict:
                 """Convert frontmatter values to JSON-serializable types."""
-                result = {}
+                result: dict = {}
                 for key, val in fm.items():
                     if isinstance(val, (date, datetime)):
                         result[key] = val.isoformat()
@@ -2134,7 +2134,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 return result
 
             try:
-                frontmatter_dict, _ = parse_note_file(full_path)
+                frontmatter_dict, _ = parse_note_file(note_full_path)
                 frontmatter_dict = serialize_frontmatter(frontmatter_dict)
             except Exception:
                 frontmatter_dict = {}
@@ -2142,12 +2142,12 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             # Record the view for history tracking
             from nb.core.notes import record_note_view
 
-            record_note_view(full_path, config.notes_root)
+            record_note_view(note_full_path, config.notes_root)
 
             self.send_json(
                 {
                     "content": content,
-                    "title": note.title if note else full_path.stem,
+                    "title": note.title if note else note_full_path.stem,
                     "path": note_path_str,
                     "alias": note_alias,
                     "frontmatter": frontmatter_dict,
@@ -2325,12 +2325,12 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 return
 
             # Resolve to full path
-            full_path = _safe_note_path(config.notes_root, note_path_str)
-            if not full_path or not full_path.exists():
+            backlinks_path = _safe_note_path(config.notes_root, note_path_str)
+            if not backlinks_path or not backlinks_path.exists():
                 self.send_json([])
                 return
 
-            backlinks = get_backlinks(full_path)
+            backlinks = get_backlinks(backlinks_path)
             self.send_json(
                 [
                     {
@@ -2390,13 +2390,13 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                         ),
                         # Use due_date_only for date comparisons (due_date may be datetime)
                         "isOverdue": t.due_date_only is not None
-                        and t.due_date_only < today
-                        and t.status.value != "completed",
+                                     and t.due_date_only < today
+                                     and t.status.value != "completed",
                         "isDueToday": t.due_date_only == today,
                         "isDueThisWeek": t.due_date_only is not None
-                        and today
-                        < t.due_date_only
-                        <= today + __import__("datetime").timedelta(days=7),
+                                         and today
+                                         < t.due_date_only
+                                         <= today + __import__("datetime").timedelta(days=7),
                     }
                     for t in todos[:100]
                 ]
@@ -2430,7 +2430,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                     from nb.index.db import get_db
 
                     db = get_db()
-                    row = db.fetchone(
+                    mod_row = db.fetchone(
                         "SELECT title, notebook FROM notes WHERE path = ?",
                         (path_str,),
                     )
@@ -2438,8 +2438,8 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                     result.append(
                         {
                             "path": path_str,
-                            "title": row["title"] if row else note_path.stem,
-                            "notebook": row["notebook"] if row else None,
+                            "title": mod_row["title"] if mod_row else note_path.stem,
+                            "notebook": mod_row["notebook"] if mod_row else None,
                             "timestamp": mtime.isoformat(),
                             "type": "modified",
                         }
@@ -2459,7 +2459,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                     from nb.index.db import get_db
 
                     db = get_db()
-                    row = db.fetchone(
+                    view_row = db.fetchone(
                         "SELECT title, notebook FROM notes WHERE path = ?",
                         (path_str,),
                     )
@@ -2467,8 +2467,8 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                     result.append(
                         {
                             "path": path_str,
-                            "title": row["title"] if row else note_path.stem,
-                            "notebook": row["notebook"] if row else None,
+                            "title": view_row["title"] if view_row else note_path.stem,
+                            "notebook": view_row["notebook"] if view_row else None,
                             "timestamp": viewed_at.isoformat(),
                             "type": "viewed",
                         }
@@ -2650,7 +2650,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
 
 
 def run_server(
-    port: int = 3000, open_browser: bool = True, show_completed: bool = False
+        port: int = 3000, open_browser: bool = True, show_completed: bool = False
 ) -> None:
     """Start the web server."""
     # Store show_completed in a module-level variable for the handler
@@ -2664,7 +2664,6 @@ def run_server(
     httpd = Server(("", port), NBHandler)
 
     if open_browser:
-
         def open_delayed() -> None:
             import time
 

@@ -6,13 +6,12 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from nb.config import get_config
+from nb.models import Note
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
-
-from nb.config import get_config
-from nb.models import Note
 
 
 @dataclass
@@ -226,7 +225,7 @@ def render_view(state: StreamState, console: Console) -> None:
 
         # Get the visible portion of content
         visible_lines = state.content_lines[
-            state.scroll_offset : state.scroll_offset + content_height
+            state.scroll_offset: state.scroll_offset + content_height
         ]
 
         if visible_lines:
@@ -252,8 +251,8 @@ def render_view(state: StreamState, console: Console) -> None:
 
 
 def run_note_stream(
-    notes: list[Note],
-    notes_root: Path,
+        notes: list[Note],
+        notes_root: Path,
 ) -> None:
     """Run the interactive note streaming viewer.
 

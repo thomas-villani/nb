@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import click
-
 from nb.cli.utils import console
 
 

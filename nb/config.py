@@ -591,12 +591,12 @@ def init_config(notes_root: Path | None = None) -> Config:
 
 
 def add_notebook(
-    name: str,
-    date_based: bool = False,
-    todo_exclude: bool = False,
-    path: Path | None = None,
-    color: str | None = None,
-    icon: str | None = None,
+        name: str,
+        date_based: bool = False,
+        todo_exclude: bool = False,
+        path: Path | None = None,
+        color: str | None = None,
+        icon: str | None = None,
 ) -> NotebookConfig:
     """Add a new notebook to the configuration.
 

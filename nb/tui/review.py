@@ -5,11 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from rich.console import Console, Group
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
-
 from nb.config import get_config
 from nb.core.todos import (
     delete_todo_from_file,
@@ -25,6 +20,10 @@ from nb.index.todos_repo import (
 from nb.models import Todo
 from nb.tui.todos import get_key
 from nb.utils.dates import get_week_range
+from rich.console import Console, Group
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 
 @dataclass
@@ -195,6 +194,7 @@ def render_todo_row(todo: Todo, is_selected: bool, idx: int) -> tuple:
     due_style = "dim"
     if todo.due_date:
         due = todo.due_date_only
+        assert due is not None  # guaranteed since todo.due_date is not None
         overdue_days = _get_overdue_days(due)
         if overdue_days and overdue_days > 0:
             due_str = f"{overdue_days}d overdue"
@@ -300,6 +300,7 @@ def render_review_view(state: ReviewState) -> Panel:
         header.append(f" | Page {state.page + 1}/{state.total_pages()}", style="dim")
 
     # Build table
+    content: Table | Text
     if visible:
         table = Table(
             show_header=False,
@@ -409,11 +410,11 @@ def get_first_of_next_month() -> date:
 
 
 def run_review(
-    scope: str = "daily",
-    tag: str | None = None,
-    notebooks: list[str] | None = None,
-    notes: list[str] | None = None,
-    exclude_notebooks: list[str] | None = None,
+        scope: str = "daily",
+        tag: str | None = None,
+        notebooks: list[str] | None = None,
+        notes: list[str] | None = None,
+        exclude_notebooks: list[str] | None = None,
 ) -> ReviewStats:
     """Run interactive review session.
 

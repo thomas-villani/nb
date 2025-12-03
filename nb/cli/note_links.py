@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
-
 from nb.cli.completion import complete_notebook
 from nb.cli.utils import console, resolve_note_ref
 from nb.config import get_config
+
+if TYPE_CHECKING:
+    from nb.core.note_links import NoteLink
 
 
 def register_note_link_commands(cli: click.Group) -> None:
@@ -51,12 +54,12 @@ def register_note_link_commands(cli: click.Group) -> None:
     help="Output as JSON",
 )
 def links_cmd(
-    note_ref: str | None,
-    notebook: str | None,
-    internal: bool,
-    external: bool,
-    check: bool,
-    as_json: bool,
+        note_ref: str | None,
+        notebook: str | None,
+        internal: bool,
+        external: bool,
+        check: bool,
+        as_json: bool,
 ) -> None:
     """Show outgoing links from a note.
 
@@ -144,11 +147,8 @@ def links_cmd(
     )
 
 
-def _display_link(link, notes_root: Path) -> None:
+def _display_link(link: NoteLink, notes_root: Path) -> None:
     """Display a single link with formatting."""
-    from nb.core.note_links import NoteLink
-
-    link: NoteLink
 
     # Format based on link type
     if link.link_type == "wiki":
@@ -173,9 +173,9 @@ def _display_link(link, notes_root: Path) -> None:
 
 
 def _check_broken_links(
-    note_ref: str | None,
-    notebook: str | None,
-    as_json: bool,
+        note_ref: str | None,
+        notebook: str | None,
+        as_json: bool,
 ) -> None:
     """Check for broken links in one or all notes."""
     from nb.core.note_links import get_broken_links
@@ -263,10 +263,10 @@ def _check_broken_links(
     help="Output as JSON",
 )
 def backlinks_cmd(
-    note_ref: str,
-    notebook: str | None,
-    count: bool,
-    as_json: bool,
+        note_ref: str,
+        notebook: str | None,
+        count: bool,
+        as_json: bool,
 ) -> None:
     """Show notes that link to the specified note.
 

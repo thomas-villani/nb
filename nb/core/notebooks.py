@@ -74,7 +74,7 @@ def get_notebook_notes(notebook: str, notes_root: Path | None = None) -> list[Pa
     for md_file in notebook_path.rglob("*.md"):
         # Skip hidden directories
         if any(
-            part.startswith(".") for part in md_file.relative_to(notebook_path).parts
+                part.startswith(".") for part in md_file.relative_to(notebook_path).parts
         ):
             continue
         try:
@@ -87,7 +87,7 @@ def get_notebook_notes(notebook: str, notes_root: Path | None = None) -> list[Pa
 
 
 def get_notebook_notes_with_linked(
-    notebook: str, notes_root: Path | None = None
+        notebook: str, notes_root: Path | None = None
 ) -> list[tuple[Path, bool, str | None]]:
     """List all notes in a specific notebook, including linked notes.
 
@@ -264,9 +264,9 @@ def get_notebook_for_file(path: Path) -> str | None:
 
 
 def get_notebook_note_path(
-    notebook: str,
-    dt: date | None = None,
-    name: str | None = None,
+        notebook: str,
+        dt: date | None = None,
+        name: str | None = None,
 ) -> Path:
     """Get the path for a note in a notebook.
 
@@ -315,10 +315,10 @@ def get_notebook_note_path(
 
 
 def ensure_notebook_note(
-    notebook: str,
-    dt: date | None = None,
-    name: str | None = None,
-    template: str | None = None,
+        notebook: str,
+        dt: date | None = None,
+        name: str | None = None,
+        template: str | None = None,
 ) -> Path:
     """Ensure a note exists in a notebook, creating it if necessary.
 

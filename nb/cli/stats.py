@@ -5,10 +5,6 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 import click
-from rich.columns import Columns
-from rich.panel import Panel
-from rich.table import Table
-
 from nb.cli.completion import complete_notebook
 from nb.cli.utils import console
 from nb.config import get_config
@@ -17,6 +13,9 @@ from nb.index.todos_repo import (
     get_tag_stats,
     get_todo_activity,
 )
+from rich.columns import Columns
+from rich.panel import Panel
+from rich.table import Table
 
 
 def register_stats_commands(cli: click.Group) -> None:
@@ -44,7 +43,7 @@ def _get_week_start(target_date: date, week_start_day: str) -> date:
 
 
 def _sum_range(
-    daily_values: list[int], start_date: date, end_date: date, days: int
+        daily_values: list[int], start_date: date, end_date: date, days: int
 ) -> int:
     """Sum daily values within a date range.
 
@@ -145,7 +144,7 @@ def _resample(values: list[int], target_width: int) -> list[int]:
 
 
 def render_bar(
-    value: int, max_value: int, width: int = 20, char: str | None = None
+        value: int, max_value: int, width: int = 20, char: str | None = None
 ) -> str:
     """Render a horizontal bar.
 
@@ -212,13 +211,13 @@ def render_completion_bar(completed: int, total: int, width: int = 20) -> str:
 @click.option("--by-tag", is_flag=True, help="Show top tags by usage")
 @click.option("--compact", "-c", is_flag=True, help="Compact single-panel view")
 def stats_cmd(
-    notebooks: tuple[str, ...],
-    exclude_notebooks: tuple[str, ...],
-    days: int,
-    by_notebook: bool,
-    by_priority: bool,
-    by_tag: bool,
-    compact: bool,
+        notebooks: tuple[str, ...],
+        exclude_notebooks: tuple[str, ...],
+        days: int,
+        by_notebook: bool,
+        by_priority: bool,
+        by_tag: bool,
+        compact: bool,
 ) -> None:
     """Show todo statistics dashboard.
 
@@ -339,12 +338,12 @@ def _render_compact_stats(stats: dict, activity: dict) -> None:
 
 
 def _render_full_dashboard(
-    stats: dict,
-    activity: dict,
-    show_notebook: bool,
-    show_priority: bool,
-    show_tag: bool,
-    days: int,
+        stats: dict,
+        activity: dict,
+        show_notebook: bool,
+        show_priority: bool,
+        show_tag: bool,
+        days: int,
 ) -> None:
     """Render full multi-panel dashboard."""
     panels = []

@@ -6,7 +6,6 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import click
-
 from nb.cli.completion import complete_notebook
 from nb.cli.utils import (
     console,
@@ -145,7 +144,7 @@ def last_note(show: bool, notebook: str | None, viewed: bool) -> None:
 )
 @click.option("--group", "-g", is_flag=True, help="Group entries by notebook")
 def history_cmd(
-    limit: int, offset: int, notebook: str | None, full_path: bool, group: bool
+        limit: int, offset: int, notebook: str | None, full_path: bool, group: bool
 ) -> None:
     """Show recently viewed notes.
 
@@ -253,12 +252,12 @@ def history_cmd(
         # Group by notebook (old behavior)
         views_by_notebook: dict[str, list] = defaultdict(list)
         for (
-            path,
-            rel_path,
-            timestamps,
-            view_count,
-            linked_alias,
-            nb_name,
+                path,
+                rel_path,
+                timestamps,
+                view_count,
+                linked_alias,
+                nb_name,
         ) in resolved_views:
             views_by_notebook[nb_name].append(
                 (path, rel_path, timestamps, view_count, linked_alias)
@@ -316,12 +315,12 @@ def history_cmd(
     else:
         # Interleaved display (new default) - sorted by most recent first
         for (
-            _path,
-            rel_path,
-            timestamps,
-            view_count,
-            linked_alias,
-            nb_name,
+                _path,
+                rel_path,
+                timestamps,
+                view_count,
+                linked_alias,
+                nb_name,
         ) in resolved_views:
             # Format the timestamp (use most recent)
             time_str = timestamps[0].strftime(
@@ -374,7 +373,7 @@ def history_cmd(
 )
 @click.pass_context
 def open_date(
-    ctx: click.Context, note_ref: str, notebook: str | None, no_prompt: bool
+        ctx: click.Context, note_ref: str, notebook: str | None, no_prompt: bool
 ) -> None:
     """Open a note by date or name.
 
@@ -550,10 +549,10 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
 @click.option("--title", "-t", help="Title for the note")
 @click.option("--template", "-T", "template_name", help="Template to use for the note")
 def new_note(
-    path: str | None,
-    notebook: str | None,
-    title: str | None,
-    template_name: str | None,
+        path: str | None,
+        notebook: str | None,
+        title: str | None,
+        template_name: str | None,
 ) -> None:
     """Create a new note.
 
@@ -699,7 +698,7 @@ def edit_note(path: str) -> None:
     help="Notebook to search for note (used with --note)",
 )
 def add_to_note(
-    text: str | None, target_note: str | None, notebook: str | None
+        text: str | None, target_note: str | None, notebook: str | None
 ) -> None:
     """Append content to a note (defaults to today's daily note).
 
@@ -788,15 +787,15 @@ def add_to_note(
     help="Display notes as a tree grouped by subdirectory sections",
 )
 def list_notes_cmd(
-    notebook: str | None,
-    all_notes: bool,
-    week: bool,
-    month: bool,
-    full: bool,
-    details: bool,
-    section: tuple[str, ...],
-    exclude_section: tuple[str, ...],
-    tree: bool,
+        notebook: str | None,
+        all_notes: bool,
+        week: bool,
+        month: bool,
+        full: bool,
+        details: bool,
+        section: tuple[str, ...],
+        exclude_section: tuple[str, ...],
+        tree: bool,
 ) -> None:
     """List notes.
 
@@ -866,9 +865,9 @@ def list_notes_cmd(
         return "  ".join(parts)
 
     def filter_notes_by_sections(
-        note_paths: list,
-        include_sections: tuple[str, ...],
-        exclude_sections: tuple[str, ...],
+            note_paths: list,
+            include_sections: tuple[str, ...],
+            exclude_sections: tuple[str, ...],
     ) -> list:
         """Filter notes by path-based sections."""
         from nb.core.notes import get_sections_for_path
@@ -900,11 +899,11 @@ def list_notes_cmd(
         return filtered
 
     def render_notes_tree(
-        notes: list,
-        notebook_name: str,
-        full_path: bool,
-        details_map: dict,
-        format_details_fn,
+            notes: list,
+            notebook_name: str,
+            full_path: bool,
+            details_map: dict,
+            format_details_fn,
     ) -> None:
         """Render notes as a tree grouped by subdirectory sections."""
         from rich.tree import Tree
@@ -1001,12 +1000,12 @@ def list_notes_cmd(
                 console.print(base)
     elif notebook:
         # Get notes with metadata (title, tags, linked status)
-        notes = get_notebook_notes_with_metadata(notebook)
+        notes_meta = get_notebook_notes_with_metadata(notebook)
 
         # Apply section filters
-        notes = filter_notes_by_sections(notes, section, exclude_section)
+        notes_meta = filter_notes_by_sections(notes_meta, section, exclude_section)
 
-        if not notes:
+        if not notes_meta:
             msg = f"No notes in {notebook}"
             if section or exclude_section:
                 msg += " matching section filters"
@@ -1015,17 +1014,19 @@ def list_notes_cmd(
 
         # Get extra details if requested
         if details:
-            note_paths = [note_path for note_path, _, _, _, _ in notes]
+            note_paths = [note_path for note_path, _, _, _, _ in notes_meta]
             details_map = get_note_details_batch(note_paths)
         else:
             details_map = {}
 
         # Use tree display if --tree flag is set
         if tree:
-            render_notes_tree(notes, notebook, full, details_map, format_details_str)
+            render_notes_tree(
+                notes_meta, notebook, full, details_map, format_details_str
+            )
             return
 
-        for note_path, title, tags, is_linked, alias in notes:
+        for note_path, title, tags, is_linked, alias in notes_meta:
             # Build display name (title or stem)
             display = title if title else note_path.stem
 
@@ -1063,12 +1064,14 @@ def list_notes_cmd(
                 console.print(base)
     elif all_notes:
         # List all notes in all notebooks (one line each)
-        notes = get_all_notes()
+        all_notes_list = get_all_notes()
 
         # Apply section filters
-        notes = filter_notes_by_sections(notes, section, exclude_section)
+        all_notes_list = filter_notes_by_sections(
+            all_notes_list, section, exclude_section
+        )
 
-        if not notes:
+        if not all_notes_list:
             msg = "No notes found"
             if section or exclude_section:
                 msg += " matching section filters"
@@ -1077,13 +1080,13 @@ def list_notes_cmd(
 
         # Get details if requested
         if details:
-            note_paths = [note_path for note_path, _, _, _ in notes]
+            note_paths = [note_path for note_path, _, _, _ in all_notes_list]
             details_map = get_note_details_batch(note_paths)
         else:
             details_map = {}
 
         current_notebook = None
-        for note_path, title, nb_name, tags in notes:
+        for note_path, title, nb_name, tags in all_notes_list:
             if nb_name != current_notebook:
                 color, icon = get_notebook_display_info(nb_name)
                 icon_prefix = f"{icon} " if icon else ""
@@ -1127,7 +1130,7 @@ def list_notes_cmd(
 
         # Get details if requested
         if details:
-            all_paths = []
+            all_paths: list[Path] = []
             for nb_notes in notes_by_notebook.values():
                 all_paths.extend(note_path for note_path, _, _ in nb_notes)
             details_map = get_note_details_batch(all_paths)
@@ -1135,11 +1138,11 @@ def list_notes_cmd(
             details_map = {}
 
         for nb_name in sorted(notes_by_notebook.keys()):
-            notes = notes_by_notebook[nb_name]
+            nb_notes_list = notes_by_notebook[nb_name]
             color, icon = get_notebook_display_info(nb_name)
             icon_prefix = f"{icon} " if icon else ""
             console.print(f"[bold {color}]{icon_prefix}{nb_name}[/bold {color}]")
-            for note_path, title, tags in notes:
+            for note_path, title, tags in nb_notes_list:
                 display = title if title else note_path.stem
                 tags_str = (
                     " ".join(f"[yellow]#{t}[/yellow]" for t in tags) if tags else ""

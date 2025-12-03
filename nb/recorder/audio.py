@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from nb.recorder import require_recorder
 
@@ -64,8 +64,8 @@ class RecordingSession:
     _error: Exception | None = None
     _started: threading.Event = field(default_factory=threading.Event)
     # Stream and buffer references (set by start_recording)
-    _mic_stream: object = None  # sd.InputStream
-    _loopback_stream: object = None  # sd.InputStream
+    _mic_stream: Any = None  # sd.InputStream
+    _loopback_stream: Any = None  # sd.InputStream
     _mic_buffer: list = field(default_factory=list)
     _loopback_buffer: list = field(default_factory=list)
     _buffer_lock: threading.Lock = field(default_factory=threading.Lock)
@@ -286,11 +286,11 @@ def _writer_thread(session: RecordingSession) -> None:
 
 
 def start_recording(
-    output_path: Path,
-    mic_device: int | None = None,
-    loopback_device: int | None = None,
-    sample_rate: int = 16000,
-    mode: RecordingMode = RecordingMode.BOTH,
+        output_path: Path,
+        mic_device: int | None = None,
+        loopback_device: int | None = None,
+        sample_rate: int = 16000,
+        mode: RecordingMode = RecordingMode.BOTH,
 ) -> RecordingSession:
     """Start recording audio to a file.
 
@@ -333,11 +333,11 @@ def start_recording(
 
     # Determine which streams to open based on mode
     use_mic = (
-        mode in (RecordingMode.BOTH, RecordingMode.MIC_ONLY) and mic_device is not None
+            mode in (RecordingMode.BOTH, RecordingMode.MIC_ONLY) and mic_device is not None
     )
     use_loopback = (
-        mode in (RecordingMode.BOTH, RecordingMode.SYSTEM_ONLY)
-        and loopback_device is not None
+            mode in (RecordingMode.BOTH, RecordingMode.SYSTEM_ONLY)
+            and loopback_device is not None
     )
 
     # Shared buffers for callbacks
