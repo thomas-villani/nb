@@ -41,14 +41,14 @@ def register_todo_commands(cli: click.Group) -> None:
 @click.group(invoke_without_command=True)
 @click.option("--created-today", is_flag=True, help="Show only todos created today")
 @click.option("--created-week", is_flag=True, help="Show only todos created this week")
-@click.option("--due-today", is_flag=True, help="Show only todos due today")
-@click.option("--due-week", is_flag=True, help="Show only todos due this week")
+@click.option("--today", "-T", is_flag=True, help="Show only todos due today")
+@click.option("--week", "-W", is_flag=True, help="Show only todos due this week")
 @click.option("--overdue", is_flag=True, help="Show only overdue todos")
 @click.option("--priority", "-p", type=int, help="Filter by priority (1, 2, or 3)")
 @click.option("--tag", "-t", help="Filter by tag", shell_complete=complete_tag)
 @click.option(
     "--exclude-tag",
-    "-T",
+    "-xt",
     multiple=True,
     help="Exclude todos with this tag (repeatable)",
     shell_complete=complete_tag,
@@ -122,13 +122,25 @@ def register_todo_commands(cli: click.Group) -> None:
     is_flag=True,
     help="Expanded view: show more content (up to 80 chars), hide source/due as needed",
 )
+@click.option(
+    "--kanban",
+    "-k",
+    is_flag=True,
+    help="Display todos in kanban board columns",
+)
+@click.option(
+    "--board",
+    "-b",
+    default="default",
+    help="Kanban board name to use (default: 'default')",
+)
 @click.pass_context
 def todo(
     ctx: click.Context,
     created_today: bool,
     created_week: bool,
-    due_today: bool,
-    due_week: bool,
+    today: bool,
+    week: bool,
     overdue: bool,
     priority: int | None,
     tag: str | None,
@@ -152,6 +164,8 @@ def todo(
     limit: int | None,
     offset: int,
     expand: bool,
+    kanban: bool,
+    board: str,
 ) -> None:
     """Manage todos.
 
@@ -378,7 +392,14 @@ def todo(
         sections_filter = effective_sections if effective_sections else None
         exclude_tags_filter = effective_exclude_tags if effective_exclude_tags else None
 
-        if interactive:
+        if kanban:
+            # Display kanban board view
+            _display_kanban(
+                notebooks=notebooks_filter,
+                exclude_notebooks=all_excluded_notebooks,
+                board_name=board,
+            )
+        elif interactive:
             # Launch interactive viewer
             from nb.tui.todos import run_interactive_todos
 
@@ -399,8 +420,8 @@ def todo(
             _list_todos(
                 created_today=created_today,
                 created_week=created_week,
-                due_today=due_today,
-                due_week=due_week,
+                due_today=today,
+                due_week=week,
                 overdue=overdue,
                 priority=effective_priority,
                 tag=effective_tag,
@@ -529,6 +550,140 @@ def _create_todo_view(
             console.print(f"  {key}: {', '.join(str(v) for v in value)}")
         else:
             console.print(f"  {key}: {value}")
+
+
+def _display_kanban(
+    notebooks: list[str] | None = None,
+    exclude_notebooks: list[str] | None = None,
+    board_name: str = "default",
+) -> None:
+    """Display todos in a kanban board layout using Rich."""
+
+    from rich.columns import Columns
+    from rich.panel import Panel
+
+    from nb.config import DEFAULT_KANBAN_COLUMNS, KanbanBoardConfig, get_config
+
+    config = get_config()
+    today = date.today()
+
+    # Get board configuration
+    board = config.get_kanban_board(board_name)
+    if not board:
+        # Use default board if not found or if no boards configured
+        if board_name != "default":
+            console.print(
+                f"[yellow]Board '{board_name}' not found, using default.[/yellow]"
+            )
+        board = KanbanBoardConfig(name="default", columns=DEFAULT_KANBAN_COLUMNS)
+
+    # Calculate responsive column width based on terminal size
+    term_width = console.width or 120
+    term_height = console.height or 40
+    num_columns = len(board.columns)
+    # Account for gaps between columns (2 chars each) and some padding
+    available_width = term_width - (num_columns - 1) * 2 - 4
+    # Calculate per-column width, with min 30 and max 60
+    column_width = max(30, min(60, available_width // num_columns))
+    # Content width is column width minus panel borders/padding (4 chars)
+    max_content_len = column_width - 6
+    # Calculate max items per column based on terminal height
+    # Each item is ~1 line, plus header (3 lines) and footer
+    max_items = max(8, min(25, term_height - 8))
+
+    # Query todos for each column and build panels
+    column_panels = []
+    for col in board.columns:
+        todos = _query_todos_for_kanban_column(
+            col.filters, notebooks, exclude_notebooks, today
+        )
+
+        # Build column content
+        lines = []
+        for t in todos[:max_items]:  # Limit items per column based on terminal height
+            # Priority indicator
+            priority_str = f"[red]!{t.priority.value}[/red] " if t.priority else ""
+
+            # Content (truncated based on available width)
+            content = priority_str + t.content
+
+            if len(content) > max_content_len:
+                content = content[: max_content_len - 3] + "..."
+            lines.append(content)
+
+        if len(todos) > max_items:
+            lines.append(f"[dim]+{len(todos) - max_items} more[/dim]")
+
+        content_str = "\n".join(lines) if lines else "[dim]No items[/dim]"
+        panel = Panel(
+            content_str,
+            title=f"[bold {col.color}]{col.name}[/bold {col.color}] ({len(todos)})",
+            border_style=col.color,
+            width=column_width,
+        )
+        column_panels.append(panel)
+
+    # Print board header
+    console.print(f"\n[bold]Kanban Board[/bold]: {board.name}\n")
+
+    # Print columns
+    console.print(Columns(column_panels, equal=True, expand=True))
+    console.print()
+
+
+def _query_todos_for_kanban_column(
+    filters: dict,
+    notebooks: list[str] | None,
+    exclude_notebooks: list[str] | None,
+    today: date,
+) -> list:
+    """Query todos matching kanban column filters."""
+    from datetime import timedelta
+
+    # Map filter keys to query_todos parameters
+    kwargs: dict = {
+        "notebooks": notebooks,
+        "exclude_notebooks": exclude_notebooks,
+        "parent_only": True,
+        "exclude_note_excluded": True,
+    }
+
+    # Handle status filter
+    status_val = filters.get("status")
+    if status_val:
+        kwargs["status"] = TodoStatus(status_val)
+    else:
+        # Default to non-completed
+        kwargs["completed"] = False
+
+    # Handle due date filters
+    if filters.get("due_today"):
+        kwargs["due_start"] = today
+        kwargs["due_end"] = today
+
+    if filters.get("due_this_week"):
+        kwargs["due_start"] = today
+        kwargs["due_end"] = today + timedelta(days=7)
+
+    if filters.get("overdue"):
+        kwargs["overdue"] = True
+
+    # Handle priority filter
+    if filters.get("priority"):
+        kwargs["priority"] = filters["priority"]
+
+    # Handle tags filter
+    if filters.get("tags") and len(filters["tags"]) > 0:
+        kwargs["tag"] = filters["tags"][0]
+
+    # Query todos
+    todos = query_todos(**kwargs)
+
+    # Post-filter for no_due_date (can't easily do this in SQL query)
+    if filters.get("no_due_date"):
+        todos = [t for t in todos if t.due_date is None]
+
+    return todos
 
 
 def _list_todos(
@@ -2531,3 +2686,182 @@ def todo_all_done(
     console.print(
         f"[green]Completed {completed_count} todo(s)[/green] in {note_path.name}"
     )
+
+
+@todo.command("completed")
+@click.option("--today", "-T", is_flag=True, help="Show todos completed today")
+@click.option("--yesterday", "-Y", is_flag=True, help="Show todos completed today")
+@click.option("--week", "-W", is_flag=True, help="Show todos completed this week")
+@click.option("--days", "-d", type=int, help="Show todos completed in last N days")
+@click.option(
+    "--notebook",
+    "-n",
+    multiple=True,
+    help="Filter by notebook (repeatable)",
+    shell_complete=complete_notebook,
+)
+@click.option("--tag", "-t", help="Filter by tag", shell_complete=complete_tag)
+@click.option("--limit", "-l", type=int, default=50, help="Maximum number of todos")
+def todo_completed(
+    today: bool,
+    yesterday: bool,
+    week: bool,
+    days: int | None,
+    notebook: tuple[str, ...],
+    tag: str | None,
+    limit: int,
+) -> None:
+    """Show recently completed todos.
+
+    View todos that were marked as completed within a specified time period.
+    By default, shows todos completed in the last 7 days.
+
+    \b
+    Examples:
+      nb todo completed                Show completed in last 7 days
+      nb todo completed --today        Show completed today
+      nb todo completed --week         Show completed this week
+      nb todo completed -d 30          Show completed in last 30 days
+      nb todo completed -n work        Show completed from work notebook
+      nb todo completed -t project     Show completed todos tagged #project
+    """
+    from nb.index.scanner import index_all_notes
+
+    # Ensure todos are indexed
+    index_all_notes(index_vectors=False)
+
+    config = get_config()
+
+    # Resolve notebooks with fuzzy matching
+    from nb.cli.utils import resolve_notebook
+    from nb.utils.fuzzy import UserCancelled
+
+    effective_notebooks: list[str] = []
+    for nb_name in notebook:
+        if config.get_notebook(nb_name):
+            effective_notebooks.append(nb_name)
+        else:
+            try:
+                resolved = resolve_notebook(nb_name)
+            except UserCancelled:
+                console.print("[dim]Cancelled.[/dim]")
+                raise SystemExit(1) from None
+            if resolved:
+                effective_notebooks.append(resolved)
+            else:
+                raise SystemExit(1)
+
+    # Determine date range
+    today_date = date.today()
+    if today and yesterday:
+        start_date = today_date - timedelta(days=1)
+        end_date = today_date
+        period_label = "yesterday and today"
+    elif today:
+        start_date = end_date = today_date
+        period_label = "today"
+    elif yesterday:
+        start_date = end_date = today_date - timedelta(days=1)
+        period_label = "today"
+    elif week:
+        week_start, week_end = get_week_range()
+        start_date = week_start
+        end_date = week_end
+        period_label = "this week"
+    elif days:
+        start_date = today_date - timedelta(days=days)
+        end_date = today_date
+        period_label = f"last {days} days"
+    else:
+        # Default: last 7 days
+        start_date = today_date - timedelta(days=7)
+        end_date = today_date
+        period_label = "last 7 days"
+
+    # Query completed todos
+    todos = query_todos(
+        status=TodoStatus.COMPLETED,
+        completed_date_start=start_date,
+        completed_date_end=end_date,
+        notebooks=effective_notebooks if effective_notebooks else None,
+        tag=tag,
+        parent_only=True,
+        exclude_note_excluded=False,  # Show all completed todos
+    )
+
+    if not todos:
+        console.print(f"[dim]No completed todos {period_label}.[/dim]")
+        return
+
+    # Sort by completion date (newest first), with fallback to created_date
+    def completion_sort_key(t):
+        # Get completion date from database - query_todos doesn't load it directly
+        # so we'll use created_date as a proxy for sorting within groups
+        return t.created_date or date.min
+
+    # Group by completion date
+    # Since Todo model doesn't expose completed_date, we'll query it separately
+    from nb.index.db import get_db
+
+    db = get_db()
+    todo_dates = {}
+    for t in todos:
+        row = db.fetchone("SELECT completed_date FROM todos WHERE id = ?", (t.id,))
+        if row and row["completed_date"]:
+            todo_dates[t.id] = date.fromisoformat(row["completed_date"])
+        else:
+            todo_dates[t.id] = t.created_date or today_date
+
+    # Group todos by completion date
+    by_date: dict[date, list] = {}
+    for t in todos:
+        d = todo_dates.get(t.id, today_date)
+        if d not in by_date:
+            by_date[d] = []
+        by_date[d].append(t)
+
+    # Display header
+    console.print(f"\n[bold]Completed Todos[/bold] ({period_label})\n")
+
+    # Display grouped by date (newest first)
+    displayed = 0
+    for d in sorted(by_date.keys(), reverse=True):
+        if displayed >= limit:
+            break
+
+        # Format date header
+        if d == today_date:
+            date_label = "Today"
+        elif d == today_date - timedelta(days=1):
+            date_label = "Yesterday"
+        else:
+            date_label = d.strftime("%A, %B %d")
+
+        console.print(f"[bold cyan]{date_label}[/bold cyan]")
+
+        for t in by_date[d]:
+            if displayed >= limit:
+                break
+
+            # Get notebook display info
+            nb_color, _ = get_notebook_display_info(t.notebook or "")
+
+            # Truncate content if needed
+            content = t.content
+            max_content = 60
+            if len(content) > max_content:
+                content = content[: max_content - 3] + "..."
+
+            # Format the todo line
+            nb_display = f"[{nb_color}]{t.notebook}[/{nb_color}]" if t.notebook else ""
+            console.print(f"  [green][x][/green] {content} [dim]{nb_display}[/dim]")
+            displayed += 1
+
+        console.print()  # Blank line between dates
+
+    # Summary
+    total = len(todos)
+    if displayed < total:
+        console.print(f"[dim]Showing {displayed} of {total} completed todos[/dim]")
+    else:
+        console.print(f"[dim]{total} todo(s) completed {period_label}[/dim]")

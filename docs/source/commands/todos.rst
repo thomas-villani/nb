@@ -24,15 +24,15 @@ List all open todos grouped by status and due date.
      - Filter by note path or alias (repeatable)
    * - ``-t, --tag TAG``
      - Filter by tag
-   * - ``-T, --exclude-tag TAG``
+   * - ``-xt, --exclude-tag TAG``
      - Exclude todos with tag (repeatable)
    * - ``-p, --priority N``
      - Filter by priority (1=high, 2=medium, 3=low)
    * - ``--overdue``
      - Show only overdue todos
-   * - ``--due-today``
+   * - ``-T, --today``
      - Show only todos due today
-   * - ``--due-week``
+   * - ``-W, --week``
      - Show only todos due this week
    * - ``--created-today``
      - Show only todos created today
@@ -64,6 +64,12 @@ List all open todos grouped by status and due date.
      - List all saved views
    * - ``--delete-view NAME``
      - Delete a saved view
+   * - ``-x, --expand``
+     - Expanded view: show more content (up to 80 chars)
+   * - ``-k, --kanban``
+     - Display todos in kanban board columns
+   * - ``-b, --board NAME``
+     - Kanban board name to use (default: 'default')
 
 **Examples:**
 
@@ -76,6 +82,8 @@ List all open todos grouped by status and due date.
    nb todo -t urgent -p 1     # High priority urgent todos
    nb todo --overdue          # Overdue only
    nb todo -l 10 -o 10        # Pagination: todos 11-20
+   nb todo -k                 # Kanban board view
+   nb todo -k -b sprint       # Use custom board
 
 nb todo add
 -----------
@@ -306,6 +314,48 @@ Mark all todos in a note as completed.
    nb todo all-done myalias            # By note alias
    nb todo all-done friday -f          # Skip confirmation
 
+nb todo completed
+-----------------
+
+Show recently completed todos grouped by completion date.
+
+**Usage:** ``nb todo completed [OPTIONS]``
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-T, --today``
+     - Show todos completed today
+   * - ``-Y, --yesterday``
+     - Show todos completed yesterday
+   * - ``-W, --week``
+     - Show todos completed this week
+   * - ``-d, --days N``
+     - Show todos completed in last N days
+   * - ``-n, --notebook NAME``
+     - Filter by notebook (repeatable)
+   * - ``-t, --tag TAG``
+     - Filter by tag
+   * - ``-l, --limit N``
+     - Maximum number of todos (default: 50)
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb todo completed              # Completed in last 7 days (default)
+   nb todo completed --today      # Completed today
+   nb todo completed --yesterday  # Completed yesterday
+   nb todo completed --week       # Completed this week
+   nb todo completed -d 30        # Completed in last 30 days
+   nb todo completed -n work      # From work notebook only
+   nb todo completed -t project   # Todos tagged #project
+
 Interactive mode
 ----------------
 
@@ -339,6 +389,50 @@ Launch an interactive TUI for managing todos:
      - Refresh
    * - ``q``
      - Quit
+
+Kanban view
+-----------
+
+Display todos in a kanban board layout with customizable columns:
+
+.. code-block:: bash
+
+   nb todo --kanban           # Display default kanban board
+   nb todo -k                 # Short form
+   nb todo -k -b sprint       # Use a custom board
+
+The default board has four columns: Backlog, In Progress, Due Today, and Done.
+
+**Custom Boards**
+
+Configure custom boards in ``config.yaml``:
+
+.. code-block:: yaml
+
+   kanban_boards:
+     - name: sprint
+       columns:
+         - name: "To Do"
+           filters: { status: pending, no_due_date: true }
+           color: cyan
+         - name: "In Progress"
+           filters: { status: in_progress }
+           color: green
+         - name: "Done"
+           filters: { status: completed }
+           color: dim
+
+**Available column filters:**
+
+- ``status``: "pending", "in_progress", or "completed"
+- ``due_today``: true - todos due today
+- ``due_this_week``: true - todos due within 7 days
+- ``overdue``: true - past due, not completed
+- ``no_due_date``: true - todos without a due date
+- ``priority``: 1, 2, or 3
+- ``tags``: list of tags to filter by
+
+The web UI also includes a Kanban view with drag-and-drop support to move todos between columns.
 
 Saved views
 -----------

@@ -104,32 +104,32 @@ todo_exclude: true
 - [x] Add a 'recently viewed/edited notes' page on nb web
 - [x] Add a way to title a new note from command line
 - [x] Figure out how to handle subdirs in notes better and include in hierarchy, perhaps as a 'section' in a notebook?
-- [ ] kanban view for nb todo and nb web
+- [x] kanban view for nb todo and nb web
 - [x] for links: Web UI - clickable links, backlinks panel, graph view
 - [x] for links: ASCII graph - nb graph <note>
 - [x] for links: Related notes - nb related <note> combining links + tags + embeddings
 - [ ] Capture url and other file attachments as markdown using all2md #feature
 - [x] Add `nb where <notebook|note|note-alias>` command that simply prints the path to stdout
 - [x] Need some kind of display of the frontmatter stuff on the `nb web` page
-- [ ] Allow search within specific notebooks as well in `nb web` command
+- [x] Allow search within specific notebooks as well in `nb web` command
 - [x] Allow opening notes by title partial match
 - [x] Add nicer table-like view in web ui for notes with created and modified date
 - [x] Add an 'expanded' view (--expand/-x) for 'nb todo' to show more of the todo text
 - [x] Add a way to check off all in progress items as completed in a notebook / note (extend `nb todo all-done`)
-- [ ] Better daily metrics - what was completed today? By notebook. `nb completed` or `nb done` something
+- [x] Better daily metrics - what was completed today? By notebook. `nb completed` or `nb done` something
 - [ ] Add --about flag
+- [ ] `nb new <existing>` should prompt to open when exists
 
 ### Phase 5: Wijjit TUI
 - [ ] Full Wijjit-based todo list view with richer interactions #feature
 - [ ] Full Wijjit based editor for notes #feature
 - [x] Stream/continuous view (`nb stream`) with lazy loading
-- [ ] Grep search within stream view #feature
 - [ ] Interactive filtering UI #feature
 - [x] Navigation and links #feature
 
 ## Technical Debt
 - [x] Add comprehensive test suite #testing
-- [ ] Add type hints throughout (mypy strict mode) #polish
+- [x] Add type hints throughout (mypy strict mode) #polish
 - [ ] Performance optimization for large note collections #performance
 - [x] Better error messages and user feedback #polish
 - [x] Documentation site with examples #docs

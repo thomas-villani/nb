@@ -302,14 +302,14 @@ nb todo --note work/project::Tasks # Filter by section within note
 nb todo --note a --note b          # Filter by multiple notes
 nb todo --overdue       # Show overdue todos only
 nb todo -t work         # Filter by tag
-nb todo -T waiting      # Exclude todos with a tag
+nb todo -xt waiting     # Exclude todos with a tag
 nb todo -p 1            # Filter by priority (1=high, 2=medium, 3=low)
 
 # Date filters
 nb todo --created-today # Show todos created today
 nb todo --created-week  # Show todos created this week
-nb todo --due-today     # Show todos due today
-nb todo --due-week      # Show todos due this week
+nb todo --today     # Show todos due today
+nb todo --week      # Show todos due this week
 
 # Sorting
 nb todo -s tag          # Sort by first tag (default: source)
@@ -356,6 +356,15 @@ nb todo all-done work/project  # Mark all in work/project.md
 nb todo all-done friday -f     # Skip confirmation
 nb todo all-done friday -i     # Only mark in-progress todos as complete
 nb todo all-done friday -i -f  # In-progress only, skip confirmation
+
+# Completed todos history
+nb todo completed              # Show todos completed in last 7 days
+nb todo completed --today      # Show todos completed today
+nb todo completed --yesterday  # Show todos completed yesterday
+nb todo completed --week       # Show todos completed this week
+nb todo completed -d 30        # Show todos completed in last 30 days
+nb todo completed -n work      # Filter by notebook
+nb todo completed -t project   # Filter by tag
 
 # Saved views
 nb todo -n work -t urgent --create-view work-urgent  # Save current filters as a view
@@ -405,6 +414,49 @@ Keyboard shortcuts:
 - `g/G` - Jump to top/bottom
 - `r` - Refresh
 - `q` - Quit
+
+#### Kanban View
+
+Display todos in a kanban board layout with customizable columns:
+
+```bash
+nb todo --kanban           # Display kanban board (default board)
+nb todo -k                 # Short form
+nb todo -k -b myboard      # Use a custom board configuration
+```
+
+The kanban view shows todos organized into columns based on their status and filters. The default board has four columns: Backlog, In Progress, Due Today, and Done.
+
+**Custom Boards**
+
+Configure custom kanban boards in `config.yaml`:
+
+```yaml
+kanban_boards:
+  - name: sprint
+    columns:
+      - name: "To Do"
+        filters: { status: pending, no_due_date: true }
+        color: cyan
+      - name: "In Progress"
+        filters: { status: in_progress }
+        color: green
+      - name: "Review"
+        filters: { tags: [review] }
+        color: yellow
+      - name: "Done"
+        filters: { status: completed }
+        color: dim
+```
+
+**Available column filters:**
+- `status`: "pending", "in_progress", or "completed"
+- `due_today`: true - todos due today
+- `due_this_week`: true - todos due within 7 days
+- `overdue`: true - past due, not completed
+- `no_due_date`: true - todos without a due date
+- `priority`: 1, 2, or 3
+- `tags`: list of tags to filter by
 
 ### Search
 
@@ -730,10 +782,11 @@ Features:
 - Browse notebooks and notes with notebook colors from config
 - Create and edit notes directly in the browser
 - Markdown rendering with syntax highlighting for code blocks
-- Full-text search across all notes
+- Full-text search across all notes (with notebook scoping)
 - **Clickable links**: Wiki links `[[note]]` and internal markdown links navigate between notes
 - **Backlinks panel**: See which notes link to the current note
 - **Knowledge graph**: Interactive D3.js visualization of note connections
+- **Kanban board**: Drag-and-drop todo management with customizable columns
 - Todo management: add new todos, toggle completion, view by section
 - Todo sections: Overdue, In Progress, Due Today, Due This Week, Due Later, No Due Date
 - Sort todos by status, notebook, due date, priority, or created date
@@ -986,6 +1039,23 @@ todo_views:
       notebooks: [daily]
       hide_later: true
       hide_no_date: true
+
+# Kanban board configurations (for CLI --kanban and web UI)
+kanban_boards:
+  - name: default
+    columns:
+      - name: Backlog
+        filters: { status: pending, no_due_date: true }
+        color: cyan
+      - name: In Progress
+        filters: { status: in_progress }
+        color: green
+      - name: Due Today
+        filters: { due_today: true, status: pending }
+        color: yellow
+      - name: Done
+        filters: { status: completed }
+        color: dim
 
 # Recording settings (optional feature)
 recorder:

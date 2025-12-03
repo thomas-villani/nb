@@ -502,6 +502,83 @@ TEMPLATE = """<!DOCTYPE html>
             .app { flex-direction: column; }
             .note-list { max-height: 30vh; }
         }
+
+        /* Kanban Board Styles */
+        .kanban-board {
+            display: flex;
+            gap: 1rem;
+            overflow-x: auto;
+            padding-bottom: 1rem;
+            min-height: 400px;
+        }
+        .kanban-column {
+            min-width: 280px;
+            max-width: 320px;
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 0.5rem;
+            display: flex;
+            flex-direction: column;
+        }
+        .kanban-column.drag-over {
+            border: 2px dashed var(--accent);
+            background: rgba(88, 166, 255, 0.1);
+        }
+        .kanban-header {
+            font-weight: 600;
+            padding: 0.5rem;
+            border-bottom: 2px solid var(--accent);
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .kanban-header .count {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            background: var(--bg);
+            padding: 0.1rem 0.4rem;
+            border-radius: 10px;
+        }
+        .kanban-items {
+            flex: 1;
+            min-height: 100px;
+            overflow-y: auto;
+        }
+        .kanban-card {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            cursor: grab;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .kanban-card:hover {
+            border-color: var(--accent);
+        }
+        .kanban-card.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+        .kanban-card-content {
+            margin-bottom: 0.5rem;
+            word-wrap: break-word;
+        }
+        .kanban-card-meta {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .kanban-card-meta .priority-1 { color: #f85149; }
+        .kanban-card-meta .priority-2 { color: #d29922; }
+        .kanban-card-meta .priority-3 { color: #58a6ff; }
+        .kanban-card-meta .due { color: var(--text-dim); }
+        .kanban-card-meta .due.overdue { color: #f85149; }
+        .kanban-card-meta .due.today { color: #d29922; }
+        .kanban-card-meta .notebook { color: var(--accent); }
     </style>
 </head>
 <body>
@@ -514,6 +591,7 @@ TEMPLATE = """<!DOCTYPE html>
                 <a class="nav-link" onclick="loadHome()">Home</a>
                 <a class="nav-link" onclick="loadHistory()">History</a>
                 <a class="nav-link" onclick="loadTodos()">Todos</a>
+                <a class="nav-link" onclick="loadKanban()">Kanban</a>
                 <a class="nav-link" onclick="loadGraph()">Graph</a>
             </div>
             <div class="nav-section">
@@ -1370,6 +1448,159 @@ TEMPLATE = """<!DOCTYPE html>
             }
         }
 
+        // Kanban board state
+        let kanbanBoard = null;
+        let draggedTodoId = null;
+
+        async function loadKanban(pushHistory = true) {
+            currentNotebook = null;
+            currentNotePath = null;
+            document.getElementById('notes-section').style.display = 'none';
+            if (pushHistory) history.pushState({ view: 'kanban' }, '', '#kanban');
+
+            // Load board configuration
+            const boards = await api('/kanban/boards');
+            kanbanBoard = boards[0];  // Use first/default board
+
+            // Load todos for each column in parallel
+            const columnDataPromises = kanbanBoard.columns.map(async col => {
+                const todos = await api('/kanban/column?filters=' + encodeURIComponent(JSON.stringify(col.filters)));
+                return { ...col, todos };
+            });
+            const columnData = await Promise.all(columnDataPromises);
+
+            renderKanban(columnData);
+        }
+
+        function renderKanban(columns) {
+            const today = getToday();
+
+            function renderCard(t) {
+                let priorityHtml = '';
+                if (t.priority === 1) priorityHtml = '<span class="priority-1">!!!</span>';
+                else if (t.priority === 2) priorityHtml = '<span class="priority-2">!!</span>';
+                else if (t.priority === 3) priorityHtml = '<span class="priority-3">!</span>';
+
+                let dueHtml = '';
+                if (t.due) {
+                    const dueDate = t.due.split('T')[0];
+                    if (dueDate < today) {
+                        dueHtml = `<span class="due overdue">${dueDate}</span>`;
+                    } else if (dueDate === today) {
+                        dueHtml = `<span class="due today">Today</span>`;
+                    } else {
+                        dueHtml = `<span class="due">${dueDate}</span>`;
+                    }
+                }
+
+                const notebookHtml = t.notebook ? `<span class="notebook">${escapeHtml(t.notebook)}</span>` : '';
+
+                return `
+                    <div class="kanban-card"
+                         draggable="true"
+                         data-id="${t.id}"
+                         data-status="${t.status}"
+                         ondragstart="kanbanDragStart(event)"
+                         ondragend="kanbanDragEnd(event)">
+                        <div class="kanban-card-content">${escapeHtml(t.content)}</div>
+                        <div class="kanban-card-meta">
+                            ${priorityHtml}
+                            ${dueHtml}
+                            ${notebookHtml}
+                        </div>
+                    </div>
+                `;
+            }
+
+            function getColumnColor(color) {
+                const colorMap = {
+                    'cyan': 'var(--accent)',
+                    'green': '#3fb950',
+                    'yellow': '#d29922',
+                    'red': '#f85149',
+                    'dim': 'var(--text-dim)',
+                    'white': 'var(--text)'
+                };
+                return colorMap[color] || color;
+            }
+
+            const columnsHtml = columns.map(col => `
+                <div class="kanban-column"
+                     data-filters='${JSON.stringify(col.filters)}'
+                     ondragover="kanbanDragOver(event)"
+                     ondragleave="kanbanDragLeave(event)"
+                     ondrop="kanbanDrop(event, '${escapeJs(JSON.stringify(col.filters))}')">
+                    <div class="kanban-header" style="border-color: ${getColumnColor(col.color)}">
+                        <span>${escapeHtml(col.name)}</span>
+                        <span class="count">${col.todos.length}</span>
+                    </div>
+                    <div class="kanban-items">
+                        ${col.todos.map(renderCard).join('')}
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('content').innerHTML = `
+                <h1>Kanban Board</h1>
+                <p style="color:var(--text-dim);margin-bottom:1rem">Drag cards between columns to change status</p>
+                <div class="kanban-board">
+                    ${columnsHtml}
+                </div>
+            `;
+        }
+
+        function kanbanDragStart(event) {
+            draggedTodoId = event.target.dataset.id;
+            event.target.classList.add('dragging');
+            event.dataTransfer.effectAllowed = 'move';
+        }
+
+        function kanbanDragEnd(event) {
+            event.target.classList.remove('dragging');
+        }
+
+        function kanbanDragOver(event) {
+            event.preventDefault();
+            event.currentTarget.classList.add('drag-over');
+        }
+
+        function kanbanDragLeave(event) {
+            event.currentTarget.classList.remove('drag-over');
+        }
+
+        async function kanbanDrop(event, filtersJson) {
+            event.preventDefault();
+            event.currentTarget.classList.remove('drag-over');
+
+            if (!draggedTodoId) return;
+
+            const filters = JSON.parse(filtersJson);
+
+            // Determine new status from column filters
+            let newStatus = filters.status;
+            if (!newStatus) {
+                // Try to infer from other filters
+                if (filters.due_today || filters.due_this_week) {
+                    newStatus = 'pending';
+                } else {
+                    newStatus = 'pending';
+                }
+            }
+
+            try {
+                await api('/todos/' + draggedTodoId + '/status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus })
+                });
+            } catch (err) {
+                console.error('Failed to update todo status:', err);
+            }
+
+            draggedTodoId = null;
+            loadKanban(false);
+        }
+
         let graphShowTags = true;
         let graphShowNotebooks = true;
 
@@ -1658,11 +1889,23 @@ TEMPLATE = """<!DOCTYPE html>
                 return;
             }
 
-            const results = await api('/search?q=' + encodeURIComponent(query));
+            // Build search URL with optional notebook filter
+            let searchUrl = '/search?q=' + encodeURIComponent(query);
+            if (currentNotebook) {
+                searchUrl += '&notebook=' + encodeURIComponent(currentNotebook);
+            }
+
+            const results = await api(searchUrl);
             document.getElementById('notes-section').style.display = 'none';
+
+            // Show scoped search indicator
+            const scopeIndicator = currentNotebook
+                ? `<p style="color:var(--accent);margin-bottom:0.5rem">Searching in: ${escapeHtml(currentNotebook)}</p>`
+                : '';
 
             document.getElementById('content').innerHTML = `
                 <h1>Search: ${escapeHtml(query)}</h1>
+                ${scopeIndicator}
                 <p style="color:var(--text-dim);margin-bottom:1rem">${results.length} results</p>
                 <div class="search-results">
                     ${results.map(r => `
@@ -1695,6 +1938,7 @@ TEMPLATE = """<!DOCTYPE html>
             else if (state.view === 'notebook') loadNotebook(state.name, false);
             else if (state.view === 'note') loadNote(state.path, false);
             else if (state.view === 'todos') loadTodos(false);
+            else if (state.view === 'kanban') loadKanban(false);
             else if (state.view === 'graph') loadGraph(false);
             else if (state.view === 'history') loadHistory(false);
         });
@@ -1713,6 +1957,9 @@ TEMPLATE = """<!DOCTYPE html>
         } else if (hash === '#todos') {
             history.replaceState({ view: 'todos' }, '', hash);
             loadTodos(false);
+        } else if (hash === '#kanban') {
+            history.replaceState({ view: 'kanban' }, '', hash);
+            loadKanban(false);
         } else if (hash === '#graph') {
             history.replaceState({ view: 'graph' }, '', hash);
             loadGraph(false);
@@ -2347,10 +2594,15 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
         # API: Search
         if path == "/api/search":
             q = query.get("q", [""])[0]
+            notebook_param = query.get("notebook", [None])[0]
             if q:
                 from nb.index.search import get_search
 
-                results = get_search().search(q, k=20)
+                # Apply notebook filter if specified
+                filters: dict | None = (
+                    {"notebook": notebook_param} if notebook_param else None
+                )
+                results = get_search().search(q, k=20, filters=filters)
                 self.send_json(
                     [
                         {
@@ -2399,6 +2651,112 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                         <= today + __import__("datetime").timedelta(days=7),
                     }
                     for t in todos[:100]
+                ]
+            )
+            return
+
+        # API: Kanban - get board configurations
+        if path == "/api/kanban/boards":
+            from nb.config import DEFAULT_KANBAN_COLUMNS
+
+            boards = []
+            for b in config.kanban_boards:
+                boards.append(
+                    {
+                        "name": b.name,
+                        "columns": [
+                            {"name": c.name, "filters": c.filters, "color": c.color}
+                            for c in b.columns
+                        ],
+                    }
+                )
+
+            # Add default board if none configured
+            if not boards:
+                boards.append(
+                    {
+                        "name": "default",
+                        "columns": [
+                            {"name": c.name, "filters": c.filters, "color": c.color}
+                            for c in DEFAULT_KANBAN_COLUMNS
+                        ],
+                    }
+                )
+
+            self.send_json(boards)
+            return
+
+        # API: Kanban - get todos for a column
+        if path == "/api/kanban/column":
+            import json
+            from datetime import date as date_type
+            from datetime import timedelta
+
+            from nb.index.todos_repo import query_todos
+            from nb.models import TodoStatus
+
+            filters_json = query.get("filters", ["{}"])[0]
+            notebook_filter = query.get("notebook", [None])[0]
+
+            try:
+                filters = json.loads(filters_json)
+            except json.JSONDecodeError:
+                filters = {}
+
+            today = date_type.today()
+
+            # Map filter keys to query_todos parameters
+            kwargs: dict = {
+                "parent_only": True,
+                "exclude_note_excluded": True,
+            }
+
+            if notebook_filter:
+                kwargs["notebooks"] = [notebook_filter]
+
+            # Handle status filter
+            status_val = filters.get("status")
+            if status_val:
+                kwargs["status"] = TodoStatus(status_val)
+            else:
+                kwargs["completed"] = False
+
+            # Handle due date filters
+            if filters.get("due_today"):
+                kwargs["due_start"] = today
+                kwargs["due_end"] = today
+
+            if filters.get("due_this_week"):
+                kwargs["due_start"] = today
+                kwargs["due_end"] = today + timedelta(days=7)
+
+            if filters.get("overdue"):
+                kwargs["overdue"] = True
+
+            if filters.get("priority"):
+                kwargs["priority"] = filters["priority"]
+
+            if filters.get("tags") and len(filters["tags"]) > 0:
+                kwargs["tag"] = filters["tags"][0]
+
+            todos = query_todos(**kwargs)
+
+            # Post-filter for no_due_date
+            if filters.get("no_due_date"):
+                todos = [t for t in todos if t.due_date is None]
+
+            self.send_json(
+                [
+                    {
+                        "id": t.id,
+                        "content": t.content,
+                        "status": t.status.value,
+                        "due": t.due_date.isoformat() if t.due_date else None,
+                        "priority": t.priority.value if t.priority else None,
+                        "notebook": t.notebook,
+                        "tags": t.tags,
+                    }
+                    for t in todos[:50]
                 ]
             )
             return
@@ -2520,6 +2878,55 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 )
                 update_todo_status(todo_id, new_status)
                 self.send_json({"success": True})
+            except PermissionError as e:
+                self.send_json({"error": str(e)}, 403)
+            return
+
+        # API: Set todo status directly (for kanban drag-and-drop)
+        if path.startswith("/api/todos/") and path.endswith("/status"):
+            todo_id = path.split("/")[-2]
+            body = self.read_body()
+            new_status_str = body.get("status")  # "pending", "in_progress", "completed"
+
+            if not new_status_str:
+                self.send_json({"error": "Status required"}, 400)
+                return
+
+            from nb.core.todos import set_todo_status_in_file
+            from nb.index.todos_repo import get_todo_by_id, update_todo_status
+            from nb.models import TodoStatus
+
+            try:
+                new_status = TodoStatus(new_status_str)
+            except ValueError:
+                self.send_json({"error": f"Invalid status: {new_status_str}"}, 400)
+                return
+
+            todo = get_todo_by_id(todo_id)
+            if not todo:
+                self.send_json({"error": "Todo not found"}, 404)
+                return
+
+            # Get absolute path for the todo's source file
+            source_path = todo.source.path
+            if not source_path.is_absolute():
+                source_path = config.notes_root / source_path
+
+            try:
+                actual_line = set_todo_status_in_file(
+                    source_path,
+                    todo.line_number,
+                    new_status,
+                    expected_content=todo.content,
+                )
+                if actual_line is None:
+                    self.send_json(
+                        {"error": "Todo not found at expected location"}, 404
+                    )
+                    return
+                # Update the database
+                update_todo_status(todo_id, new_status)
+                self.send_json({"success": True, "status": new_status.value})
             except PermissionError as e:
                 self.send_json({"error": str(e)}, 403)
             return

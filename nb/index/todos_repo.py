@@ -403,6 +403,8 @@ def query_todos(
     due_end: date | None = None,
     created_start: date | None = None,
     created_end: date | None = None,
+    completed_date_start: date | None = None,
+    completed_date_end: date | None = None,
     overdue: bool = False,
     priority: int | None = None,
     notebooks: list[str] | None = None,
@@ -427,6 +429,8 @@ def query_todos(
         due_end: Filter by due date <= this
         created_start: Filter by created date >= this
         created_end: Filter by created date <= this
+        completed_date_start: Filter by completion date >= this
+        completed_date_end: Filter by completion date <= this
         overdue: Only include overdue todos
         priority: Filter by priority level (1, 2, or 3)
         notebooks: Filter by notebook names (stored as project in DB)
@@ -514,6 +518,14 @@ def query_todos(
     if created_end:
         conditions.append("t.created_date <= ?")
         params.append(created_end.isoformat())
+
+    if completed_date_start:
+        conditions.append("t.completed_date >= ?")
+        params.append(completed_date_start.isoformat())
+
+    if completed_date_end:
+        conditions.append("t.completed_date <= ?")
+        params.append(completed_date_end.isoformat())
 
     if overdue:
         conditions.append("t.due_date < ? AND t.status != ?")

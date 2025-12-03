@@ -114,6 +114,62 @@ class TodoViewConfig:
 
 
 @dataclass
+class KanbanColumnConfig:
+    """Configuration for a single kanban board column.
+
+    Columns define filters to determine which todos appear in each column.
+    """
+
+    name: str
+    filters: dict[str, Any] = field(default_factory=dict)
+    # Supported filter keys:
+    # - status: "pending" | "in_progress" | "completed"
+    # - due_today: bool - todos due today
+    # - due_this_week: bool - todos due within 7 days
+    # - overdue: bool - past due, not completed
+    # - no_due_date: bool - todos without a due date
+    # - priority: int - filter by priority (1, 2, 3)
+    # - tags: list[str] - filter by tags
+    color: str = "white"  # Display color for the column header
+
+
+@dataclass
+class KanbanBoardConfig:
+    """Configuration for a kanban board.
+
+    Boards contain multiple columns, each with their own filters.
+    """
+
+    name: str
+    columns: list[KanbanColumnConfig] = field(default_factory=list)
+
+
+# Default kanban board configuration
+DEFAULT_KANBAN_COLUMNS = [
+    KanbanColumnConfig(
+        name="Backlog",
+        filters={"status": "pending", "no_due_date": True},
+        color="cyan",
+    ),
+    KanbanColumnConfig(
+        name="In Progress",
+        filters={"status": "in_progress"},
+        color="green",
+    ),
+    KanbanColumnConfig(
+        name="Due Today",
+        filters={"due_today": True, "status": "pending"},
+        color="yellow",
+    ),
+    KanbanColumnConfig(
+        name="Done",
+        filters={"status": "completed"},
+        color="dim",
+    ),
+]
+
+
+@dataclass
 class Config:
     """Application configuration."""
 
@@ -128,6 +184,7 @@ class Config:
         ]
     )
     todo_views: list[TodoViewConfig] = field(default_factory=list)
+    kanban_boards: list[KanbanBoardConfig] = field(default_factory=list)
     embeddings: EmbeddingsConfig = field(default_factory=EmbeddingsConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
     todo: TodoConfig = field(default_factory=TodoConfig)
@@ -147,6 +204,17 @@ class Config:
     def todo_view_names(self) -> list[str]:
         """Get list of todo view names."""
         return [view.name for view in self.todo_views]
+
+    def get_kanban_board(self, name: str) -> KanbanBoardConfig | None:
+        """Get a kanban board configuration by name."""
+        for board in self.kanban_boards:
+            if board.name == name:
+                return board
+        return None
+
+    def kanban_board_names(self) -> list[str]:
+        """Get list of kanban board names."""
+        return [board.name for board in self.kanban_boards]
 
     def get_notebook(self, name: str) -> NotebookConfig | None:
         """Get a notebook configuration by name."""
@@ -359,6 +427,34 @@ def _parse_todo_views(data: list[dict[str, Any]]) -> list[TodoViewConfig]:
     return result
 
 
+def _parse_kanban_columns(data: list[dict[str, Any]]) -> list[KanbanColumnConfig]:
+    """Parse kanban column configuration."""
+    result = []
+    for item in data:
+        result.append(
+            KanbanColumnConfig(
+                name=item["name"],
+                filters=item.get("filters", {}),
+                color=item.get("color", "white"),
+            )
+        )
+    return result
+
+
+def _parse_kanban_boards(data: list[dict[str, Any]]) -> list[KanbanBoardConfig]:
+    """Parse kanban_boards configuration."""
+    result = []
+    for item in data:
+        columns = _parse_kanban_columns(item.get("columns", []))
+        result.append(
+            KanbanBoardConfig(
+                name=item["name"],
+                columns=columns,
+            )
+        )
+    return result
+
+
 def _parse_search(data: dict[str, Any] | None) -> SearchConfig:
     """Parse search configuration."""
     if data is None:
@@ -431,6 +527,7 @@ def load_config(config_path: Path | None = None) -> Config:
 
     # Note: linked_todos and linked_notes are stored in the database, not config
     todo_views = _parse_todo_views(data.get("todo_views", []))
+    kanban_boards = _parse_kanban_boards(data.get("kanban_boards", []))
     embeddings = _parse_embeddings(data.get("embeddings"))
     search = _parse_search(data.get("search"))
     todo_config = _parse_todo_config(data.get("todo"))
@@ -445,6 +542,7 @@ def load_config(config_path: Path | None = None) -> Config:
         editor=editor,
         notebooks=notebooks,
         todo_views=todo_views,
+        kanban_boards=kanban_boards,
         embeddings=embeddings,
         search=search,
         todo=todo_config,
@@ -525,6 +623,16 @@ def save_config(config: Config) -> None:
         "notebooks": notebooks_data,
         "todo_views": [
             {"name": view.name, "filters": view.filters} for view in config.todo_views
+        ],
+        "kanban_boards": [
+            {
+                "name": board.name,
+                "columns": [
+                    {"name": col.name, "filters": col.filters, "color": col.color}
+                    for col in board.columns
+                ],
+            }
+            for board in config.kanban_boards
         ],
         "embeddings": embeddings_data,
         "search": search_data,
