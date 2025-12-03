@@ -366,7 +366,7 @@ class TestTodoFilters:
         path.write_text(content)
         cli_runner.invoke(cli, ["index"])
 
-        result = cli_runner.invoke(cli, ["todo", "-T", "waiting"])
+        result = cli_runner.invoke(cli, ["todo", "-xt", "waiting"])
         assert result.exit_code == 0
         assert "Active" in result.output
         assert "Waiting" not in result.output
