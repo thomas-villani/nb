@@ -108,7 +108,6 @@ todo_exclude: true
 - [x] for links: Web UI - clickable links, backlinks panel, graph view
 - [x] for links: ASCII graph - nb graph <note>
 - [x] for links: Related notes - nb related <note> combining links + tags + embeddings
-- [ ] Capture url and other file attachments as markdown using all2md #feature
 - [x] Add `nb where <notebook|note|note-alias>` command that simply prints the path to stdout
 - [x] Need some kind of display of the frontmatter stuff on the `nb web` page
 - [x] Allow search within specific notebooks as well in `nb web` command
@@ -118,10 +117,11 @@ todo_exclude: true
 - [x] Add a way to check off all in progress items as completed in a notebook / note (extend `nb todo all-done`)
 - [x] Better daily metrics - what was completed today? By notebook. `nb completed` or `nb done` something
 - [x] Add --about flag
-- [ ] `nb new <existing>` should prompt to open when exists
+- [x] `nb new <existing>` should prompt to open when exists
 - [ ] give notes a unique ID as well so they can be quick loaded and included on listings
 - [ ] Add numbering to `nb history` list and allow loading notes from history command like `nb history open 2`
-
+- [ ] Capture url and other file attachments as markdown using all2md #feature
+- [ ] Browser plugin to add notes from webpages
 
 ### Phase 5: Wijjit TUI
 - [ ] Full Wijjit-based todo list view with richer interactions #feature

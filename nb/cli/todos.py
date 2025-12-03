@@ -1060,62 +1060,62 @@ def _calculate_column_widths(
         total += 2  # gap after priority
         return total
 
-    # Expanded view mode: prioritize content width (up to 80 chars)
-    # Hide source first, then due, to maximize content space
+    # Expanded view mode: maximize content width, show only id + source + content
+    # Hide created, due, and priority to give maximum room for todo text
     if expand:
-        expanded_max_content = 80
+        # Base spacing: id(6) + checkbox(1) + space + gap after content + gap after source
+        expand_base = id_width + 2 + 2 + 2  # 12 chars overhead
 
-        # Try with source visible (compact), no created
-        fixed_total = calc_total(
-            source_width_compact, show_created=False, show_due=True
-        )
-        content_width = min(terminal_width - fixed_total, expanded_max_content)
+        # Try with full source
+        fixed_total = expand_base + source_width_full
+        content_width = terminal_width - fixed_total
+        if content_width >= min_content_width:
+            return {
+                "content": content_width,
+                "source": source_width_full,
+                "created": 0,
+                "due": 0,
+                "priority": 0,
+                "show_created": False,
+                "show_due": False,
+                "show_priority": False,
+                "compact_source": False,
+                "nosection_source": False,
+                "hide_notebook": hide_notebook,
+                "hide_source": False,
+            }
+
+        # Try with compact source
+        fixed_total = expand_base + source_width_compact
+        content_width = terminal_width - fixed_total
         if content_width >= min_content_width:
             return {
                 "content": content_width,
                 "source": source_width_compact,
                 "created": 0,
-                "due": due_width,
-                "priority": priority_width,
+                "due": 0,
+                "priority": 0,
                 "show_created": False,
-                "show_due": True,
+                "show_due": False,
+                "show_priority": False,
                 "compact_source": True,
                 "nosection_source": False,
                 "hide_notebook": hide_notebook,
                 "hide_source": False,
             }
 
-        # Try with source hidden, due visible
-        fixed_total = calc_total_no_source(show_due=True)
-        content_width = min(terminal_width - fixed_total, expanded_max_content)
-        if content_width >= min_content_width:
-            return {
-                "content": content_width,
-                "source": 0,
-                "created": 0,
-                "due": due_width,
-                "priority": priority_width,
-                "show_created": False,
-                "show_due": True,
-                "compact_source": False,
-                "nosection_source": False,
-                "hide_notebook": hide_notebook,
-                "hide_source": True,
-            }
-
-        # Try with both source and due hidden
-        fixed_total = calc_total_no_source(show_due=False)
-        content_width = min(
-            max(terminal_width - fixed_total, min_content_width), expanded_max_content
-        )
+        # Fallback: hide source too, maximize content
+        fixed_total = id_width + 2 + 2  # id + checkbox + gap
+        content_width = max(terminal_width - fixed_total, min_content_width)
         return {
             "content": content_width,
             "source": 0,
             "created": 0,
             "due": 0,
-            "priority": priority_width,
+            "priority": 0,
             "show_created": False,
             "show_due": False,
+            "show_priority": False,
             "compact_source": False,
             "nosection_source": False,
             "hide_notebook": hide_notebook,
@@ -1652,6 +1652,7 @@ def _print_todo(
     # Get visibility flags from widths
     show_created = bool(widths.get("show_created", True)) if widths else True
     show_due = bool(widths.get("show_due", True)) if widths else True
+    show_priority = bool(widths.get("show_priority", True)) if widths else True
     compact_source = bool(widths.get("compact_source", False)) if widths else False
     nosection_source = bool(widths.get("nosection_source", False)) if widths else False
     hide_notebook = bool(widths.get("hide_notebook", False)) if widths else False
@@ -1748,7 +1749,8 @@ def _print_todo(
         due_part = f"[{due_color}]{due_str:>6}[/{due_color}]" if due_str else " " * 6
         line_parts.append(f"  {due_part}")
 
-    line_parts.append(f"  {priority_part}{tags_part}")
+    if show_priority:
+        line_parts.append(f"  {priority_part}{tags_part}")
 
     console.print("".join(line_parts))
 
