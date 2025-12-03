@@ -1,3 +1,64 @@
+# v0.2.3 - 2025-12-03
+
+This patch release contains documentation and example asset additions, several developer-facing robustness and indexing improvements, a new Kanban/completed-todos flow (CLI + web), small CLI quality-of-life changes, and assorted refactors/tests/housekeeping. No breaking changes.
+
+## New Features
+
+- Add Kanban support to todos:
+  - CLI flags: --kanban / -k and --board / -b; new command `nb todo completed`
+  - Terminal kanban renderer with configurable boards/columns
+  - Web UI kanban with client rendering, drag-and-drop, and API endpoints (/api/kanban/boards, /api/kanban/column, /api/todos/:id/status)
+  - Kanban boards persisted via Config (KanbanBoard/KanbanColumn) with parsing/load/save support
+  - Todo queries extended to support completed_date_start / completed_date_end filters
+- CLI polish and aliases:
+  - Added --about / -A to print an ASCII-rich About panel (uses rich.Panel)
+  - Added aliases/shortcuts (ls → list, td → todo done, now → todo --today)
+  - Prompt to open existing note when creating a note that already exists
+  - Notebook path display changed to show ~/notes/<name> for local notebooks
+  - When editing a todo, capture file mtime and re-sync/reindex after editor returns; print sync status
+
+## Improvements
+
+- Indexing and todo handling:
+  - Normalize relative due dates before hashing/indexing and use future-oriented parsing so @due(Friday) resolves to the upcoming Friday (parse_fuzzy_datetime_future)
+  - Consolidated re-index logic: call index_note(...) for full reindex on edits and added index_note_threadsafe for background/threaded indexing to avoid SQLite threading issues
+  - Vector indexing made more resilient: added logging, thread lock, and failure handling to avoid crashing the indexer when embedding/searching fails
+  - Compute mtime after due-date normalization and batch upsert todos for performance
+- Web server and security:
+  - Hardened path handling: validate absolute paths against configured allowed roots (_is_allowed_external_path) and always resolve relative paths against notes_root to prevent arbitrary file reads
+  - get_alias_for_path now resolves paths against notes_root before comparison
+  - Bind development web server to 127.0.0.1 by default
+- Recorder and audio:
+  - Rewrote recorder writer thread to incrementally flush audio to disk, reduce memory use, support stereo mix (mic left / loopback right), and handle missing channels; extracted stereo processing into _process_stereo_chunk
+- CLI/help/docs tooling:
+  - Docs example generation updated (docs/generate_examples.py) to set up a temporary notebook, invoke real CLI renderers, manage env/indexing, save SVG outputs, and improve logging/cleanup
+  - Small CLI validation: warn on invalid week_start_day in stats
+  - Remove web CSS max-width constraint and tweak todo markdown checklist rendering
+- Other developer ergonomics:
+  - Make rebuild_db more verbose on vector clear failures (debug logging)
+  - Add ruff/pyproject excludes for common build/dev directories
+
+## Bug Fixes
+
+- Fixed broken test introduced by a changed flag and other test stabilizations
+- Fixed tiny error in notes.py
+- Minor fix to `nb todo -x` behavior
+- Fixed version string in pyproject.toml and bumped package version to 0.2.3
+- Updated CHANGELOG.md as part of release housekeeping
+
+## Refactor / Code Quality
+
+- Large-formatting and typing cleanup across the codebase:
+  - Normalized function signature formatting, import ordering, and general whitespace
+  - Added/refined type hints and mypy overrides for third-party libs in pyproject.toml
+  - Replaced several lambda progress callbacks with direct callables, added defensive checks and assertions, and renamed variables to reduce shadowing risks
+  - Cosmetic-only changes to prepare for stricter linting/type checks; no behavior changes intended
+
+## Tests & CI
+
+- Tests: reset global config and database singletons in fixtures to avoid cross-test interference
+- Adjusted tests to match refactors and improved deterministic behavior in indexing/mtime handling
+
 # v0.2.2 - 2025-12-02
 
 Patch release addressing todo timestamp preservation during re-indexing and a few maintenance fixes.
