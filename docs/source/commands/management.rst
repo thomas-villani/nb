@@ -385,6 +385,188 @@ Rebuild the notes and todos index.
    nb index --rebuild          # Recreate database
    nb index --embeddings       # Rebuild embeddings
 
+Note Linking
+------------
+
+Commands for exploring connections between notes.
+
+nb links
+^^^^^^^^
+
+Show outgoing links from a note.
+
+**Usage:** ``nb links [OPTIONS] NOTE_REF``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``NOTE_REF``
+     - Note name, path, or alias
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``--internal``
+     - Show only internal (note) links
+   * - ``--external``
+     - Show only external (URL) links
+   * - ``--json``
+     - Output as JSON
+   * - ``--check``
+     - Check for broken internal links
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb links today                  # Links from today's note
+   nb links projects/myproject     # Links from specific note
+   nb links today --internal       # Only internal links
+   nb links today --external       # Only external links
+   nb links --check                # Check all notes for broken links
+   nb links today --check          # Check specific note
+
+nb backlinks
+^^^^^^^^^^^^
+
+Show notes linking TO a note (incoming links).
+
+**Usage:** ``nb backlinks [OPTIONS] NOTE_REF``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``NOTE_REF``
+     - Note name, path, or alias
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``--count``
+     - Just show the count
+   * - ``--json``
+     - Output as JSON
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb backlinks projects/myproject # What notes link to this?
+   nb backlinks today --count      # Just show the count
+   nb backlinks myproject --json   # Output as JSON
+
+nb graph
+^^^^^^^^
+
+Visualize note connections in the terminal.
+
+**Usage:** ``nb graph [OPTIONS] [NOTE_REF]``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``NOTE_REF``
+     - Optional note to center the graph on
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-d, --depth N``
+     - Levels of connections to show (default: 1)
+   * - ``--no-tags``
+     - Don't show tag connections
+   * - ``--links-only``
+     - Only show note-to-note links
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb graph                    # Overview of entire knowledge graph
+   nb graph today              # Connections for today's note
+   nb graph myproject -d 2     # 2 levels of connections
+   nb graph --no-tags          # Hide tag connections
+
+nb related
+^^^^^^^^^^
+
+Find notes related to a given note.
+
+**Usage:** ``nb related [OPTIONS] NOTE_REF``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``NOTE_REF``
+     - Note name, path, or alias
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-l, --limit N``
+     - Number of related notes to show (default: 10)
+   * - ``--links-only``
+     - Only by direct links
+   * - ``--tags-only``
+     - Only by shared tags
+   * - ``--semantic-only``
+     - Only by content similarity
+
+**Scoring weights:**
+
+- Direct links: 1.0 (outgoing), 0.9 (backlinks)
+- Shared tags: 0.3 per tag
+- Semantic similarity: 0.5 × score
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb related today              # Related to today's note
+   nb related myproject -l 5     # Top 5 related
+   nb related today --links-only # Only by direct links
+   nb related today --tags-only  # Only by shared tags
+
 Statistics
 ----------
 
@@ -471,6 +653,10 @@ List tags with usage counts.
    nb tags --sources           # Show sources
    nb tags -n work             # Specific notebook
    nb tags --limit 10          # Top 10
+
+.. image:: /_static/examples/tags.svg
+   :alt: nb tags output
+   :width: 50%
 
 Attachments
 -----------

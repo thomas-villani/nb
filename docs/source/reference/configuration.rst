@@ -44,9 +44,50 @@ Full example:
        notebook: "@project"
        sync: true
 
+   date_format: "%Y-%m-%d"
+   time_format: "%H:%M"
+   daily_title_format: "%A, %B %d, %Y"  # e.g., "Friday, November 28, 2025"
+   week_start_day: monday  # monday or sunday
+
    embeddings:
      provider: ollama
      model: nomic-embed-text
+     chunk_size: 500
+     chunking_method: paragraphs  # sentences, tokens, paragraphs, sections
+
+   search:
+     vector_weight: 0.7      # 0=keyword only, 1=vector only
+     score_threshold: 0.4    # Minimum score to show results
+     recency_decay_days: 30  # Half-life for recency boost
+
+   todo:
+     default_sort: source    # source, tag, priority, created
+     inbox_file: todo.md     # Name of inbox file in notes_root
+     auto_complete_children: true  # Complete subtasks when parent is done
+
+   recorder:
+     mic_device: null
+     loopback_device: null
+     sample_rate: 16000
+     auto_delete_audio: false
+     transcribe_timeout: 600
+     mic_speaker_label: "You"
+
+   kanban_boards:
+     - name: default
+       columns:
+         - name: Backlog
+           filters: { status: pending, no_due_date: true }
+           color: cyan
+         - name: In Progress
+           filters: { status: in_progress }
+           color: green
+         - name: Due Today
+           filters: { due_today: true, status: pending }
+           color: yellow
+         - name: Done
+           filters: { status: completed }
+           color: dim
 
    todo_views:
      - name: work-urgent
@@ -108,6 +149,27 @@ Linked notes options
    * - ``sync``
      - Sync completions back to source file
 
+Global options
+--------------
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``notes_root``
+     - Root directory for all notes
+   * - ``editor``
+     - Text editor command (e.g., ``vim``, ``code``)
+   * - ``date_format``
+     - Date display format (default: ``%Y-%m-%d``)
+   * - ``time_format``
+     - Time display format (default: ``%H:%M``)
+   * - ``daily_title_format``
+     - Format for daily note titles (default: ``%A, %B %d, %Y``)
+   * - ``week_start_day``
+     - First day of week: ``monday`` or ``sunday``
+
 Embeddings options
 ------------------
 
@@ -124,6 +186,122 @@ Embeddings options
      - Custom endpoint URL
    * - ``api_key``
      - API key (for OpenAI)
+   * - ``chunk_size``
+     - Max tokens per chunk (default: 500)
+   * - ``chunking_method``
+     - ``sentences``, ``tokens``, ``paragraphs``, or ``sections``
+
+Search options
+--------------
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``vector_weight``
+     - Hybrid search ratio (0=keyword only, 1=vector only, default: 0.7)
+   * - ``score_threshold``
+     - Minimum score to show results (default: 0.4)
+   * - ``recency_decay_days``
+     - Half-life for recency boost (default: 30)
+
+Todo options
+------------
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``default_sort``
+     - Default sort order: ``source``, ``tag``, ``priority``, ``created``
+   * - ``inbox_file``
+     - Name of inbox file in notes_root (default: ``todo.md``)
+   * - ``auto_complete_children``
+     - Complete subtasks when parent is done (default: true)
+
+Recorder options
+----------------
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``mic_device``
+     - Microphone device index (null for default)
+   * - ``loopback_device``
+     - System audio device index (null for default)
+   * - ``sample_rate``
+     - Sample rate in Hz (16000 for MME, 48000 for WASAPI)
+   * - ``auto_delete_audio``
+     - Delete WAV after successful transcription
+   * - ``transcribe_timeout``
+     - Deepgram API timeout in seconds (default: 600)
+   * - ``mic_speaker_label``
+     - Label for microphone speaker in transcripts (default: "You")
+
+Kanban board options
+--------------------
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``name``
+     - Board name
+   * - ``columns``
+     - List of column definitions
+
+**Column options:**
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``name``
+     - Column display name
+   * - ``filters``
+     - Filter criteria (see below)
+   * - ``color``
+     - Display color
+
+**Available column filters:**
+
+- ``status``: ``pending``, ``in_progress``, or ``completed``
+- ``due_today``: true - todos due today
+- ``due_this_week``: true - todos due within 7 days
+- ``overdue``: true - past due, not completed
+- ``no_due_date``: true - todos without a due date
+- ``priority``: 1, 2, or 3
+- ``tags``: list of tags to filter by
+
+Todo view options
+-----------------
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``name``
+     - View name
+   * - ``filters``
+     - Filter criteria
+
+**Available view filters:**
+
+- ``notebooks``: list of notebook names
+- ``notes``: list of note paths
+- ``tag``: single tag to filter by
+- ``priority``: 1, 2, or 3
+- ``exclude_tags``: list of tags to exclude
+- ``hide_later``: hide "DUE LATER" section
+- ``hide_no_date``: hide "NO DUE DATE" section
+- ``include_completed``: include completed todos
 
 Configuration commands
 ----------------------

@@ -47,6 +47,8 @@ Start recording audio from microphone and system audio.
      - Microphone device index
    * - ``--loopback INDEX``
      - System audio (loopback) device index
+   * - ``-d, --dictate``
+     - Dictation mode: mic-only with optimized transcription
 
 **Examples:**
 
@@ -301,7 +303,26 @@ Recording settings can be configured in ``config.yaml``:
    recorder:
      mic_device: 1              # Microphone device index (null for default)
      loopback_device: 3         # System audio device index (null for default)
-     sample_rate: 16000         # Sample rate in Hz (16000 recommended for speech)
+     sample_rate: 16000         # Sample rate in Hz (16000 for MME, 48000 for WASAPI)
      auto_delete_audio: false   # Automatically delete WAV after transcription
+     transcribe_timeout: 600    # Deepgram API timeout in seconds (default 10 min)
+     mic_speaker_label: "You"   # Label for microphone speaker in transcripts
 
 Use ``nb record devices`` to find device indices for your system.
+
+Dictation Mode
+--------------
+
+Use ``--dictate`` for voice notes and single-speaker dictation:
+
+.. code-block:: bash
+
+   nb record start --dictate              # Start dictation
+   nb record start --dictate -n work      # Save to work notebook
+
+Dictation mode:
+
+- Records mic only (no system audio)
+- Optimized transcription for single-speaker dictation
+- Spoken phrases like "new todo item:" are converted to ``- [ ]`` checkboxes
+- Tagged as ``voice-note``, ``dictation`` instead of ``meeting``, ``transcript``

@@ -137,6 +137,16 @@ nb list -n work            # List notes in work notebook
 nb list -n work --week     # List this week's notes in work notebook
 nb list -f                 # Show full paths to notes
 nb list -d                 # Show details (todo count, mtime, date, excluded status)
+nb list -t                 # Display as tree grouped by subdirectory sections
+nb list -S tasks           # Filter by path section/subdirectory
+nb list -xs archive        # Exclude notes from a section
+nb list -S tasks -xs done  # Combine include and exclude sections
+
+nb delete friday           # Delete Friday's daily note
+nb delete myproject -n work  # Delete work/myproject.md
+nb delete work/myproject   # Delete using notebook/note format
+nb delete myalias          # Delete note by alias
+nb delete friday -f        # Skip confirmation
 
 nb stream                  # Browse all notes interactively
 nb stream -n daily         # Browse daily notes
@@ -342,6 +352,8 @@ nb todo start abc123    # Mark as in-progress ([ ] -> [^])
 nb todo pause abc123    # Pause in-progress todo ([^] -> [ ])
 nb todo show abc123     # Show todo details
 nb todo edit abc123     # Open source file at todo line
+nb todo delete abc123   # Delete todo from source file
+nb todo delete abc -f   # Delete without confirmation
 
 # Change due dates
 nb todo due abc123 friday      # Set due to next Friday
@@ -404,6 +416,28 @@ Use `-a/--all` to include all todos, `-n <notebook>` to view a specific notebook
 ```bash
 nb todo -i              # Launch interactive viewer
 ```
+
+#### Interactive Review
+
+```bash
+nb todo review              # Review overdue + due today (TUI)
+nb todo review --weekly     # Include this week + no-due-date items
+nb todo review --all        # Review all incomplete todos
+nb todo review -t work      # Review only #work tagged todos
+nb todo review -n daily     # Review only from daily notebook
+```
+
+Actions in review TUI:
+- `d` - Mark done
+- `t` - Reschedule to tomorrow
+- `f` - This Friday
+- `F` - Next Friday
+- `w` - Next Monday
+- `n` - Next month
+- `e` - Edit in editor
+- `s` - Skip (move to next)
+- `x` - Delete
+- `q` - Quit review
 
 Keyboard shortcuts:
 - `j/k` - Navigate up/down

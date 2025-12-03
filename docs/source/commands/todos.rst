@@ -70,6 +70,10 @@ List all open todos grouped by status and due date.
      - Display todos in kanban board columns
    * - ``-b, --board NAME``
      - Kanban board name to use (default: 'default')
+   * - ``-S, --section NAME``
+     - Filter by path section/subdirectory (repeatable)
+   * - ``-xs, --exclude-section NAME``
+     - Exclude todos from this section (repeatable)
 
 **Examples:**
 
@@ -235,6 +239,42 @@ Open the source file at the todo's line.
 
    nb todo edit abc123
 
+nb todo delete
+--------------
+
+Delete a todo from its source file.
+
+**Usage:** ``nb todo delete [OPTIONS] ID``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``ID``
+     - Todo ID or ID prefix
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-f, --force``
+     - Skip confirmation prompt
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb todo delete abc123      # Delete with confirmation
+   nb todo delete abc -f      # Skip confirmation
+
 nb todo due
 -----------
 
@@ -303,6 +343,8 @@ Mark all todos in a note as completed.
      - Notebook to search in
    * - ``-f, --force``
      - Skip confirmation prompt
+   * - ``-i, --in-progress``
+     - Only mark in-progress todos as complete
 
 **Examples:**
 
@@ -313,6 +355,8 @@ Mark all todos in a note as completed.
    nb todo all-done work/myproject     # Same as above
    nb todo all-done myalias            # By note alias
    nb todo all-done friday -f          # Skip confirmation
+   nb todo all-done friday -i          # Only in-progress todos
+   nb todo all-done friday -i -f       # In-progress, skip confirmation
 
 nb todo completed
 -----------------
@@ -390,6 +434,83 @@ Launch an interactive TUI for managing todos:
    * - ``q``
      - Quit
 
+nb todo review
+--------------
+
+Interactively review and triage todos with a TUI interface.
+
+**Usage:** ``nb todo review [OPTIONS]``
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-w, --weekly``
+     - Include this week + no-due-date items
+   * - ``-a, --all``
+     - Review all incomplete todos
+   * - ``-t, --tag TAG``
+     - Filter by tag
+   * - ``-n, --notebook NAME``
+     - Filter by notebook (repeatable)
+   * - ``--note PATH``
+     - Filter by note path (repeatable)
+   * - ``-N, --exclude-notebook NAME``
+     - Exclude notebook (repeatable)
+
+**Scopes:**
+
+- **(default)**: Overdue + due today
+- **--weekly**: Overdue + this week + items with no due date
+- **--all**: All incomplete todos
+
+**Keyboard shortcuts in review TUI:**
+
+.. list-table::
+   :widths: 20 80
+   :header-rows: 1
+
+   * - Key
+     - Action
+   * - ``d``
+     - Mark done
+   * - ``t``
+     - Reschedule to tomorrow
+   * - ``f``
+     - Reschedule to this Friday
+   * - ``F``
+     - Reschedule to next Friday
+   * - ``w``
+     - Reschedule to next Monday
+   * - ``n``
+     - Reschedule to next month
+   * - ``e``
+     - Edit in editor
+   * - ``s``
+     - Skip (move to next)
+   * - ``x``
+     - Delete todo
+   * - ``j/k``
+     - Move up/down
+   * - ``[/]``
+     - Previous/next page
+   * - ``q``
+     - Quit review
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb todo review              # Review overdue + due today
+   nb todo review --weekly     # Include this week's todos
+   nb todo review --all        # Review everything incomplete
+   nb todo review -t work      # Review only #work tagged todos
+   nb todo review -n daily     # Review only from daily notebook
+
 Kanban view
 -----------
 
@@ -402,6 +523,10 @@ Display todos in a kanban board layout with customizable columns:
    nb todo -k -b sprint       # Use a custom board
 
 The default board has four columns: Backlog, In Progress, Due Today, and Done.
+
+.. image:: /_static/examples/kanban.svg
+   :alt: nb todo -k output
+   :width: 80%
 
 **Custom Boards**
 

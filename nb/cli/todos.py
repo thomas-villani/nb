@@ -181,7 +181,7 @@ def todo(
       nb todo                 List all open todos
       nb todo -f              Focus mode (hide later/no-date sections)
       nb todo -t work         Show only todos tagged #work
-      nb todo -T waiting      Exclude todos tagged #waiting
+      nb todo -xt waiting     Exclude todos tagged #waiting
       nb todo -p 1            Show only high priority todos
       nb todo -n daily        Show todos from 'daily' notebook only
       nb todo -n daily -n work  Filter by multiple notebooks

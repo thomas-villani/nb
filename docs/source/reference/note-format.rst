@@ -62,6 +62,31 @@ Available fields:
      - List of tags for filtering
    * - ``todo_exclude``
      - Hide todos from ``nb todo``
+   * - ``links``
+     - List of related notes/URLs (see below)
+
+Links in frontmatter
+^^^^^^^^^^^^^^^^^^^^
+
+The ``links`` field supports several formats:
+
+.. code-block:: yaml
+
+   ---
+   links:
+     # String formats
+     - "note://work/project-plan"    # Internal note link
+     - "https://example.com"          # External URL
+
+     # Object format for URLs
+     - title: "Company Wiki"
+       url: "https://wiki.example.com"
+
+     # Object format for notes
+     - title: "Project Plan"
+       note: "2026-plan"
+       notebook: "work"              # Optional notebook context
+   ---
 
 Tag inheritance
 ^^^^^^^^^^^^^^^
@@ -144,6 +169,56 @@ Configure a default template for a notebook in config:
      - name: work
        date_based: true
        template: meeting
+
+Attachments
+-----------
+
+Attach files or URLs using the ``@attach:`` syntax:
+
+.. code-block:: markdown
+
+   @attach: ~/Documents/spec.pdf
+   @attach: ./relative/path/to/file.png
+   @attach: https://example.com/resource
+   @attach: [Custom Title](~/path/to/file.pdf)
+
+Note linking
+------------
+
+Create connections between notes using wiki-style or markdown links.
+
+**Wiki-style links:**
+
+.. code-block:: markdown
+
+   See [[projects/myproject]] for details.
+   Also check [[myproject|the project docs]] for examples.
+
+**Markdown links:**
+
+.. code-block:: markdown
+
+   For more info, read [the API guide](docs/api.md).
+   Visit [our wiki](https://wiki.example.com).
+   See [related note](./relative.md).
+
+.. list-table::
+   :header-rows: 1
+
+   * - Syntax
+     - Description
+   * - ``[[path]]``
+     - Wiki-style link to note
+   * - ``[[path|display]]``
+     - Wiki-style link with custom text
+   * - ``[text](path.md)``
+     - Markdown link to internal note
+   * - ``[text](https://...)``
+     - Markdown link to external URL
+   * - ``[text](./relative.md)``
+     - Relative path (resolved from note's directory)
+
+Use ``nb links`` to see outgoing links and ``nb backlinks`` to see incoming links.
 
 Attachments
 -----------

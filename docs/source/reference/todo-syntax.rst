@@ -157,6 +157,37 @@ When listing todos, they're grouped by status and due date:
 
 Use focus mode (``-f``) to hide "due later" and "no date" sections.
 
+Section targeting
+-----------------
+
+Use section headers to organize todos within a note. You can then filter or add todos to specific sections.
+
+.. code-block:: markdown
+
+   ## Tasks
+
+   - [ ] First task
+   - [ ] Second task
+
+   ## Backlog
+
+   - [ ] Future task
+
+**Filter by section:**
+
+.. code-block:: bash
+
+   nb todo --note work/project::Tasks      # Only todos under "Tasks" heading
+   nb todo --note project::Backlog         # Only todos under "Backlog"
+
+**Add to section:**
+
+.. code-block:: bash
+
+   nb todo add "New task" --note work/project::Tasks
+
+If the section doesn't exist, it's created as a new ``## Section`` heading.
+
 Complete example
 ----------------
 

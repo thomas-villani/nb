@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate SVG examples of CLI output for documentation.
 
-This script creates a temporary notebook with sample data, runs key commands,
+This script creates a temporary notebook with sample data, runs actual CLI commands,
 and captures the Rich console output as SVG files.
 
 Usage:
@@ -13,7 +13,10 @@ Output:
 
 from __future__ import annotations
 
+import os
+import shutil
 import tempfile
+from collections.abc import Callable
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -62,6 +65,8 @@ notebooks:
 
     # Today's note
     today_note = daily_dir / f"{today.isoformat()}.md"
+    friday = today + timedelta(days=(4 - today.weekday()) % 7)
+    tomorrow = today + timedelta(days=1)
     today_note.write_text(
         f"""\
 ---
@@ -78,8 +83,8 @@ Discussed sprint progress with the team.
 ## Tasks
 
 - [^] Review pull request for auth module @priority(1) #code-review
-- [ ] Update API documentation @due(friday) @priority(2) #docs
-- [ ] Schedule 1:1 with manager @due(tomorrow) #meetings
+- [ ] Update API documentation @due({friday.isoformat()}) @priority(2) #docs
+- [ ] Schedule 1:1 with manager @due({tomorrow.isoformat()}) #meetings
 - [x] Send weekly status report #communication
 
 ## Notes
@@ -119,8 +124,9 @@ tags: [daily]
     projects_dir = root / "projects"
     projects_dir.mkdir()
 
+    next_week = today + timedelta(days=7)
     (projects_dir / "website-redesign.md").write_text(
-        """\
+        f"""\
 ---
 title: Website Redesign
 tags: [project, design]
@@ -137,7 +143,7 @@ tags: [project, design]
 ## Tasks
 
 - [ ] Create wireframes @priority(1) #design
-- [ ] Review competitor sites @due(next week) #research
+- [ ] Review competitor sites @due({next_week.isoformat()}) #research
 - [ ] Set up new hosting @priority(3) #devops
 - [x] Gather stakeholder requirements #planning
 """,
@@ -145,7 +151,7 @@ tags: [project, design]
     )
 
     (projects_dir / "api-v2.md").write_text(
-        """\
+        f"""\
 ---
 title: API v2 Development
 tags: [project, backend]
@@ -160,7 +166,7 @@ Building the next generation API with improved performance.
 ## Tasks
 
 - [ ] Design new endpoint structure @priority(1) #architecture
-- [ ] Implement rate limiting @due(friday) @priority(2) #backend
+- [ ] Implement rate limiting @due({friday.isoformat()}) @priority(2) #backend
 - [ ] Write migration guide @priority(3) #docs
 """,
         encoding="utf-8",
@@ -183,7 +189,7 @@ tags: [work]
 ## In Progress
 
 - [^] Refactor authentication module @priority(1) #backend
-- [ ] Code review for PR #142 @due(today) #code-review
+- [ ] Code review for PR #142 @due({today.isoformat()}) #code-review
 
 ## Blocked
 
@@ -205,38 +211,8 @@ tags: [work]
     )
 
 
-def capture_command_output(
-    root: Path,
-    title: str,
-    render_func: callable,
-    width: int = 100,
-) -> Console:
-    """Capture command output to a recording console.
-
-    Args:
-        root: Notes root directory
-        title: Title for the SVG
-        render_func: Function that takes (console, root) and renders output
-        width: Console width
-
-    Returns:
-        The recording console with captured output
-    """
-    console = Console(
-        record=True,
-        force_terminal=True,
-        width=width,
-        color_system="truecolor",
-    )
-    render_func(console, root)
-    return console
-
-
-def render_todo_list(console: Console, root: Path) -> None:
-    """Render the todo list output."""
-    # We need to import and configure nb to use our temp root
-    import os
-
+def setup_environment(root: Path) -> None:
+    """Set up the environment for running commands against the temp notebook."""
     os.environ["NB_NOTES_ROOT"] = str(root)
 
     # Clear any cached config
@@ -249,205 +225,247 @@ def render_todo_list(console: Console, root: Path) -> None:
 
     index_all_notes(force=True)
 
-    # Now get todos and render them
-    from datetime import date, timedelta
 
-    from nb.cli.utils import get_notebook_display_info
-    from nb.index.todos_repo import get_sorted_todos
+def capture_with_function(
+    root: Path,
+    render_func: Callable[[Console], None],
+    title: str,
+    width: int = 100,
+) -> Console:
+    """Capture output from a custom render function.
 
-    todos = get_sorted_todos(completed=False)
+    Args:
+        root: Notes root directory
+        render_func: Function that takes console and renders output
+        title: Title for the SVG
+        width: Console width
 
-    if not todos:
-        console.print("[dim]No todos found.[/dim]")
-        return
+    Returns:
+        The recording console with captured output
+    """
+    console = Console(
+        record=True,
+        force_terminal=True,
+        width=width,
+        color_system="truecolor",
+    )
+    render_func(console)
+    return console
 
-    today_date = date.today()
-    week_start = today_date - timedelta(days=today_date.weekday())
-    week_end = week_start + timedelta(days=6)
-    next_week_end = week_end + timedelta(days=7)
 
-    # Group todos
-    groups: dict[str, list] = {
-        "OVERDUE": [],
-        "IN PROGRESS": [],
-        "DUE TODAY": [],
-        "DUE THIS WEEK": [],
-        "DUE NEXT WEEK": [],
-        "DUE LATER": [],
-        "NO DUE DATE": [],
-    }
+def render_todo_list(console: Console) -> None:
+    """Render todo list by calling the actual CLI display function."""
+    from nb.cli import utils as cli_utils
+    from nb.cli.todos import _list_todos
 
-    for t in todos:
-        if t.in_progress:
-            groups["IN PROGRESS"].append(t)
-        elif t.due_date is None:
-            groups["NO DUE DATE"].append(t)
-        elif t.due_date < today_date:
-            groups["OVERDUE"].append(t)
-        elif t.due_date == today_date:
-            groups["DUE TODAY"].append(t)
-        elif t.due_date <= week_end:
-            groups["DUE THIS WEEK"].append(t)
-        elif t.due_date <= next_week_end:
-            groups["DUE NEXT WEEK"].append(t)
-        else:
-            groups["DUE LATER"].append(t)
+    # Temporarily replace the console
+    original = cli_utils.console
+    cli_utils.console = console
 
-    # Render output
-    for group_name, group_todos in groups.items():
-        if not group_todos:
-            continue
+    # Also patch in todos module
+    from nb.cli import todos
 
-        console.print(f"\n[bold yellow]{group_name}[/bold yellow]")
+    todos_original = todos.console
+    todos.console = console
 
-        for t in group_todos:
-            # Format todo line
-            checkbox = "[bold green]\u2713[/bold green]" if t.completed else "[dim]\u2610[/dim]"
-            if t.in_progress:
-                checkbox = "[bold cyan]\u25b6[/bold cyan]"
+    try:
+        _list_todos(focus=True)
+    finally:
+        cli_utils.console = original
+        todos.console = todos_original
 
-            content = t.content[:50] + "..." if len(t.content) > 50 else t.content
 
-            # Get notebook color - t.notebook is the notebook name
-            notebook = t.notebook or "inbox"
-            color, icon = get_notebook_display_info(notebook)
+def render_stats(console: Console) -> None:
+    """Render stats by calling the actual CLI display function."""
+    from nb.cli import utils as cli_utils
+
+    original = cli_utils.console
+    cli_utils.console = console
+
+    from nb.cli import stats as stats_module
+
+    stats_original = stats_module.console
+    stats_module.console = console
+
+    try:
+        # Call the actual stats rendering
+        from nb.cli.stats import _render_full_dashboard
+        from nb.index.todos_repo import get_extended_todo_stats, get_todo_activity
+
+        stats = get_extended_todo_stats(notebooks=None, exclude_notebooks=None)
+        activity = get_todo_activity(days=30, notebooks=None, exclude_notebooks=None)
+
+        _render_full_dashboard(
+            stats=stats,
+            activity=activity,
+            show_notebook=True,
+            show_priority=False,
+            show_tag=False,
+            days=30,
+        )
+    finally:
+        cli_utils.console = original
+        stats_module.console = stats_original
+
+
+def render_notebooks(console: Console) -> None:
+    """Render notebooks list."""
+    from nb.cli import utils as cli_utils
+
+    original = cli_utils.console
+    cli_utils.console = console
+
+    from nb.cli import notebooks as notebooks_module
+
+    nb_original = notebooks_module.console
+    notebooks_module.console = console
+
+    try:
+        from nb.config import get_config
+
+        config = get_config()
+
+        console.print("[bold]Notebooks[/bold]\n")
+
+        for nb in config.notebooks:
+            color = nb.color or "magenta"
+            icon = nb.icon or ""
             icon_str = f"{icon} " if icon else ""
 
-            source_str = f"[{color}]{icon_str}{notebook}[/{color}]"
+            # Count notes
+            nb_path = Path(config.notes_root) / nb.name
+            if nb_path.exists():
+                note_count = len(list(nb_path.rglob("*.md")))
+            else:
+                note_count = 0
 
-            # Priority
-            priority_str = ""
-            if t.priority:
-                prio_colors = {1: "red", 2: "yellow", 3: "blue"}
-                priority_str = f"[{prio_colors.get(t.priority.value, 'white')}]!{t.priority.value}[/]"
-
-            # Due date
-            due_str = ""
-            if t.due_date:
-                if t.due_date < today_date:
-                    due_str = f"[red]{t.due_date.strftime('%b %d')}[/red]"
-                elif t.due_date == today_date:
-                    due_str = f"[yellow]{t.due_date.strftime('%b %d')}[/yellow]"
-                else:
-                    due_str = f"[dim]{t.due_date.strftime('%b %d')}[/dim]"
-
-            # Tags
-            tags_str = " ".join(f"[cyan]#{tag}[/cyan]" for tag in t.tags[:2])
-
-            # Build the line
-            line_parts = [f"  {checkbox} {content}"]
-            if tags_str:
-                line_parts.append(tags_str)
-            line_parts.append(source_str)
-            if due_str:
-                line_parts.append(due_str)
-            if priority_str:
-                line_parts.append(priority_str)
-            line_parts.append(f"[dim]{t.id[:6]}[/dim]")
-
-            console.print("  ".join(line_parts))
+            console.print(
+                f"  [{color}]{icon_str}{nb.name}[/{color}] [dim]({note_count} notes)[/dim]"
+            )
+    finally:
+        cli_utils.console = original
+        notebooks_module.console = nb_original
 
 
-def render_note_list(console: Console, root: Path) -> None:
-    """Render the note list output."""
-    import os
+def render_search_results(console: Console) -> None:
+    """Render actual search results."""
+    from nb.cli import utils as cli_utils
 
-    os.environ["NB_NOTES_ROOT"] = str(root)
+    original = cli_utils.console
+    cli_utils.console = console
 
-    from nb import config as config_module
+    try:
+        from nb.index.search import get_search
 
-    config_module._config = None
+        search = get_search()
+        results = search.search("API", search_type="keyword", k=5)
 
+        console.print('[bold]Search results for:[/bold] [cyan]"API"[/cyan]\n')
+
+        if not results:
+            console.print("[dim]No results found.[/dim]")
+            return
+
+        for result in results[:3]:
+            title = result.title or Path(result.path).stem
+            tags_str = " ".join(f"[cyan]#{t}[/cyan]" for t in (result.tags or [])[:3])
+            rel_path = Path(result.path).name
+
+            console.print(f"  [bold]{title}[/bold]")
+            console.print(f"  [dim]{rel_path}[/dim]  {tags_str}")
+            console.print()
+
+    finally:
+        cli_utils.console = original
+
+
+def render_kanban(console: Console) -> None:
+    """Render kanban board by calling the actual CLI display function."""
+    from nb.cli import todos as todos_module
+    from nb.cli import utils as cli_utils
+
+    original = cli_utils.console
+    cli_utils.console = console
+
+    todos_original = todos_module.console
+    todos_module.console = console
+
+    try:
+        from nb.cli.todos import _display_kanban
+
+        _display_kanban(
+            notebooks=None,
+            exclude_notebooks=None,
+            board_name="default",
+        )
+    finally:
+        cli_utils.console = original
+        todos_module.console = todos_original
+
+
+def render_tags(console: Console) -> None:
+    """Render tags list."""
+    from nb.cli import utils as cli_utils
+
+    original = cli_utils.console
+    cli_utils.console = console
+
+    try:
+        from nb.index.todos_repo import get_tag_stats
+
+        tag_stats = get_tag_stats(include_sources=False)
+
+        console.print("[bold]Tags[/bold]\n")
+
+        if not tag_stats:
+            console.print("[dim]No tags found.[/dim]")
+            return
+
+        for stat in tag_stats[:10]:
+            tag = stat["tag"]
+            count = stat["count"]
+            bar_width = min(count * 2, 20)
+            bar = "█" * bar_width
+
+            console.print(f"  [cyan]#{tag:<15}[/cyan] [dim]{bar}[/dim] {count}")
+
+    finally:
+        cli_utils.console = original
+
+
+def render_note_list(console: Console) -> None:
+    """Render note list with details."""
+    from nb.cli import utils as cli_utils
     from nb.config import get_config
+    from nb.core.notes import list_notes
 
-    config = get_config()
+    original = cli_utils.console
+    cli_utils.console = console
 
-    console.print("[bold]Notebooks[/bold]\n")
+    try:
+        config = get_config()
+        note_paths = list_notes()[:8]
 
-    for nb in config.notebooks:
-        color = nb.color or "magenta"
-        icon = nb.icon or ""
-        icon_str = f"{icon} " if icon else ""
+        console.print("[bold]Recent Notes[/bold]\n")
 
-        # Count notes
-        nb_path = root / nb.name
-        if nb_path.exists():
-            note_count = len(list(nb_path.rglob("*.md")))
-        else:
-            note_count = 0
+        if not note_paths:
+            console.print("[dim]No notes found.[/dim]")
+            return
 
-        console.print(f"  [{color}]{icon_str}{nb.name}[/{color}] [dim]({note_count} notes)[/dim]")
+        for note_path in note_paths:
+            # Determine notebook from path
+            parts = note_path.parts
+            notebook = parts[0] if parts else "inbox"
+            title = note_path.stem
 
-        # Show recent notes
-        if nb_path.exists():
-            notes = sorted(nb_path.rglob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)[:2]
-            for note in notes:
-                rel_path = note.relative_to(nb_path)
-                console.print(f"    [dim]\u2514\u2500[/dim] {rel_path.stem}")
+            # Get notebook color
+            color, icon = cli_utils.get_notebook_display_info(notebook)
+            icon_str = f"{icon} " if icon else ""
 
+            console.print(f"  [{color}]{icon_str}{notebook}[/{color}] [bold]{title}[/bold]")
 
-def render_stats(console: Console, root: Path) -> None:
-    """Render the stats dashboard output."""
-    import os
-
-    os.environ["NB_NOTES_ROOT"] = str(root)
-
-    from nb import config as config_module
-
-    config_module._config = None
-
-    from nb.index.scanner import index_all_notes
-
-    index_all_notes(force=True)
-
-    from nb.index.todos_repo import query_todos
-
-    all_todos = query_todos(completed=None)
-    open_todos = [t for t in all_todos if not t.completed]
-    completed_todos = [t for t in all_todos if t.completed]
-    in_progress = [t for t in open_todos if t.in_progress]
-
-    today = date.today()
-    overdue = [t for t in open_todos if t.due_date and t.due_date < today]
-    due_today = [t for t in open_todos if t.due_date == today]
-
-    total = len(all_todos)
-    completed_count = len(completed_todos)
-    completion_rate = (completed_count / total * 100) if total > 0 else 0
-
-    from rich.panel import Panel
-    from rich.table import Table
-
-    # Overview panel
-    table = Table(show_header=False, box=None, padding=(0, 2))
-    table.add_column("Label", style="dim")
-    table.add_column("Value", justify="right")
-
-    table.add_row("Total", f"[bold]{total}[/bold]")
-    table.add_row("Completed", f"[green]{completed_count}[/green] ({completion_rate:.0f}%)")
-    table.add_row("In Progress", f"[cyan]{len(in_progress)}[/cyan]")
-    table.add_row("Pending", f"[white]{len(open_todos) - len(in_progress)}[/white]")
-    table.add_row("Overdue", f"[red]{len(overdue)}[/red]")
-    table.add_row("Due Today", f"[yellow]{len(due_today)}[/yellow]")
-
-    console.print(Panel(table, title="[bold]Todo Statistics[/bold]", border_style="blue"))
-
-
-def render_search_results(console: Console, root: Path) -> None:
-    """Render search results output."""
-    console.print("[bold]Search results for:[/bold] [cyan]\"API\"[/cyan]\n")
-
-    results = [
-        ("projects/api-v2.md", "API v2 Development", ["project", "backend"]),
-        ("daily/2024-01-15.md", "Update API documentation", ["daily"]),
-        ("work/2024-01-15.md", "Code review for PR #142", ["work"]),
-    ]
-
-    for path, title, tags in results:
-        tags_str = " ".join(f"[cyan]#{t}[/cyan]" for t in tags)
-        console.print(f"  [bold]{title}[/bold]")
-        console.print(f"  [dim]{path}[/dim]  {tags_str}")
-        console.print()
+    finally:
+        cli_utils.console = original
 
 
 def cleanup_db_connections() -> None:
@@ -462,8 +480,6 @@ def cleanup_db_connections() -> None:
         pass
 
     try:
-
-        # Force garbage collection to close any open handles
         import gc
 
         gc.collect()
@@ -473,8 +489,6 @@ def cleanup_db_connections() -> None:
 
 def generate_all_examples() -> None:
     """Generate all SVG examples."""
-    import shutil
-
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # Create temp directory manually for better cleanup control
@@ -482,31 +496,50 @@ def generate_all_examples() -> None:
     root = Path(tmp)
 
     try:
+        print("Creating sample notebook...")
         create_sample_notebook(root)
 
-        examples = [
-            ("todo-list", "nb todo", render_todo_list, 100),
-            ("notebooks", "nb notebooks", render_note_list, 80),
-            ("stats", "nb stats", render_stats, 60),
+        print("Setting up environment...")
+        setup_environment(root)
+
+        # Define examples to generate
+        # Each tuple: (filename, title, render_function, width)
+        examples: list[tuple[str, str, Callable[[Console], None], int]] = [
+            ("todo-list", "nb todo -f", render_todo_list, 100),
+            ("stats", "nb stats", render_stats, 80),
+            ("notebooks", "nb notebooks", render_notebooks, 80),
             ("search", "nb search", render_search_results, 80),
+            ("kanban", "nb todo -k", render_kanban, 120),
+            ("tags", "nb tags", render_tags, 60),
+            ("note-list", "nb list", render_note_list, 80),
         ]
 
         for filename, title, render_func, width in examples:
             print(f"Generating {filename}.svg...")
             try:
-                console = capture_command_output(root, title, render_func, width)
+                console = capture_with_function(root, render_func, title, width)
                 output_path = OUTPUT_DIR / f"{filename}.svg"
                 console.save_svg(str(output_path), title=title)
-                print(f"  \u2713 Saved to {output_path}")
+                print(f"  ✓ Saved to {output_path}")
             except Exception as e:
-                print(f"  \u2717 Error: {e}")
+                print(f"  ✗ Error: {e}")
                 import traceback
 
                 traceback.print_exc()
 
+        print("\nDone!")
+
     finally:
         # Clean up database connections before removing temp dir
         cleanup_db_connections()
+
+        # Clear cached config
+        try:
+            from nb import config as config_module
+
+            config_module._config = None
+        except Exception:
+            pass
 
         # Try to remove temp directory, ignore errors on Windows
         try:

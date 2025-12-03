@@ -365,6 +365,12 @@ List notes across notebooks.
      - Show full paths
    * - ``-d, --details``
      - Show extra details (todo count, mtime, excluded status)
+   * - ``-t, --tree``
+     - Display as tree grouped by subdirectory sections
+   * - ``-S, --section NAME``
+     - Filter by path section/subdirectory (repeatable)
+   * - ``-xs, --exclude-section NAME``
+     - Exclude notes from this section (repeatable)
 
 By default, shows title and tags. With ``--details``, also shows:
 
@@ -384,6 +390,13 @@ By default, shows title and tags. With ``--details``, also shows:
    nb list -f                 # Show full paths
    nb list -d                 # Show extra details
    nb list -n work -d         # Notebook with details
+   nb list -t                 # Display as tree
+   nb list -S tasks           # Filter by section
+   nb list -xs archive        # Exclude a section
+
+.. image:: /_static/examples/note-list.svg
+   :alt: nb list output
+   :width: 60%
 
 nb stream
 ---------
@@ -495,6 +508,8 @@ Delete a note from the filesystem and database.
      - Description
    * - ``-n, --notebook NAME``
      - Notebook containing the note
+   * - ``-f, --force``
+     - Skip confirmation prompt
 
 **Examples:**
 
@@ -502,6 +517,49 @@ Delete a note from the filesystem and database.
 
    nb delete myproject -n ideas
    nb delete daily/2025-11-27
+   nb delete friday -f          # Skip confirmation
+
+Note: Linked notes cannot be deleted. Use ``nb unlink`` to remove them.
+
+nb where
+--------
+
+Print the full filesystem path to a notebook, note, or alias.
+
+**Usage:** ``nb where [OPTIONS] REF``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``REF``
+     - Notebook name, note name/path/date, or alias
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-n, --notebook NAME``
+     - Notebook context for resolving note
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb where daily              # Path to daily notebook directory
+   nb where friday             # Path to Friday's daily note
+   nb where myalias            # Path to aliased note
+   nb where myproject -n work  # Path to work/myproject.md
+
+Useful for scripting and integrations. When multiple matches exist, all paths are printed (one per line).
 
 Command aliases
 ---------------
