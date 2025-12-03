@@ -5,6 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
+from rich.console import Console, Group
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
 from nb.config import get_config
 from nb.core.todos import (
     delete_todo_from_file,
@@ -20,10 +25,6 @@ from nb.index.todos_repo import (
 from nb.models import Todo
 from nb.tui.todos import get_key
 from nb.utils.dates import get_week_range
-from rich.console import Console, Group
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
 
 
 @dataclass
@@ -410,11 +411,11 @@ def get_first_of_next_month() -> date:
 
 
 def run_review(
-        scope: str = "daily",
-        tag: str | None = None,
-        notebooks: list[str] | None = None,
-        notes: list[str] | None = None,
-        exclude_notebooks: list[str] | None = None,
+    scope: str = "daily",
+    tag: str | None = None,
+    notebooks: list[str] | None = None,
+    notes: list[str] | None = None,
+    exclude_notebooks: list[str] | None = None,
 ) -> ReviewStats:
     """Run interactive review session.
 

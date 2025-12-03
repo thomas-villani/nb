@@ -5,8 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
-from nb.cli.utils import console
 from rich.table import Table
+
+from nb.cli.utils import console
 
 
 def register_link_commands(cli: click.Group) -> None:
@@ -78,12 +79,12 @@ def link_list() -> None:
     help="Exclude todos from 'nb todo' unless explicitly requested",
 )
 def link_add(
-        path: str,
-        alias: str | None,
-        sync: bool,
-        notebook: str | None,
-        no_recursive: bool,
-        todo_exclude: bool,
+    path: str,
+    alias: str | None,
+    sync: bool,
+    notebook: str | None,
+    no_recursive: bool,
+    todo_exclude: bool,
 ) -> None:
     """Link an external file or directory.
 

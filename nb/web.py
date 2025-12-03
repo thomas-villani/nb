@@ -40,8 +40,8 @@ def get_alias_for_path(note_path: Path) -> str | None:
             if not alias_path.is_absolute():
                 alias_path = config.notes_root / alias_path
             if (
-                    alias_path.resolve() == normalized
-                    or str(alias_path).replace("\\", "/") == normalized_str
+                alias_path.resolve() == normalized
+                or str(alias_path).replace("\\", "/") == normalized_str
             ):
                 return row["alias"]
     except Exception:
@@ -1910,7 +1910,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                         tags = [t["tag"] for t in tag_rows]
 
                         note_alias = (
-                                get_alias_for_path(note_path) or row["source_alias"]
+                            get_alias_for_path(note_path) or row["source_alias"]
                         )
 
                         result.append(
@@ -2017,7 +2017,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                             else config.notes_root / note_path
                         )
                         note_alias = (
-                                get_alias_for_path(check_path) or row["source_alias"]
+                            get_alias_for_path(check_path) or row["source_alias"]
                         )
 
                         result.append(
@@ -2040,7 +2040,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                         notebook, config.notes_root
                     )
                     for note_path, is_linked, linked_alias in sorted(
-                            notes_with_linked, reverse=True
+                        notes_with_linked, reverse=True
                     ):
                         if is_linked:
                             full_path = (
@@ -2390,13 +2390,13 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                         ),
                         # Use due_date_only for date comparisons (due_date may be datetime)
                         "isOverdue": t.due_date_only is not None
-                                     and t.due_date_only < today
-                                     and t.status.value != "completed",
+                        and t.due_date_only < today
+                        and t.status.value != "completed",
                         "isDueToday": t.due_date_only == today,
                         "isDueThisWeek": t.due_date_only is not None
-                                         and today
-                                         < t.due_date_only
-                                         <= today + __import__("datetime").timedelta(days=7),
+                        and today
+                        < t.due_date_only
+                        <= today + __import__("datetime").timedelta(days=7),
                     }
                     for t in todos[:100]
                 ]
@@ -2650,7 +2650,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
 
 
 def run_server(
-        port: int = 3000, open_browser: bool = True, show_completed: bool = False
+    port: int = 3000, open_browser: bool = True, show_completed: bool = False
 ) -> None:
     """Start the web server."""
     # Store show_completed in a module-level variable for the handler
@@ -2664,6 +2664,7 @@ def run_server(
     httpd = Server(("", port), NBHandler)
 
     if open_browser:
+
         def open_delayed() -> None:
             import time
 

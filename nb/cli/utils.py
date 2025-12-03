@@ -8,7 +8,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from nb.config import get_config, init_config
 from rich.console import Console
 from rich.progress import (
     BarColumn,
@@ -19,6 +18,8 @@ from rich.progress import (
     TextColumn,
     TimeElapsedColumn,
 )
+
+from nb.config import get_config, init_config
 
 if TYPE_CHECKING:
     from nb.models import Todo
@@ -92,10 +93,10 @@ def spinner(description: str) -> Iterator[Callable[[str], None]]:
         A function to update the status text.
     """
     with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=stderr_console,
-            transient=True,
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=stderr_console,
+        transient=True,
     ) as progress:
         task = progress.add_task(description, total=None)
 
@@ -107,9 +108,9 @@ def spinner(description: str) -> Iterator[Callable[[str], None]]:
 
 @contextmanager
 def progress_bar(
-        description: str,
-        total: int,
-        show_count: bool = True,
+    description: str,
+    total: int,
+    show_count: bool = True,
 ) -> Iterator[Callable[[int], None]]:
     """Context manager for a progress bar.
 
@@ -138,9 +139,9 @@ def progress_bar(
     columns.append(TimeElapsedColumn())
 
     with Progress(
-            *columns,
-            console=stderr_console,
-            transient=True,
+        *columns,
+        console=stderr_console,
+        transient=True,
     ) as progress:
         task = progress.add_task(description, total=total)
 
@@ -193,7 +194,7 @@ class MultiStageProgress:
 
     @contextmanager
     def stage(
-            self, description: str, total: int | None = None
+        self, description: str, total: int | None = None
     ) -> Iterator[Callable[[int], None]]:
         """Start a new stage in the multi-stage operation.
 
@@ -330,8 +331,8 @@ def resolve_notebook(name: str, interactive: bool = True) -> str | None:
 
 
 def resolve_note_for_todo_filter(
-        note_ref: str,
-        notebook: str | None = None,
+    note_ref: str,
+    notebook: str | None = None,
 ) -> tuple[str | None, str | None]:
     """Resolve a note reference for todo filtering.
 
@@ -412,9 +413,9 @@ def resolve_note_for_todo_filter(
 
 
 def resolve_note(
-        note_ref: str,
-        notebook: str | None = None,
-        interactive: bool = True,
+    note_ref: str,
+    notebook: str | None = None,
+    interactive: bool = True,
 ) -> Path | None:
     """Resolve a note reference, with fuzzy matching if no exact match.
 
@@ -516,8 +517,8 @@ def resolve_note(
 
 
 def find_notes_by_title(
-        title_query: str,
-        notebook: str | None = None,
+    title_query: str,
+    notebook: str | None = None,
 ) -> list[tuple[Path, str]]:
     """Find notes by partial title match (case-insensitive).
 
@@ -618,11 +619,11 @@ def open_or_show_note(path: Path, show: bool = False) -> None:
 
 
 def resolve_note_ref(
-        note_ref: str,
-        notebook: str | None = None,
-        ensure_exists: bool = True,
-        create_if_date_based: bool = False,
-        interactive: bool = True,
+    note_ref: str,
+    notebook: str | None = None,
+    ensure_exists: bool = True,
+    create_if_date_based: bool = False,
+    interactive: bool = True,
 ) -> Path | None:
     """Unified note resolution handling all cases.
 
@@ -815,7 +816,7 @@ def resolve_note_ref(
 
 
 def resolve_attachment_target(
-        target: str | None,
+    target: str | None,
 ) -> tuple[Path | None, Todo | None]:
     """Resolve an attachment target to either a note path or todo.
 

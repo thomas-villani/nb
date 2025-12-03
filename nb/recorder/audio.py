@@ -286,11 +286,11 @@ def _writer_thread(session: RecordingSession) -> None:
 
 
 def start_recording(
-        output_path: Path,
-        mic_device: int | None = None,
-        loopback_device: int | None = None,
-        sample_rate: int = 16000,
-        mode: RecordingMode = RecordingMode.BOTH,
+    output_path: Path,
+    mic_device: int | None = None,
+    loopback_device: int | None = None,
+    sample_rate: int = 16000,
+    mode: RecordingMode = RecordingMode.BOTH,
 ) -> RecordingSession:
     """Start recording audio to a file.
 
@@ -333,11 +333,11 @@ def start_recording(
 
     # Determine which streams to open based on mode
     use_mic = (
-            mode in (RecordingMode.BOTH, RecordingMode.MIC_ONLY) and mic_device is not None
+        mode in (RecordingMode.BOTH, RecordingMode.MIC_ONLY) and mic_device is not None
     )
     use_loopback = (
-            mode in (RecordingMode.BOTH, RecordingMode.SYSTEM_ONLY)
-            and loopback_device is not None
+        mode in (RecordingMode.BOTH, RecordingMode.SYSTEM_ONLY)
+        and loopback_device is not None
     )
 
     # Shared buffers for callbacks

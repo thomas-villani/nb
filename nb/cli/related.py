@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import click
+
 from nb.cli.completion import complete_notebook
 from nb.cli.utils import console, resolve_note_ref
 from nb.config import get_config
@@ -57,12 +58,12 @@ class RelatedNote:
     help="Only use semantic similarity",
 )
 def related_cmd(
-        note_ref: str,
-        notebook: str | None,
-        limit: int,
-        links_only: bool,
-        tags_only: bool,
-        semantic_only: bool,
+    note_ref: str,
+    notebook: str | None,
+    limit: int,
+    links_only: bool,
+    tags_only: bool,
+    semantic_only: bool,
 ) -> None:
     """Find notes related to the given note.
 
@@ -140,10 +141,10 @@ def related_cmd(
 
 
 def _add_link_relations(
-        path: Path,
-        rel_path_str: str,
-        related: dict[str, RelatedNote],
-        config,
+    path: Path,
+    rel_path_str: str,
+    related: dict[str, RelatedNote],
+    config,
 ) -> None:
     """Add related notes from direct links."""
     from nb.core.note_links import get_backlinks, get_outgoing_links
@@ -204,9 +205,9 @@ def _add_link_relations(
 
 
 def _add_tag_relations(
-        rel_path_str: str,
-        related: dict[str, RelatedNote],
-        config,
+    rel_path_str: str,
+    related: dict[str, RelatedNote],
+    config,
 ) -> None:
     """Add related notes from shared tags."""
     from nb.index.db import get_db
@@ -264,11 +265,11 @@ def _add_tag_relations(
 
 
 def _add_semantic_relations(
-        path: Path,
-        rel_path_str: str,
-        related: dict[str, RelatedNote],
-        config,
-        limit: int,
+    path: Path,
+    rel_path_str: str,
+    related: dict[str, RelatedNote],
+    config,
+    limit: int,
 ) -> None:
     """Add related notes from semantic similarity."""
     try:

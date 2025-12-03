@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import click
+from rich.table import Table
+
 from nb.cli.utils import console
 from nb.config import get_config
 from nb.core.notebooks import get_notebook_notes
-from rich.table import Table
 
 
 def register_notebook_commands(cli: click.Group) -> None:
@@ -88,10 +89,10 @@ def notebooks_list(verbose: bool) -> None:
     "--todo-exclude", "-x", is_flag=True, help="Exclude from nb todo by default"
 )
 def notebooks_create(
-        name: str,
-        from_path: str | None,
-        date_based: bool,
-        todo_exclude: bool,
+    name: str,
+    from_path: str | None,
+    date_based: bool,
+    todo_exclude: bool,
 ) -> None:
     """Create a new notebook.
 

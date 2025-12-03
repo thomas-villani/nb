@@ -53,12 +53,12 @@ def format_timestamp(seconds: float) -> str:
 
 
 def to_json(
-        result: TranscriptResult,
-        output_path: Path,
-        source_file: str | None = None,
-        recorded_at: datetime | None = None,
-        speaker_names: dict[int, str] | None = None,
-        attendees: list[str] | None = None,
+    result: TranscriptResult,
+    output_path: Path,
+    source_file: str | None = None,
+    recorded_at: datetime | None = None,
+    speaker_names: dict[int, str] | None = None,
+    attendees: list[str] | None = None,
 ) -> None:
     """Write transcript to JSON file.
 
@@ -127,13 +127,13 @@ def to_json(
 
 
 def to_markdown(
-        result: TranscriptResult,
-        output_path: Path,
-        title: str | None = None,
-        recorded_at: datetime | None = None,
-        speaker_names: dict[int, str] | None = None,
-        include_frontmatter: bool = True,
-        tags: list[str] | None = None,
+    result: TranscriptResult,
+    output_path: Path,
+    title: str | None = None,
+    recorded_at: datetime | None = None,
+    speaker_names: dict[int, str] | None = None,
+    include_frontmatter: bool = True,
+    tags: list[str] | None = None,
 ) -> None:
     """Write transcript to Markdown file.
 

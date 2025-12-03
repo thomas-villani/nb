@@ -58,7 +58,7 @@ def get_api_key() -> str | None:
 
 
 def _parse_deepgram_response(
-        response: dict[str, Any], recording_id: str
+    response: dict[str, Any], recording_id: str
 ) -> TranscriptResult:
     """Parse Deepgram API response into TranscriptResult.
 
@@ -118,7 +118,7 @@ def _parse_deepgram_response(
                                 confidence=sum(
                                     w.get("confidence", 0.0) for w in current_words
                                 )
-                                           / len(current_words),
+                                / len(current_words),
                             )
                         )
                     current_words = [word]
@@ -136,7 +136,7 @@ def _parse_deepgram_response(
                         end=current_words[-1].get("end", 0.0),
                         text=" ".join(w.get("word", "") for w in current_words),
                         confidence=sum(w.get("confidence", 0.0) for w in current_words)
-                                   / len(current_words),
+                        / len(current_words),
                     )
                 )
         else:
@@ -166,11 +166,11 @@ def _parse_deepgram_response(
 
 
 def transcribe_file(
-        audio_path: Path,
-        api_key: str | None = None,
-        model: str = "nova-2",
-        dictation: bool = False,
-        timeout: int = 600,
+    audio_path: Path,
+    api_key: str | None = None,
+    model: str = "nova-2",
+    dictation: bool = False,
+    timeout: int = 600,
 ) -> TranscriptResult:
     """Transcribe an audio file using Deepgram (v5 SDK).
 
@@ -258,11 +258,11 @@ def transcribe_file(
 
 
 def transcribe(
-        audio_path: Path,
-        api_key: str | None = None,
-        model: str = "nova-2",
-        dictation: bool = False,
-        timeout: int = 600,
+    audio_path: Path,
+    api_key: str | None = None,
+    model: str = "nova-2",
+    dictation: bool = False,
+    timeout: int = 600,
 ) -> TranscriptResult:
     """Transcribe an audio file using Deepgram.
 

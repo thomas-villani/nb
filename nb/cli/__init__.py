@@ -75,7 +75,7 @@ class AliasedGroup(click.Group):
         return None
 
     def resolve_command(
-            self, ctx: click.Context, args: list[str]
+        self, ctx: click.Context, args: list[str]
     ) -> tuple[str | None, click.Command | None, list[str]]:
         # Handle special aliases that inject arguments
         if args:
@@ -128,7 +128,7 @@ def help_cmd(ctx):
     # Look for docs in package (installed) then dev location
     package_docs = Path(__file__).parent.parent / "_docs" / "index.html"
     dev_docs = (
-            Path(__file__).parent.parent.parent / "docs" / "build" / "html" / "index.html"
+        Path(__file__).parent.parent.parent / "docs" / "build" / "html" / "index.html"
     )
 
     if package_docs.exists():

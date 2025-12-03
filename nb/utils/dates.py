@@ -434,7 +434,7 @@ def is_date_in_range(dt: date, start: date | None, end: date | None) -> bool:
 
 
 def get_week_range(
-        dt: date | None = None, week_start_day: str | None = None
+    dt: date | None = None, week_start_day: str | None = None
 ) -> tuple[date, date]:
     """Get the start and end of the week containing dt.
 
@@ -468,7 +468,7 @@ def get_week_range(
 
 
 def get_week_folder_name(
-        dt: date | None = None, week_start_day: str | None = None
+    dt: date | None = None, week_start_day: str | None = None
 ) -> str:
     """Get the week folder name for a date (e.g., 'Nov25-Dec01').
 

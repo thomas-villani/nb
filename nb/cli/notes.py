@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import click
+
 from nb.cli.completion import complete_notebook
 from nb.cli.utils import (
     console,
@@ -144,7 +145,7 @@ def last_note(show: bool, notebook: str | None, viewed: bool) -> None:
 )
 @click.option("--group", "-g", is_flag=True, help="Group entries by notebook")
 def history_cmd(
-        limit: int, offset: int, notebook: str | None, full_path: bool, group: bool
+    limit: int, offset: int, notebook: str | None, full_path: bool, group: bool
 ) -> None:
     """Show recently viewed notes.
 
@@ -252,12 +253,12 @@ def history_cmd(
         # Group by notebook (old behavior)
         views_by_notebook: dict[str, list] = defaultdict(list)
         for (
-                path,
-                rel_path,
-                timestamps,
-                view_count,
-                linked_alias,
-                nb_name,
+            path,
+            rel_path,
+            timestamps,
+            view_count,
+            linked_alias,
+            nb_name,
         ) in resolved_views:
             views_by_notebook[nb_name].append(
                 (path, rel_path, timestamps, view_count, linked_alias)
@@ -315,12 +316,12 @@ def history_cmd(
     else:
         # Interleaved display (new default) - sorted by most recent first
         for (
-                _path,
-                rel_path,
-                timestamps,
-                view_count,
-                linked_alias,
-                nb_name,
+            _path,
+            rel_path,
+            timestamps,
+            view_count,
+            linked_alias,
+            nb_name,
         ) in resolved_views:
             # Format the timestamp (use most recent)
             time_str = timestamps[0].strftime(
@@ -373,7 +374,7 @@ def history_cmd(
 )
 @click.pass_context
 def open_date(
-        ctx: click.Context, note_ref: str, notebook: str | None, no_prompt: bool
+    ctx: click.Context, note_ref: str, notebook: str | None, no_prompt: bool
 ) -> None:
     """Open a note by date or name.
 
@@ -549,10 +550,10 @@ def show_note(note_ref: str | None, notebook: str | None) -> None:
 @click.option("--title", "-t", help="Title for the note")
 @click.option("--template", "-T", "template_name", help="Template to use for the note")
 def new_note(
-        path: str | None,
-        notebook: str | None,
-        title: str | None,
-        template_name: str | None,
+    path: str | None,
+    notebook: str | None,
+    title: str | None,
+    template_name: str | None,
 ) -> None:
     """Create a new note.
 
@@ -698,7 +699,7 @@ def edit_note(path: str) -> None:
     help="Notebook to search for note (used with --note)",
 )
 def add_to_note(
-        text: str | None, target_note: str | None, notebook: str | None
+    text: str | None, target_note: str | None, notebook: str | None
 ) -> None:
     """Append content to a note (defaults to today's daily note).
 
@@ -787,15 +788,15 @@ def add_to_note(
     help="Display notes as a tree grouped by subdirectory sections",
 )
 def list_notes_cmd(
-        notebook: str | None,
-        all_notes: bool,
-        week: bool,
-        month: bool,
-        full: bool,
-        details: bool,
-        section: tuple[str, ...],
-        exclude_section: tuple[str, ...],
-        tree: bool,
+    notebook: str | None,
+    all_notes: bool,
+    week: bool,
+    month: bool,
+    full: bool,
+    details: bool,
+    section: tuple[str, ...],
+    exclude_section: tuple[str, ...],
+    tree: bool,
 ) -> None:
     """List notes.
 
@@ -865,9 +866,9 @@ def list_notes_cmd(
         return "  ".join(parts)
 
     def filter_notes_by_sections(
-            note_paths: list,
-            include_sections: tuple[str, ...],
-            exclude_sections: tuple[str, ...],
+        note_paths: list,
+        include_sections: tuple[str, ...],
+        exclude_sections: tuple[str, ...],
     ) -> list:
         """Filter notes by path-based sections."""
         from nb.core.notes import get_sections_for_path
@@ -899,16 +900,18 @@ def list_notes_cmd(
         return filtered
 
     def render_notes_tree(
-            notes: list,
-            notebook_name: str,
-            full_path: bool,
-            details_map: dict,
-            format_details_fn,
+        notes: list,
+        notebook_name: str,
+        full_path: bool,
+        details_map: dict,
+        format_details_fn,
     ) -> None:
         """Render notes as a tree grouped by subdirectory sections."""
         from rich.tree import Tree
 
         from nb.core.notes import get_sections_for_path
+
+        config = get_config()
 
         # Get notebook display info
         color, icon = get_notebook_display_info(notebook_name)
@@ -929,7 +932,14 @@ def list_notes_cmd(
                 title = None
                 tags = []
 
-            note_sections = get_sections_for_path(note_path)
+            # Convert absolute path to relative path for section extraction
+            try:
+                rel_path = note_path.relative_to(config.notes_root)
+            except ValueError:
+                # External/linked note - use the path as-is
+                rel_path = note_path
+
+            note_sections = get_sections_for_path(rel_path)
 
             # Find or create parent node
             parent = root

@@ -6,6 +6,11 @@ import sys
 from dataclasses import dataclass
 from datetime import date
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
 from nb.config import get_config
 from nb.core.todos import set_todo_status_in_file, toggle_todo_in_file
 from nb.index.todos_repo import (
@@ -15,10 +20,6 @@ from nb.index.todos_repo import (
 )
 from nb.models import Todo, TodoStatus
 from nb.utils.dates import get_week_range
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
 
 
 def _format_todo_source(t: Todo) -> str:
@@ -307,10 +308,10 @@ def get_key() -> str:
 
 
 def run_interactive_todos(
-        show_completed: bool = False,
-        tag: str | None = None,
-        notebooks: list[str] | None = None,
-        exclude_notebooks: list[str] | None = None,
+    show_completed: bool = False,
+    tag: str | None = None,
+    notebooks: list[str] | None = None,
+    exclude_notebooks: list[str] | None = None,
 ) -> None:
     """Run the interactive todo viewer.
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 import click
+
 from nb.cli.completion import complete_notebook, complete_tag, complete_view
 from nb.cli.utils import (
     console,
@@ -123,34 +124,34 @@ def register_todo_commands(cli: click.Group) -> None:
 )
 @click.pass_context
 def todo(
-        ctx: click.Context,
-        created_today: bool,
-        created_week: bool,
-        due_today: bool,
-        due_week: bool,
-        overdue: bool,
-        priority: int | None,
-        tag: str | None,
-        exclude_tag: tuple[str, ...],
-        notebook: tuple[str, ...],
-        note: tuple[str, ...],
-        section: tuple[str, ...],
-        exclude_section: tuple[str, ...],
-        exclude_notebook: tuple[str, ...],
-        view: str | None,
-        create_view: str | None,
-        list_views: bool,
-        delete_view: str | None,
-        hide_later: bool,
-        hide_no_date: bool,
-        focus: bool,
-        sort_by: str | None,
-        show_all: bool,
-        include_completed: bool,
-        interactive: bool,
-        limit: int | None,
-        offset: int,
-        expand: bool,
+    ctx: click.Context,
+    created_today: bool,
+    created_week: bool,
+    due_today: bool,
+    due_week: bool,
+    overdue: bool,
+    priority: int | None,
+    tag: str | None,
+    exclude_tag: tuple[str, ...],
+    notebook: tuple[str, ...],
+    note: tuple[str, ...],
+    section: tuple[str, ...],
+    exclude_section: tuple[str, ...],
+    exclude_notebook: tuple[str, ...],
+    view: str | None,
+    create_view: str | None,
+    list_views: bool,
+    delete_view: str | None,
+    hide_later: bool,
+    hide_no_date: bool,
+    focus: bool,
+    sort_by: str | None,
+    show_all: bool,
+    include_completed: bool,
+    interactive: bool,
+    limit: int | None,
+    offset: int,
+    expand: bool,
 ) -> None:
     """Manage todos.
 
@@ -391,7 +392,7 @@ def todo(
             # Determine if we should exclude notes with todo_exclude
             # Don't exclude when --all, specific notebooks, or specific notes requested
             exclude_note_excluded = (
-                    not show_all and not effective_notebooks and not notes_filter
+                not show_all and not effective_notebooks and not notes_filter
             )
 
             # Default: list todos
@@ -472,16 +473,16 @@ def _delete_todo_view(config, view_name: str) -> None:
 
 
 def _create_todo_view(
-        config,
-        name: str,
-        notebooks: list[str] | None = None,
-        notes: list[str] | None = None,
-        tag: str | None = None,
-        priority: int | None = None,
-        exclude_tags: list[str] | None = None,
-        hide_later: bool = False,
-        hide_no_date: bool = False,
-        include_completed: bool = False,
+    config,
+    name: str,
+    notebooks: list[str] | None = None,
+    notes: list[str] | None = None,
+    tag: str | None = None,
+    priority: int | None = None,
+    exclude_tags: list[str] | None = None,
+    hide_later: bool = False,
+    hide_no_date: bool = False,
+    include_completed: bool = False,
 ) -> None:
     """Create a new todo view from current filters."""
     # Build filters dict (only include non-empty values)
@@ -531,29 +532,29 @@ def _create_todo_view(
 
 
 def _list_todos(
-        created_today: bool = False,
-        created_week: bool = False,
-        due_today: bool = False,
-        due_week: bool = False,
-        overdue: bool = False,
-        priority: int | None = None,
-        tag: str | None = None,
-        exclude_tags: list[str] | None = None,
-        notebooks: list[str] | None = None,
-        notes: list[str] | None = None,
-        sections: list[str] | None = None,
-        exclude_notebooks: list[str] | None = None,
-        path_sections: list[str] | None = None,
-        exclude_path_sections: list[str] | None = None,
-        hide_later: bool = False,
-        hide_no_date: bool = False,
-        focus: bool = False,
-        sort_by: str = "source",
-        include_completed: bool = False,
-        exclude_note_excluded: bool = True,
-        limit: int | None = None,
-        offset: int = 0,
-        expand: bool = False,
+    created_today: bool = False,
+    created_week: bool = False,
+    due_today: bool = False,
+    due_week: bool = False,
+    overdue: bool = False,
+    priority: int | None = None,
+    tag: str | None = None,
+    exclude_tags: list[str] | None = None,
+    notebooks: list[str] | None = None,
+    notes: list[str] | None = None,
+    sections: list[str] | None = None,
+    exclude_notebooks: list[str] | None = None,
+    path_sections: list[str] | None = None,
+    exclude_path_sections: list[str] | None = None,
+    hide_later: bool = False,
+    hide_no_date: bool = False,
+    focus: bool = False,
+    sort_by: str = "source",
+    include_completed: bool = False,
+    exclude_note_excluded: bool = True,
+    limit: int | None = None,
+    offset: int = 0,
+    expand: bool = False,
 ) -> None:
     """List todos with optional filters."""
     # Determine completion filter
@@ -795,7 +796,7 @@ def _list_todos(
 
 
 def _calculate_column_widths(
-        todos: list, hide_notebook: bool = False, expand: bool = False
+    todos: list, hide_notebook: bool = False, expand: bool = False
 ) -> dict[str, int | bool]:
     """Calculate column widths for aligned todo output.
 
@@ -1049,7 +1050,7 @@ def _calculate_column_widths(
 
 
 def _format_todo_source(
-        t, max_width: int = 0, max_section_len: int = 15, hide_notebook: bool = False
+    t, max_width: int = 0, max_section_len: int = 15, hide_notebook: bool = False
 ) -> str:
     """Format the source of a todo for display (plain text, used for sorting).
 
@@ -1143,7 +1144,7 @@ def _get_todo_source_parts(t) -> dict[str, str]:
 
 
 def _format_colored_todo_source(
-        t, width: int = 0, max_section_len: int = 15, hide_notebook: bool = False
+    t, width: int = 0, max_section_len: int = 15, hide_notebook: bool = False
 ) -> str:
     """Format the source of a todo with colors for display.
 
@@ -1200,12 +1201,12 @@ def _format_colored_todo_source(
 
         # Color notebook part (skip if hiding notebook)
         if (
-                not hide_notebook
-                and parts["notebook"]
-                and remaining.startswith(parts["notebook"])
+            not hide_notebook
+            and parts["notebook"]
+            and remaining.startswith(parts["notebook"])
         ):
             colored_parts.append(f"[{color}]{icon_prefix}{parts['notebook']}[/{color}]")
-            remaining = remaining[len(parts["notebook"]):]
+            remaining = remaining[len(parts["notebook"]) :]
             icon_prefix = ""  # Only show icon once
         elif not hide_notebook and parts["notebook"]:
             # Notebook itself was truncated
@@ -1228,10 +1229,10 @@ def _format_colored_todo_source(
                     note_part = remaining[:-1]  # Remove ellipsis for now
             if remaining.startswith(parts["note"]):
                 colored_parts.append(f"[blue]{parts['note']}[/blue]")
-                remaining = remaining[len(parts["note"]):]
+                remaining = remaining[len(parts["note"]) :]
             elif note_part:
                 colored_parts.append(f"[blue]{note_part}[/blue]")
-                remaining = remaining[len(note_part):]
+                remaining = remaining[len(note_part) :]
 
         # Color "::" separator and section part
         if remaining.startswith("::"):
@@ -1308,7 +1309,7 @@ def _format_nosection_source(t, max_width: int = 0, hide_notebook: bool = False)
 
 
 def _format_colored_nosection_source(
-        t, width: int = 0, hide_notebook: bool = False
+    t, width: int = 0, hide_notebook: bool = False
 ) -> str:
     """Format source without section (notebook/note) with colors.
 
@@ -1365,7 +1366,7 @@ def _format_colored_nosection_source(
     if not hide_notebook and notebook and remaining.startswith(notebook):
         icon_prefix = f"{icon} " if icon else ""
         colored_parts.append(f"[{color}]{icon_prefix}{notebook}[/{color}]")
-        remaining = remaining[len(notebook):]
+        remaining = remaining[len(notebook) :]
     elif not hide_notebook and notebook:
         # Notebook was truncated
         icon_prefix = f"{icon} " if icon else ""
@@ -1421,7 +1422,7 @@ def _format_compact_source(t, max_width: int = 0, hide_notebook: bool = False) -
 
 
 def _format_colored_compact_source(
-        t, width: int = 0, hide_notebook: bool = False
+    t, width: int = 0, hide_notebook: bool = False
 ) -> str:
     """Format compact source (notebook only, or note if hiding) with colors.
 
@@ -1478,7 +1479,7 @@ def _format_colored_compact_source(
 
 
 def _print_todo(
-        t, indent: int = 0, widths: dict[str, int | bool] | None = None
+    t, indent: int = 0, widths: dict[str, int | bool] | None = None
 ) -> None:
     """Print a single todo with formatting."""
     prefix = "  " * indent
@@ -2295,12 +2296,12 @@ def todo_delete(todo_id: tuple[str, ...], force: bool) -> None:
     shell_complete=complete_notebook,
 )
 def todo_review(
-        weekly: bool,
-        show_all: bool,
-        tag: str | None,
-        notebook: tuple[str, ...],
-        note: tuple[str, ...],
-        exclude_notebook: tuple[str, ...],
+    weekly: bool,
+    show_all: bool,
+    tag: str | None,
+    notebook: tuple[str, ...],
+    note: tuple[str, ...],
+    exclude_notebook: tuple[str, ...],
 ) -> None:
     """Interactively review and triage todos.
 
@@ -2418,7 +2419,7 @@ def todo_review(
 )
 @click.option("--force", "-f", is_flag=True, help="Skip confirmation")
 def todo_all_done(
-        note_ref: str, notebook: str | None, in_progress_only: bool, force: bool
+    note_ref: str, notebook: str | None, in_progress_only: bool, force: bool
 ) -> None:
     """Mark all todos in a note as completed.
 

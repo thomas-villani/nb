@@ -5,10 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+from rich.table import Table
+
 from nb.cli.completion import complete_notebook
 from nb.cli.utils import console
 from nb.index.todos_repo import get_tag_stats
-from rich.table import Table
 
 
 def register_tags_commands(cli: click.Group) -> None:
@@ -43,11 +44,11 @@ def register_tags_commands(cli: click.Group) -> None:
     help="Only count open (non-completed) todos",
 )
 def tags_cmd(
-        sources: bool,
-        sort: str,
-        notebooks: tuple[str, ...],
-        limit: int | None,
-        open_todos: bool,
+    sources: bool,
+    sort: str,
+    notebooks: tuple[str, ...],
+    limit: int | None,
+    open_todos: bool,
 ) -> None:
     """List all tags with usage counts.
 

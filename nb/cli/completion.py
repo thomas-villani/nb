@@ -17,7 +17,7 @@ def register_completion_commands(cli: click.Group) -> None:
 
 
 def complete_notebook(
-        ctx: click.Context, param: click.Parameter, incomplete: str
+    ctx: click.Context, param: click.Parameter, incomplete: str
 ) -> list[CompletionItem]:
     """Complete notebook names from configuration."""
     try:
@@ -35,7 +35,7 @@ def complete_notebook(
 
 
 def complete_tag(
-        ctx: click.Context, param: click.Parameter, incomplete: str
+    ctx: click.Context, param: click.Parameter, incomplete: str
 ) -> list[CompletionItem]:
     """Complete tag names from indexed todos."""
     try:
@@ -52,7 +52,7 @@ def complete_tag(
 
 
 def complete_view(
-        ctx: click.Context, param: click.Parameter, incomplete: str
+    ctx: click.Context, param: click.Parameter, incomplete: str
 ) -> list[CompletionItem]:
     """Complete saved todo view names."""
     try:

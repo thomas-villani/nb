@@ -46,9 +46,9 @@ class BrokenLink:
 
 
 def get_outgoing_links(
-        note_path: Path,
-        internal_only: bool = False,
-        external_only: bool = False,
+    note_path: Path,
+    internal_only: bool = False,
+    external_only: bool = False,
 ) -> list[NoteLink]:
     """Get all links from a note.
 
@@ -182,9 +182,9 @@ def get_backlinks(note_path: Path) -> list[Backlink]:
 
 
 def resolve_link_target(
-        target: str,
-        source_path: Path,
-        notes_root: Path | None = None,
+    target: str,
+    source_path: Path,
+    notes_root: Path | None = None,
 ) -> Path | None:
     """Resolve a link target to an actual note path.
 

@@ -13,9 +13,10 @@ from datetime import datetime
 from pathlib import Path
 
 import click
+from rich.console import Console
+
 from nb.cli.completion import complete_notebook
 from nb.config import get_config
-from rich.console import Console
 
 console = Console()
 
@@ -98,15 +99,15 @@ def record_group() -> None:
 @click.option("--mic", "-m", type=int, help="Microphone device index")
 @click.option("--loopback", "-l", type=int, help="System audio (loopback) device index")
 def record_start(
-        name: str,
-        notebook: str | None,
-        audio_only: bool,
-        delete_audio: bool,
-        mic_only: bool,
-        system_only: bool,
-        dictate: bool,
-        mic: int | None,
-        loopback: int | None,
+    name: str,
+    notebook: str | None,
+    audio_only: bool,
+    delete_audio: bool,
+    mic_only: bool,
+    system_only: bool,
+    dictate: bool,
+    mic: int | None,
+    loopback: int | None,
 ) -> None:
     """Start recording audio.
 
@@ -243,10 +244,10 @@ def record_start(
 
     try:
         with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                TimeElapsedColumn(),
-                transient=True,
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            transient=True,
         ) as progress:
             _task = progress.add_task("Recording", total=None)
             while session.is_recording and not stop_requested:
@@ -327,12 +328,12 @@ def record_stop() -> None:
     help="Delete WAV file after successful transcription",
 )
 def record_transcribe(
-        recording_id: str | None,
-        notebook: str | None,
-        speakers: str | None,
-        attendees: str | None,
-        transcribe_all: bool,
-        delete_audio: bool,
+    recording_id: str | None,
+    notebook: str | None,
+    speakers: str | None,
+    attendees: str | None,
+    transcribe_all: bool,
+    delete_audio: bool,
 ) -> None:
     """Transcribe a recording using Deepgram.
 
@@ -492,10 +493,10 @@ def record_list(status: str) -> None:
 )
 @click.confirmation_option(prompt="Are you sure you want to delete recordings?")
 def record_purge(
-        transcribed: bool,
-        purge_all: bool,
-        older_than: int | None,
-        dry_run: bool,
+    transcribed: bool,
+    purge_all: bool,
+    older_than: int | None,
+    dry_run: bool,
 ) -> None:
     """Delete old audio recordings to free up space.
 
@@ -678,12 +679,12 @@ def _process_dictation_text(text: str) -> str:
 
 
 def _transcribe_recording(
-        wav_path: Path,
-        notebook: str | None = None,
-        speakers: str | None = None,
-        attendees: str | None = None,
-        delete_audio: bool = False,
-        dictation: bool = False,
+    wav_path: Path,
+    notebook: str | None = None,
+    speakers: str | None = None,
+    attendees: str | None = None,
+    delete_audio: bool = False,
+    dictation: bool = False,
 ) -> None:
     """Transcribe a recording and save outputs."""
     from nb.recorder.formatter import (
