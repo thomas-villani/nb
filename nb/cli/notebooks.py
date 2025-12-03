@@ -60,7 +60,7 @@ def _list_notebooks(verbose: bool = False) -> None:
                 nb_type_parts.append("ext")
             nb_type = ", ".join(nb_type_parts) if nb_type_parts else "-"
 
-            path_display = str(nb.path) if nb.is_external else f"~/{nb.name}"
+            path_display = str(nb.path) if nb.is_external else f"~/notes/{nb.name}"
             table.add_row(nb.name, nb_type, note_count, path_display)
 
         console.print(table)

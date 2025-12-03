@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import date, timedelta
 
 import click
@@ -2312,8 +2313,29 @@ def todo_edit(todo_id: str) -> None:
         raise SystemExit(1)
 
     config = get_config()
-    console.print(f"[dim]Opening {t.source.path.name}:{t.line_number}...[/dim]")
-    open_in_editor(t.source.path, line=t.line_number, editor=config.editor)
+    path = t.source.path
+
+    # Capture mtime before edit
+    try:
+        mtime_before = path.stat().st_mtime
+    except OSError:
+        mtime_before = None
+
+    console.print(f"[dim]Opening {path.name}:{t.line_number}...[/dim]")
+    open_in_editor(path, line=t.line_number, editor=config.editor)
+
+    # Sync if file was modified
+    try:
+        mtime_after = path.stat().st_mtime
+        if mtime_before is None or mtime_after != mtime_before:
+            from nb.core.notes import _reindex_note_after_edit, update_note_mtime
+
+            print("Syncing nb...", end="", file=sys.stderr, flush=True)
+            update_note_mtime(path, config.notes_root)
+            _reindex_note_after_edit(path, config.notes_root)
+            print(" done", file=sys.stderr)
+    except OSError:
+        pass
 
 
 def _delete_todo_with_children(t, force: bool = False) -> int:

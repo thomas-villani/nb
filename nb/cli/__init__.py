@@ -46,6 +46,7 @@ class AliasedGroup(click.Group):
         "l": "last",
         "o": "open",
         "s": "search",
+        "ls": "list",
         "nbs": "notebooks",
         "td": "todo",
         "rec": "record",
@@ -55,6 +56,8 @@ class AliasedGroup(click.Group):
     SPECIAL_ALIASES: ClassVar[dict[str, tuple[str, list[str]]]] = {
         "ss": ("search", ["--semantic"]),  # ss -> search --semantic
         "ta": ("todo", ["add"]),  # ta -> todo add
+        "td": ("todo", ["done"]),  # td -> todo done
+        "now": ("todo", ["--today"]),  # now -> todo --today
     }
 
     def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
@@ -88,8 +91,55 @@ class AliasedGroup(click.Group):
         return super().resolve_command(ctx, args)
 
 
+_nb_art = """
+[blue]
+               █████
+              ░░███
+    ████████   ░███████
+   ░░███░░███  ░███░░███
+    ░███ ░███  ░███ ░███
+    ░███ ░███  ░███ ░███
+    ████ █████ ████████
+   ░░░░ ░░░░░ ░░░░░░░░
+[/blue]
+[bright_green]Copyright (c) 2025, Tom Villani, Ph.D.[/bright_green]
+
+[dim][cyan]nb[/cyan] was created because I prefer command line applications
+over web apps. This tool allows you to collect todo
+items from notes scattered across many notebooks or repos.
+
+Long live the CLI![/dim]"""
+
+
+def _print_about(ctx, param, value):
+    if not value or ctx.resilient_parsing:
+        return
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console()
+    console.print(
+        Panel(
+            _nb_art,
+            title="About",
+            title_align="left",
+            expand=False,
+            border_style="bold blue",
+        )
+    )
+    ctx.exit()
+
+
 @click.group(cls=AliasedGroup, invoke_without_command=True)
 @click.version_option(version=__version__, prog_name="nb")
+@click.option(
+    "--about",
+    "-A",
+    is_flag=True,
+    callback=_print_about,
+    expose_value=False,
+    is_eager=True,
+)
 @click.option(
     "-s", "--show", is_flag=True, help="Print note to console instead of opening editor"
 )

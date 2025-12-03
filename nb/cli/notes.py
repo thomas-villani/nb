@@ -663,8 +663,11 @@ def new_note(
         console.print(f"[green]Created:[/green] {note_path}")
         open_note(full_path)
     except FileExistsError:
-        console.print(f"[red]Note already exists:[/red] {note_path}")
-        raise SystemExit(1) from None
+        console.print(f"[yellow]Note already exists:[/yellow] {note_path}")
+        if click.confirm("Open existing note?", default=True):
+            open_note(config.notes_root / note_path)
+        else:
+            raise SystemExit(1) from None
 
 
 @click.command("edit")

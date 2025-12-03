@@ -157,7 +157,6 @@ TEMPLATE = """<!DOCTYPE html>
             margin-left: 260px;
             flex: 1;
             padding: 2rem 3rem;
-            max-width: 900px;
         }
 
         /* Sidebar */

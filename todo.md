@@ -117,8 +117,11 @@ todo_exclude: true
 - [x] Add an 'expanded' view (--expand/-x) for 'nb todo' to show more of the todo text
 - [x] Add a way to check off all in progress items as completed in a notebook / note (extend `nb todo all-done`)
 - [x] Better daily metrics - what was completed today? By notebook. `nb completed` or `nb done` something
-- [ ] Add --about flag
+- [x] Add --about flag
 - [ ] `nb new <existing>` should prompt to open when exists
+- [ ] give notes a unique ID as well so they can be quick loaded and included on listings
+- [ ] Add numbering to `nb history` list and allow loading notes from history command like `nb history open 2`
+
 
 ### Phase 5: Wijjit TUI
 - [ ] Full Wijjit-based todo list view with richer interactions #feature
