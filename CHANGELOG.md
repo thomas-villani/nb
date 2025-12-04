@@ -1,3 +1,42 @@
+# v0.2.4 - 2025-12-04
+
+Patch release with usability and CLI improvements: open notes by index from history, deterministic/tighter todo sorting, a shortcut to open the last-modified note, and various CLI/help updates. No breaking changes.
+
+## New Features
+
+- [629ee5b] Add --open INDEX to nb history
+  - Open a note by its 1-based index from the history list (works with grouped and ungrouped views)
+  - History entries are now numbered with consistent width and the index range is validated before opening in the editor
+  - Preserves original indices when grouping by notebook so --open is stable in grouped view
+  - Updated help and examples to document opening by index
+
+- [6ce2cb5] Add support for "last" note reference in nb open
+  - `nb open last` opens the most recently modified note (optionally constrained to a notebook)
+  - Uses get_last_modified_note under the hood; prints user-friendly messages and exits when no notes are found
+
+## Improvements
+
+- [6ce2cb5] Revise todo sorting for deterministic, developer-friendly order
+  - New sort precedence: due-section -> due date (soonest) -> created date (oldest) -> priority -> file/section -> line number
+  - get_sorted_todos and CLI list sorting updated to follow this order
+  - Removes entries for files that no longer exist by calling remove_deleted_notes() before listing todos
+
+- [629ee5b] Improve note resolution behavior and scoping
+  - When a single notebook is in scope, use it as context/hint for resolving todo-note references
+  - Pass notebook hint to linked-note lookup to constrain resolved links (linked-file lookup remains unchanged)
+
+- [6ce2cb5] CLI ergonomics and option changes
+  - Introduce -xt for --exclude-tag and -xn for --exclude-notebook
+  - Reassign -N to --note PATH (see updated help text)
+  - Update todo.md with the new default sort note and future enhancement items
+  - Note: CLI short flags changed — update any scripts or aliases accordingly
+
+- [9a185e7] Remove artificial max terminal size of 150 so output can use full terminal dimensions
+
+## Chore
+
+- [f70dd99] Bump version: 0.2.3 → 0.2.4
+
 # v0.2.3 - 2025-12-03
 
 This patch release contains documentation and example asset additions, several developer-facing robustness and indexing improvements, a new Kanban/completed-todos flow (CLI + web), small CLI quality-of-life changes, and assorted refactors/tests/housekeeping. No breaking changes.
