@@ -380,6 +380,7 @@ def open_date(
 
     \b
     NOTE_REF can be:
+    - "last" to open the most recently modified note
     - A date like "2025-11-26" or "nov 26"
     - A relative date like "friday" or "last monday"
     - A note name (when used with -n for non-date-based notebooks)
@@ -393,6 +394,8 @@ def open_date(
 
     \b
     Examples:
+      nb open last                # Open the last modified note
+      nb open last -n work        # Open last modified note in 'work' notebook
       nb open friday              # Open Friday's daily note
       nb open "last monday"       # Open last Monday's note
       nb open myalias             # Open note by alias
@@ -406,11 +409,22 @@ def open_date(
     from rich.prompt import Confirm
 
     from nb.core.notebooks import ensure_notebook_note, is_notebook_date_based
-    from nb.core.notes import create_note
+    from nb.core.notes import create_note, get_last_modified_note
     from nb.utils.dates import parse_fuzzy_date
 
     show = ctx.obj and ctx.obj.get("show")
     config = get_config()
+
+    # Handle "last" as a special case - open the most recently modified note
+    if note_ref.lower() == "last":
+        path = get_last_modified_note(notebook=notebook)
+        if not path:
+            console.print("[dim]No notes found.[/dim]")
+            if notebook:
+                console.print("[dim]Try 'nb index' to ensure notes are indexed.[/dim]")
+            raise SystemExit(1)
+        open_or_show_note(path, show=show)
+        return
 
     try:
         path = resolve_note_ref(note_ref, notebook=notebook, create_if_date_based=True)

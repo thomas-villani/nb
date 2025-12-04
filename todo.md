@@ -121,7 +121,10 @@ todo_exclude: true
 - [ ] give notes a unique ID as well so they can be quick loaded and included on listings
 - [ ] Add numbering to `nb history` list and allow loading notes from history command like `nb history open 2`
 - [ ] Capture url and other file attachments as markdown using all2md #feature
-- [ ] Browser plugin to add notes from webpages
+- [x] default sort order for todo items: due-section -> due-date (soonest first) -> created-date (oldest first) -> priority -> file/section -> line #
+- [ ] Allow low priority items (priorty(low))
+- [x] 'nb open last -n personal' should work to open last note in personal as well (`nb last -n personal` works fine)
+- [ ] `nb stream --modified-today` and `nb stream --viewed-today` or something like that - does that exist?
 
 ### Phase 5: Wijjit TUI
 - [ ] Full Wijjit-based todo list view with richer interactions #feature
@@ -130,6 +133,19 @@ todo_exclude: true
 - [x] Stream/continuous view (`nb stream`) with lazy loading
 - [ ] Interactive filtering UI #feature
 - [x] Navigation and links #feature
+- [ ] Browser plugin to add notes from webpages
+
+
+### Phase 6: Future Enhancements
+- [ ] Recurring todos (`@recur(weekly)`) #feature
+- [ ] Contextual views - e.g. set time windows when `nbt` shows certain notebooks (e.g. work notebooks from 9-5p)
+- [ ] Auto TL;DR generation and stash in frontmatter
+- [ ] Export to various formats (HTML, PDF) #feature
+- [ ] Calendar view for due dates #feature
+- [ ] Due date reminders (optional notifications) #feature
+  These can use the `win11toast` library which is dead simple.
+- [ ] Add '@startby' to todos #feature
+
 
 ## Technical Debt
 - [x] Add comprehensive test suite #testing
@@ -144,14 +160,3 @@ todo_exclude: true
   - [x] Simplify `list_linked_files()` and `list_linked_notes()` to DB-only
 - [ ] Optimize imports and startup speed of cli #performance
 - [x] Evaluate test suite and add e2e tests on actual CLI (if not existing) #testing
-
-
-### Phase 6: Future Enhancements
-- [ ] Recurring todos (`@recur(weekly)`) #feature
-- [ ] Contextual views - e.g. set time windows when `nbt` shows certain notebooks (e.g. work notebooks from 9-5p)
-- [ ] Auto TL;DR generation and stash in frontmatter
-- [ ] Export to various formats (HTML, PDF) #feature
-- [ ] Calendar view for due dates #feature
-- [ ] Due date reminders (optional notifications) #feature
-  These can use the `win11toast` library which is dead simple.
-- [ ] Add '@startby' to todos #feature

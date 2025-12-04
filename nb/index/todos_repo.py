@@ -673,14 +673,12 @@ def get_sorted_todos(
     """Get todos sorted by the default sorting order.
 
     Sorting order:
-    1. Overdue (oldest first)
-    2. In Progress (by due date, then created date)
-    3. Due today
-    4. Due this week (by date)
-    5. Due later (by date)
-    6. No due date (by created date, oldest first)
-
-    Within each group, secondary sort by priority (1 > 2 > 3 > none).
+    1. Due section (overdue, in_progress, today, this week, later, no due date)
+    2. Due date (soonest first)
+    3. Created date (oldest first)
+    4. Priority (1 > 2 > 3 > none)
+    5. File/section (source path)
+    6. Line number
     """
     todos = query_todos(
         completed=completed,
@@ -710,28 +708,31 @@ def get_sorted_todos(
         due = todo.due_date_only
         if todo.in_progress:
             group = 1
-            date_key = due or todo.created_date or today
         elif due is None:
             group = 5
-            date_key = todo.created_date or today
         elif due < today:
             group = 0
-            date_key = due
         elif due == today:
             group = 2
-            date_key = due
         elif (due - today).days <= 7:
             group = 3
-            date_key = due
         else:
             group = 4
-            date_key = due
+
+        # Due date: soonest first (use max date for no due date)
+        due_key = due if due else date.max
+
+        # Created date: oldest first
+        created_key = todo.created_date or today
 
         # Priority: 1, 2, 3, then 999 for no priority
         priority_key = todo.priority.value if todo.priority else 999
 
-        # line_number preserves document order for todos from the same source
-        return (group, date_key, priority_key, todo.line_number)
+        # File/section: source path for grouping todos from same file together
+        source_key = str(todo.source.path) if todo.source else ""
+
+        # Line number preserves document order for todos from the same source
+        return (group, due_key, created_key, priority_key, source_key, todo.line_number)
 
     return sorted(todos, key=sort_key)
 

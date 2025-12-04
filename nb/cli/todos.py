@@ -21,7 +21,7 @@ from nb.core.todos import (
     set_todo_status_in_file,
     toggle_todo_in_file,
 )
-from nb.index.scanner import index_all_notes
+from nb.index.scanner import index_all_notes, remove_deleted_notes
 from nb.index.todos_repo import (
     get_sorted_todos,
     get_todo_children,
@@ -80,7 +80,7 @@ def register_todo_commands(cli: click.Group) -> None:
 )
 @click.option(
     "--exclude-notebook",
-    "-N",
+    "-xn",
     multiple=True,
     help="Exclude todos from this notebook (repeatable)",
     shell_complete=complete_notebook,
@@ -212,10 +212,10 @@ def todo(
     \b
     Source Filters:
       -t, --tag TAG             Include only todos with this tag
-      -T, --exclude-tag TAG     Exclude todos with this tag (repeatable)
+      -xt, --exclude-tag TAG     Exclude todos with this tag (repeatable)
       -n, --notebook NAME       Filter by notebook (repeatable for multiple)
-      --note PATH               Filter by specific note path (repeatable)
-      -N, --exclude-notebook    Exclude todos from this notebook (repeatable)
+      -N, --note PATH               Filter by specific note path (repeatable)
+      -xn, --exclude-notebook    Exclude todos from this notebook (repeatable)
       -p, --priority N          Filter by priority (1=high, 2=medium, 3=low)
 
     \b
@@ -377,6 +377,9 @@ def todo(
 
         # Ensure todos are indexed (skip vector indexing for speed)
         index_all_notes(index_vectors=False)
+
+        # Clean up notes/todos for files that no longer exist (e.g., moved or deleted)
+        remove_deleted_notes()
 
         # Get excluded notebooks from config (unless --all, specific notebooks, or specific notes requested)
         all_excluded_notebooks: list[str] | None = None
@@ -839,7 +842,7 @@ def _list_todos(
             groups["DUE NEXT WEEK"] = []
 
     # Sort todos within each group
-    # line_number is used as a tiebreaker to maintain document order for todos from the same source
+    # Default sort order: due-date -> created-date -> priority -> file/section -> line #
     def get_sort_key(todo):
         if sort_by == "tag":
             return (
@@ -857,9 +860,12 @@ def _list_todos(
                 todo.content.lower(),
                 todo.line_number,
             )
-        else:  # default: sort by due date, then line_number to preserve document order
+        else:  # default: due-date -> created-date -> priority -> file/section -> line #
             due = todo.due_date_only if todo.due_date else date.max
-            return (due, todo.line_number, todo.content.lower())
+            created = todo.created_date or date.min
+            prio = todo.priority.value if todo.priority else 999
+            source = str(todo.source.path) if todo.source else ""
+            return (due, created, prio, source, todo.line_number)
 
     for group_todos in groups.values():
         group_todos.sort(key=get_sort_key)
