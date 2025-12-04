@@ -309,6 +309,11 @@ def todo(
                     else:
                         note_part = parts[1]
 
+            # If no explicit notebook in note_ref but -n was used with a single notebook,
+            # use that as context for note resolution
+            if nb_hint is None and len(effective_notebooks) == 1:
+                nb_hint = effective_notebooks[0]
+
             try:
                 resolved_path, note_section = resolve_note_for_todo_filter(
                     note_part, notebook=nb_hint

@@ -124,7 +124,7 @@ todo_exclude: true
 - [x] default sort order for todo items: due-section -> due-date (soonest first) -> created-date (oldest first) -> priority -> file/section -> line #
 - [ ] Allow low priority items (priorty(low))
 - [x] 'nb open last -n personal' should work to open last note in personal as well (`nb last -n personal` works fine)
-- [ ] `nb stream --modified-today` and `nb stream --viewed-today` or something like that - does that exist?
+- [x] `nb stream --modified-today` and `nb stream --viewed-today` or something like that - does that exist?
 
 ### Phase 5: Wijjit TUI
 - [ ] Full Wijjit-based todo list view with richer interactions #feature

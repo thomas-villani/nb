@@ -388,11 +388,13 @@ def resolve_note_for_todo_filter(
             return (normalize_path(linked.path), section_pattern)
 
     # Check if it matches a linked note alias (from config or DB)
-    linked_note = get_linked_note(check_ref)
+    # Pass notebook to constrain to that notebook if specified
+    linked_note = get_linked_note(check_ref, notebook=notebook)
     if linked_note:
         return (normalize_path(linked_note.path), section_pattern)
 
     # Also check linked todo files (from config or DB)
+    # Note: linked files don't have notebooks, they're standalone todo files
     linked_file = get_linked_file(check_ref)
     if linked_file:
         return (normalize_path(linked_file.path), section_pattern)

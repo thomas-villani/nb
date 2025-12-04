@@ -144,17 +144,27 @@ def last_note(show: bool, notebook: str | None, viewed: bool) -> None:
     "--full-path", "-f", is_flag=True, help="Show full paths instead of filenames"
 )
 @click.option("--group", "-g", is_flag=True, help="Group entries by notebook")
+@click.option(
+    "--open", "open_index", type=int, help="Open note at index N from history"
+)
 def history_cmd(
-    limit: int, offset: int, notebook: str | None, full_path: bool, group: bool
+    limit: int,
+    offset: int,
+    notebook: str | None,
+    full_path: bool,
+    group: bool,
+    open_index: int | None,
 ) -> None:
     """Show recently viewed notes.
 
     Displays a list of notes you've recently opened with timestamps.
+    Each entry is numbered so you can quickly open one with --open.
     Use --group to organize entries by notebook.
 
     \b
     Examples:
       nb history             # Show last 10 viewed notes (interleaved)
+      nb history --open 2    # Open the 2nd note in history list
       nb history -l 50       # Show last 50 viewed notes
       nb history -o 10       # Skip first 10, show next 10
       nb history -n work     # Show recently viewed notes in 'work' notebook
@@ -249,19 +259,39 @@ def history_cmd(
             (path, rel_path, timestamps, view_count, linked_alias, nb_name)
         )
 
+    # Handle --open option: open the note at the specified index
+    if open_index is not None:
+        if open_index < 1 or open_index > len(resolved_views):
+            console.print(
+                f"[red]Invalid index: {open_index}. "
+                f"Valid range is 1-{len(resolved_views)}.[/red]"
+            )
+            raise SystemExit(1)
+
+        # Get the note at the specified index (1-based)
+        note_path, _, _, _, _, _ = resolved_views[open_index - 1]
+        from nb.utils.editor import open_in_editor
+
+        open_in_editor(note_path)
+        return
+
+    # Calculate index width for consistent formatting
+    index_width = len(str(len(resolved_views)))
+
     if group:
         # Group by notebook (old behavior)
+        # Track original index for --open compatibility
         views_by_notebook: dict[str, list] = defaultdict(list)
-        for (
+        for idx, (
             path,
             rel_path,
             timestamps,
             view_count,
             linked_alias,
             nb_name,
-        ) in resolved_views:
+        ) in enumerate(resolved_views, 1):
             views_by_notebook[nb_name].append(
-                (path, rel_path, timestamps, view_count, linked_alias)
+                (idx, path, rel_path, timestamps, view_count, linked_alias)
             )
 
         # Sort notebooks alphabetically (empty string last, @external last)
@@ -284,9 +314,16 @@ def history_cmd(
                 console.print("[bold dim](root)[/bold dim]")
 
             # Sort views by most recent timestamp within each notebook
-            nb_views.sort(key=lambda x: x[2][0], reverse=True)
+            nb_views.sort(key=lambda x: x[3][0], reverse=True)
 
-            for _abs_path, rel_path, timestamps, view_count, linked_alias in nb_views:
+            for (
+                idx,
+                _abs_path,
+                rel_path,
+                timestamps,
+                view_count,
+                linked_alias,
+            ) in nb_views:
                 # Format the timestamp (use most recent)
                 time_str = timestamps[0].strftime(
                     f"{config.date_format} {config.time_format}"
@@ -308,21 +345,24 @@ def history_cmd(
                 if linked_alias:
                     alias_str = f" [dim](@{linked_alias})[/dim]"
 
+                # Format index with consistent width
+                idx_str = f"[dim]{idx:>{index_width}}[/dim]"
+
                 console.print(
-                    f"  [dim]{time_str}[/dim]  {display_path}{alias_str}{count_str}"
+                    f"  {idx_str}  [dim]{time_str}[/dim]  {display_path}{alias_str}{count_str}"
                 )
 
             console.print()  # Blank line between notebooks
     else:
         # Interleaved display (new default) - sorted by most recent first
-        for (
+        for idx, (
             _path,
             rel_path,
             timestamps,
             view_count,
             linked_alias,
             nb_name,
-        ) in resolved_views:
+        ) in enumerate(resolved_views, 1):
             # Format the timestamp (use most recent)
             time_str = timestamps[0].strftime(
                 f"{config.date_format} {config.time_format}"
@@ -354,8 +394,11 @@ def history_cmd(
             else:
                 nb_display = "[dim](root)[/dim]"
 
+            # Format index with consistent width
+            idx_str = f"[dim]{idx:>{index_width}}[/dim]"
+
             console.print(
-                f"[dim]{time_str}[/dim]  {nb_display}  {display_path}{alias_str}{count_str}"
+                f"{idx_str}  [dim]{time_str}[/dim]  {nb_display}  {display_path}{alias_str}{count_str}"
             )
 
 
