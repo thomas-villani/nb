@@ -977,7 +977,7 @@ def _calculate_column_widths(
     terminal_width = console.width or 120
     # Cap terminal width to prevent excessively long lines
     # (some terminals/environments report width larger than visible area)
-    terminal_width = min(terminal_width, 150)
+    # terminal_width = min(terminal_width, 150)
     min_content_width = 25
     max_content_width = 60  # Don't pad content beyond this for readability
 

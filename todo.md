@@ -125,7 +125,8 @@ todo_exclude: true
 
 ### Phase 5: Wijjit TUI
 - [ ] Full Wijjit-based todo list view with richer interactions #feature
-- [ ] Full Wijjit based editor for notes #feature
+- [ ] Wijjit-based todo review #feature
+- [ ] Full Wijjit based viewer/editor for notes #feature
 - [x] Stream/continuous view (`nb stream`) with lazy loading
 - [ ] Interactive filtering UI #feature
 - [x] Navigation and links #feature
