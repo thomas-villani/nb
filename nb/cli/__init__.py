@@ -14,6 +14,7 @@ import click
 
 from nb import __version__
 from nb.cli.attachments import register_attachment_commands
+from nb.cli.clip import register_clip_commands
 from nb.cli.completion import (
     complete_notebook,
     handle_powershell_completion,
@@ -50,6 +51,7 @@ class AliasedGroup(click.Group):
         "nbs": "notebooks",
         "td": "todo",
         "rec": "record",
+        "c": "clip",
     }
 
     # Special aliases that need argument injection
@@ -214,6 +216,7 @@ register_tags_commands(cli)
 register_web_commands(cli)
 register_record_commands(cli)
 register_transcribe_commands(cli)
+register_clip_commands(cli)
 
 
 def main() -> None:

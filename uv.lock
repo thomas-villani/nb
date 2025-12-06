@@ -23,6 +23,148 @@ wheels = [
 ]
 
 [[package]]
+name = "all2md"
+version = "1.0.0a0"
+source = { path = "wheels/all2md-1.0.0a0-py3-none-any.whl" }
+dependencies = [
+    { name = "pyyaml" },
+    { name = "tomli-w" },
+]
+wheels = [
+    { filename = "all2md-1.0.0a0-py3-none-any.whl", hash = "sha256:bef4743ac78681aac1a2c84d9cb29d8e5558ba59594691f421803e7af9e21d5e" },
+]
+
+[package.optional-dependencies]
+html = [
+    { name = "beautifulsoup4" },
+    { name = "chardet" },
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "beautifulsoup4", marker = "extra == 'all'", specifier = ">=4.14.2" },
+    { name = "beautifulsoup4", marker = "extra == 'dev'", specifier = ">=4.14.2" },
+    { name = "beautifulsoup4", marker = "extra == 'html'", specifier = ">=4.13.5" },
+    { name = "black", marker = "extra == 'dev'", specifier = ">=25.9.0" },
+    { name = "bleach", marker = "extra == 'sanitizer'", specifier = ">=6.2.0" },
+    { name = "chardet", marker = "extra == 'all'", specifier = ">=5.2.0" },
+    { name = "chardet", marker = "extra == 'dev'", specifier = ">=5.2.0" },
+    { name = "chardet", marker = "extra == 'html'", specifier = ">=5.2.0" },
+    { name = "chardet", marker = "extra == 'markdown'", specifier = ">=5.2.0" },
+    { name = "chardet", marker = "extra == 'org'", specifier = ">=5.2.0" },
+    { name = "chardet", marker = "extra == 'rst'", specifier = ">=5.2.0" },
+    { name = "chardet", marker = "extra == 'textile'", specifier = ">=5.2.0" },
+    { name = "chardet", marker = "extra == 'wiki'", specifier = ">=5.2.0" },
+    { name = "chardet", marker = "extra == 'xlsx'", specifier = ">=5.2.0" },
+    { name = "docutils", marker = "extra == 'all'", specifier = ">=0.20" },
+    { name = "docutils", marker = "extra == 'dev'", specifier = ">=0.20" },
+    { name = "docutils", marker = "extra == 'rst'", specifier = ">=0.20" },
+    { name = "ebooklib", marker = "extra == 'all'", specifier = ">=0.19" },
+    { name = "ebooklib", marker = "extra == 'dev'", specifier = ">=0.19" },
+    { name = "ebooklib", marker = "extra == 'epub'", specifier = ">=0.19" },
+    { name = "extract-msg", marker = "extra == 'all'", specifier = ">=0.37.1" },
+    { name = "extract-msg", marker = "extra == 'dev'", specifier = ">=0.37.1" },
+    { name = "extract-msg", marker = "extra == 'outlook'", specifier = ">=0.37.1" },
+    { name = "faiss-cpu", marker = "extra == 'search'", specifier = ">=1.7.4" },
+    { name = "fastmcp", marker = "extra == 'all'", specifier = ">=2.0.0" },
+    { name = "fastmcp", marker = "extra == 'dev'", specifier = ">=2.0.0" },
+    { name = "fastmcp", marker = "extra == 'mcp'", specifier = ">=2.0.0" },
+    { name = "httpx", marker = "extra == 'all'", specifier = ">=0.28.1" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.1" },
+    { name = "httpx", marker = "extra == 'html'", specifier = ">=0.28.1" },
+    { name = "httpx", marker = "extra == 'http'", specifier = ">=0.28.1" },
+    { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.100.0" },
+    { name = "jinja2", marker = "extra == 'all'", specifier = ">=3.1.0" },
+    { name = "jinja2", marker = "extra == 'dev'", specifier = ">=3.1.0" },
+    { name = "jinja2", marker = "extra == 'templates'", specifier = ">=3.1.0" },
+    { name = "langdetect", marker = "extra == 'langdetect'", specifier = ">=1.0.9" },
+    { name = "mistune", marker = "extra == 'all'", specifier = ">=3.0.0" },
+    { name = "mistune", marker = "extra == 'dev'", specifier = ">=3.0.0" },
+    { name = "mistune", marker = "extra == 'markdown'", specifier = ">=3.0.0" },
+    { name = "mwparserfromhell", marker = "extra == 'wiki'", specifier = ">=0.7.2" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.18.2" },
+    { name = "odfpy", marker = "extra == 'all'", specifier = ">=1.4.1" },
+    { name = "odfpy", marker = "extra == 'dev'", specifier = ">=1.4.1" },
+    { name = "odfpy", marker = "extra == 'odf'", specifier = ">=1.4.1" },
+    { name = "openpyxl", marker = "extra == 'all'", specifier = ">=3.1.5" },
+    { name = "openpyxl", marker = "extra == 'dev'", specifier = ">=3.1.5" },
+    { name = "openpyxl", marker = "extra == 'xlsx'", specifier = ">=3.1.5" },
+    { name = "orgparse", marker = "extra == 'all'", specifier = ">=0.4.20250520" },
+    { name = "orgparse", marker = "extra == 'dev'", specifier = ">=0.4.20250520" },
+    { name = "orgparse", marker = "extra == 'org'", specifier = ">=0.4.20250520" },
+    { name = "pillow", marker = "extra == 'all'", specifier = ">=11.3.0" },
+    { name = "pillow", marker = "extra == 'dev'", specifier = ">=11.3.0" },
+    { name = "pillow", marker = "extra == 'ocr'", specifier = ">=11.3.0" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.3.0" },
+    { name = "py7zr", marker = "extra == 'all'", specifier = ">=0.22.0" },
+    { name = "py7zr", marker = "extra == 'archive'", specifier = ">=0.22.0" },
+    { name = "py7zr", marker = "extra == 'dev'", specifier = ">=0.22.0" },
+    { name = "pychm", marker = "extra == 'chm'", specifier = ">=0.8.6" },
+    { name = "pylatexenc", marker = "extra == 'all'", specifier = ">=2.10" },
+    { name = "pylatexenc", marker = "extra == 'dev'", specifier = ">=2.10" },
+    { name = "pylatexenc", marker = "extra == 'latex'", specifier = ">=2.10" },
+    { name = "pymupdf", marker = "extra == 'all'", specifier = ">=1.26.5" },
+    { name = "pymupdf", marker = "extra == 'dev'", specifier = ">=1.26.5" },
+    { name = "pymupdf", marker = "extra == 'pdf'", specifier = ">=1.26.5" },
+    { name = "pytesseract", marker = "extra == 'all'", specifier = ">=0.3.10" },
+    { name = "pytesseract", marker = "extra == 'dev'", specifier = ">=0.3.10" },
+    { name = "pytesseract", marker = "extra == 'ocr'", specifier = ">=0.3.10" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.0.0" },
+    { name = "pyth3", marker = "extra == 'all'", specifier = ">=0.7" },
+    { name = "pyth3", marker = "extra == 'dev'", specifier = ">=0.7" },
+    { name = "pyth3", marker = "extra == 'rtf'", specifier = ">=0.7" },
+    { name = "python-docx", marker = "extra == 'all'", specifier = ">=1.2.0" },
+    { name = "python-docx", marker = "extra == 'dev'", specifier = ">=1.2.0" },
+    { name = "python-docx", marker = "extra == 'docx'", specifier = ">=1.2.0" },
+    { name = "python-docx", marker = "extra == 'docx-render'", specifier = ">=1.2.0" },
+    { name = "python-pptx", marker = "extra == 'all'", specifier = ">=1.0.2" },
+    { name = "python-pptx", marker = "extra == 'dev'", specifier = ">=1.0.2" },
+    { name = "python-pptx", marker = "extra == 'pptx'", specifier = ">=1.0.2" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "pyyaml", marker = "extra == 'all'", specifier = ">=6.0" },
+    { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
+    { name = "pyyaml", marker = "extra == 'openapi'", specifier = ">=6.0" },
+    { name = "rank-bm25", marker = "extra == 'search'", specifier = ">=0.2.2" },
+    { name = "rarfile", marker = "extra == 'all'", specifier = ">=4.2" },
+    { name = "rarfile", marker = "extra == 'archive'", specifier = ">=4.2" },
+    { name = "rarfile", marker = "extra == 'dev'", specifier = ">=4.2" },
+    { name = "readability-lxml", marker = "extra == 'all'", specifier = ">=0.8.1" },
+    { name = "readability-lxml", marker = "extra == 'dev'", specifier = ">=0.8.1" },
+    { name = "readability-lxml", marker = "extra == 'html-readability'", specifier = ">=0.8.1" },
+    { name = "reportlab", marker = "extra == 'all'", specifier = ">=4.0.0" },
+    { name = "reportlab", marker = "extra == 'dev'", specifier = ">=4.0.0" },
+    { name = "reportlab", marker = "extra == 'pdf-render'", specifier = ">=4.0.0" },
+    { name = "rich", marker = "extra == 'all'", specifier = ">=14.2.0" },
+    { name = "rich", marker = "extra == 'cli-extras'", specifier = ">=14.2.0" },
+    { name = "rich", marker = "extra == 'dev'", specifier = ">=14.2.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.0" },
+    { name = "sentence-transformers", marker = "extra == 'search'", specifier = ">=2.2.2" },
+    { name = "six", marker = "extra == 'rtf'", specifier = ">=1.16.0" },
+    { name = "sphinx", marker = "extra == 'dev'", specifier = ">=8.2.3" },
+    { name = "sphinx-copybutton", marker = "extra == 'dev'", specifier = ">=0.5.2" },
+    { name = "sphinx-rtd-theme", marker = "extra == 'dev'", specifier = ">=3.0.2" },
+    { name = "syrupy", marker = "extra == 'dev'", specifier = ">=4.6.0" },
+    { name = "textile", marker = "extra == 'all'", specifier = ">=4.0.1" },
+    { name = "textile", marker = "extra == 'dev'", specifier = ">=4.0.1" },
+    { name = "textile", marker = "extra == 'textile'", specifier = ">=4.0.1" },
+    { name = "tomli-w", specifier = ">=1.0.0" },
+    { name = "tqdm", marker = "extra == 'all'", specifier = ">=4.66.0" },
+    { name = "tqdm", marker = "extra == 'cli-extras'", specifier = ">=4.66.0" },
+    { name = "tqdm", marker = "extra == 'dev'", specifier = ">=4.66.0" },
+    { name = "types-beautifulsoup4", marker = "extra == 'dev'" },
+    { name = "types-docutils", marker = "extra == 'dev'" },
+    { name = "types-lxml", marker = "extra == 'dev'" },
+    { name = "types-pillow", marker = "extra == 'dev'" },
+    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12.20250915" },
+    { name = "types-reportlab", marker = "extra == 'dev'" },
+    { name = "watchdog", marker = "extra == 'all'", specifier = ">=4.0.0" },
+    { name = "watchdog", marker = "extra == 'cli-extras'", specifier = ">=4.0.0" },
+    { name = "watchdog", marker = "extra == 'dev'", specifier = ">=4.0.0" },
+]
+
+[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -51,6 +193,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7d/6b/d52e42361e1aa00709585ecc30b3f9684b3ab62530771402248b1b1d6240/babel-2.17.0.tar.gz", hash = "sha256:0c54cffb19f690cdcc52a3b50bcbf71e07a808d1c80d549f2459b9d2cf0afb9d", size = 9951852 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/b8/3fe70c75fe32afc4bb507f75563d39bc5642255d1d94f1f23604725780bf/babel-2.17.0-py3-none-any.whl", hash = "sha256:4d0b53093fdfb4b21c92b5213dba5a1b23885afa8383709427046b21c366e5f2", size = 10182537 },
+]
+
+[[package]]
+name = "beautifulsoup4"
+version = "4.14.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "soupsieve" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c3/b0/1c6a16426d389813b48d95e26898aff79abbde42ad353958ad95cc8c9b21/beautifulsoup4-4.14.3.tar.gz", hash = "sha256:6292b1c5186d356bba669ef9f7f051757099565ad9ada5dd630bd9de5fa7fb86", size = 627737 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1a/39/47f9197bdd44df24d67ac8893641e16f386c984a0619ef2ee4c51fbbc019/beautifulsoup4-4.14.3-py3-none-any.whl", hash = "sha256:0918bfe44902e6ad8d57732ba310582e98da931428d231a5ecb9e7c703a735bb", size = 107721 },
 ]
 
 [[package]]
@@ -130,6 +285,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/1d/ec1a60bd1a10daa292d3cd6bb0b359a81607154fb8165f3ec95fe003b85c/cffi-2.0.0-cp314-cp314t-win32.whl", hash = "sha256:1fc9ea04857caf665289b7a75923f2c6ed559b8298a1b8c49e59f7dd95c8481e", size = 180487 },
     { url = "https://files.pythonhosted.org/packages/bf/41/4c1168c74fac325c0c8156f04b6749c8b6a8f405bbf91413ba088359f60d/cffi-2.0.0-cp314-cp314t-win_amd64.whl", hash = "sha256:d68b6cef7827e8641e8ef16f4494edda8b36104d79773a334beaa1e3521430f6", size = 191726 },
     { url = "https://files.pythonhosted.org/packages/ae/3a/dbeec9d1ee0844c679f6bb5d6ad4e9f198b1224f4e7a32825f47f6192b0c/cffi-2.0.0-cp314-cp314t-win_arm64.whl", hash = "sha256:0a1527a803f0a659de1af2e1fd700213caba79377e27e4693648c2923da066f9", size = 184195 },
+]
+
+[[package]]
+name = "chardet"
+version = "5.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f3/0d/f7b6ab21ec75897ed80c17d79b15951a719226b9fababf1e40ea74d69079/chardet-5.2.0.tar.gz", hash = "sha256:1b3b6ff479a8c414bc3fa2c0852995695c4a026dcd6d0633b2dd092ca39c1cf7", size = 2069618 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/38/6f/f5fbc992a329ee4e0f288c1fe0e2ad9485ed064cac731ed2fe47dcc38cbf/chardet-5.2.0-py3-none-any.whl", hash = "sha256:e1cf59446890a00105fe7b7912492ea04b6e6f06d4b742b2c788469e34c82970", size = 199385 },
 ]
 
 [[package]]
@@ -597,10 +761,12 @@ wheels = [
 
 [[package]]
 name = "nb-cli"
-version = "0.2.0"
+version = "0.2.4"
 source = { editable = "." }
 dependencies = [
+    { name = "all2md", extra = ["html"] },
     { name = "click" },
+    { name = "httpx" },
     { name = "localvectordb" },
     { name = "psutil" },
     { name = "python-dateutil" },
@@ -631,9 +797,11 @@ recorder = [
 
 [package.metadata]
 requires-dist = [
+    { name = "all2md", extras = ["html"], path = "wheels/all2md-1.0.0a0-py3-none-any.whl" },
     { name = "black", marker = "extra == 'dev'" },
     { name = "click", specifier = ">=8.0" },
     { name = "deepgram-sdk", marker = "extra == 'recorder'", specifier = ">=3.0.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "localvectordb", path = "wheels/localvectordb-1.0.0-py3-none-any.whl" },
     { name = "mypy", marker = "extra == 'dev'" },
@@ -1150,6 +1318,15 @@ wheels = [
 ]
 
 [[package]]
+name = "soupsieve"
+version = "2.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6d/e6/21ccce3262dd4889aa3332e5a119a3491a95e8f60939870a3a035aabac0d/soupsieve-2.8.tar.gz", hash = "sha256:e2dd4a40a628cb5f28f6d4b0db8800b8f581b65bb380b97de22ba5ca8d72572f", size = 103472 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/a0/bb38d3b76b8cae341dad93a2dd83ab7462e6dbcdd84d43f54ee60a8dc167/soupsieve-2.8-py3-none-any.whl", hash = "sha256:0cc76456a30e20f5d7f2e14a98a4ae2ee4e5abdc7c5ea0aafe795f344bc7984c", size = 36679 },
+]
+
+[[package]]
 name = "sphinx"
 version = "8.2.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1295,6 +1472,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/28/c0/3c7a39ff68022ddfd7d93f3337ad90389a342f761c4d71de99a3ccc57857/tiktoken-0.12.0-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:54c891b416a0e36b8e2045b12b33dd66fb34a4fe7965565f1b482da50da3e86a", size = 1194908 },
     { url = "https://files.pythonhosted.org/packages/ab/0d/c1ad6f4016a3968c048545f5d9b8ffebf577774b2ede3e2e352553b685fe/tiktoken-0.12.0-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:5edb8743b88d5be814b1a8a8854494719080c28faaa1ccbef02e87354fe71ef0", size = 1253706 },
     { url = "https://files.pythonhosted.org/packages/af/df/c7891ef9d2712ad774777271d39fdef63941ffba0a9d59b7ad1fd2765e57/tiktoken-0.12.0-cp314-cp314t-win_amd64.whl", hash = "sha256:f61c0aea5565ac82e2ec50a05e02a6c44734e91b51c10510b084ea1b8e633a71", size = 920667 },
+]
+
+[[package]]
+name = "tomli-w"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/19/75/241269d1da26b624c0d5e110e8149093c759b7a286138f4efd61a60e75fe/tomli_w-1.2.0.tar.gz", hash = "sha256:2dd14fac5a47c27be9cd4c976af5a12d87fb1f0b4512f81d69cce3b35ae25021", size = 7184 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c7/18/c86eb8e0202e32dd3df50d43d7ff9854f8e0603945ff398974c1d91ac1ef/tomli_w-1.2.0-py3-none-any.whl", hash = "sha256:188306098d013b691fcadc011abd66727d3c414c571bb01b1a174ba8c983cf90", size = 6675 },
 ]
 
 [[package]]

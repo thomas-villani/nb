@@ -125,6 +125,8 @@ todo_exclude: true
 - [ ] Allow low priority items (priorty(low))
 - [x] 'nb open last -n personal' should work to open last note in personal as well (`nb last -n personal` works fine)
 - [x] `nb stream --modified-today` and `nb stream --viewed-today` or something like that - does that exist?
+- [ ] Allow `tb todo due` to allow multiple todo items, and allow "next week" or "+7" as options too
+
 
 ### Phase 5: Wijjit TUI
 - [ ] Full Wijjit-based todo list view with richer interactions #feature

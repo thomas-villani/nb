@@ -25,6 +25,8 @@ dependencies = [
     "rich>=13.0", # pretty printing in CLI
     "localvectordb",
     "psutil>=7.1.3",
+    "httpx>=0.27.0", # web clipping
+    "all2md[html]>=1.0.0", # HTML to markdown conversion
 ]
 [project.scripts]
 nb = "nb.cli:main"
@@ -70,6 +72,7 @@ exclude_lines = [
 
 [tool.uv.sources]
 localvectordb = { path = "wheels/localvectordb-1.0.0-py3-none-any.whl" }
+all2md = { path = "wheels/all2md-1.0.0a0-py3-none-any.whl" }
 
 
 [tool.bumpversion]

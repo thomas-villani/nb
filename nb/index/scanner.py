@@ -312,10 +312,11 @@ def index_note(
         )
 
     # Update links (using extracted links with full metadata)
+    # Use INSERT OR IGNORE to handle duplicate target links in the same note
     db.execute("DELETE FROM note_links WHERE source_path = ?", (normalized_note_path,))
     if all_links:
         db.executemany(
-            """INSERT INTO note_links
+            """INSERT OR IGNORE INTO note_links
                (source_path, target_path, display_text, link_type, is_external)
                VALUES (?, ?, ?, ?, ?)""",
             [
@@ -601,10 +602,11 @@ def index_note_threadsafe(
         )
 
     # Update links (using extracted links with full metadata)
+    # Use INSERT OR IGNORE to handle duplicate target links in the same note
     db.execute("DELETE FROM note_links WHERE source_path = ?", (normalized_note_path,))
     if all_links:
         db.executemany(
-            """INSERT INTO note_links
+            """INSERT OR IGNORE INTO note_links
                (source_path, target_path, display_text, link_type, is_external)
                VALUES (?, ?, ?, ?, ?)""",
             [
@@ -1274,10 +1276,11 @@ def index_linked_note(
         )
 
     # Update links (using extracted links with full metadata)
+    # Use INSERT OR IGNORE to handle duplicate target links in the same note
     db.execute("DELETE FROM note_links WHERE source_path = ?", (note_path,))
     if all_links:
         db.executemany(
-            """INSERT INTO note_links
+            """INSERT OR IGNORE INTO note_links
                (source_path, target_path, display_text, link_type, is_external)
                VALUES (?, ?, ?, ?, ?)""",
             [
