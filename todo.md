@@ -118,14 +118,16 @@ todo_exclude: true
 - [x] Better daily metrics - what was completed today? By notebook. `nb completed` or `nb done` something
 - [x] Add --about flag
 - [x] `nb new <existing>` should prompt to open when exists
-- [ ] give notes a unique ID as well so they can be quick loaded and included on listings
-- [ ] Add numbering to `nb history` list and allow loading notes from history command like `nb history open 2`
+- [ ] give notes a unique ID as well so they can be quick loaded and included on listings like the todos
+- [ ] Add numbering to `nb history` list and allow loading notes from history command like `nb history open 2` or `nb open --history 2`
 - [ ] Capture url and other file attachments as markdown using all2md #feature
 - [x] default sort order for todo items: due-section -> due-date (soonest first) -> created-date (oldest first) -> priority -> file/section -> line #
-- [ ] Allow low priority items (priorty(low))
+- [ ] Allow low priority items (priority(low))
 - [x] 'nb open last -n personal' should work to open last note in personal as well (`nb last -n personal` works fine)
 - [x] `nb stream --modified-today` and `nb stream --viewed-today` or something like that - does that exist?
 - [ ] Allow `tb todo due` to allow multiple todo items, and allow "next week" or "+7" as options too
+- [ ] Add a way to create a log-style command `nb log` which is like `nb add` but will insert a date/time as well.
+- [ ] Add "overdue-by-notebook" to stats and "what's behind"
 
 
 ### Phase 5: Wijjit TUI

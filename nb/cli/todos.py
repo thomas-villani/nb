@@ -2169,6 +2169,7 @@ def todo_due(todo_id: tuple[str, ...], date_expr: str) -> None:
     DATE_EXPR can be:
     - A date: "2025-12-15", "dec 15", "tomorrow", "friday"
     - A date with time: "2025-12-15 14:30", "tomorrow 2pm", "friday 9am"
+    - Relative days: "+7" (7 days from now), "+1" (tomorrow), "+30"
     - "none" or "clear" to remove the due date
 
     Note: "friday" means the NEXT Friday (future), not the most recent.
@@ -2181,6 +2182,7 @@ def todo_due(todo_id: tuple[str, ...], date_expr: str) -> None:
       nb todo due abc123 2025-12-15
       nb todo due abc123 "friday 2pm"   # With time
       nb todo due abc123 "tomorrow 9am"
+      nb todo due abc123 +7             # 7 days from now
       nb todo due abc123 none           # Remove due date
       nb todo due abc def friday        # Multiple IDs
     """

@@ -123,6 +123,9 @@ nb add "Note" --note myproject       # Append to specific note
 nb add "Note" --note work/myproject  # Notebook/note format
 nb add "Note" -N proj                # Using alias
 
+nb log "Started feature X"           # Append with timestamp to today's note
+nb log "Meeting notes" -N project    # Timestamp + content to specific note
+
 # Stdin piping support
 echo "random thought" | nb add              # Pipe to today's note
 cat notes.txt | nb add                      # Pipe file content
@@ -359,6 +362,8 @@ nb todo delete abc -f   # Delete without confirmation
 nb todo due abc123 friday      # Set due to next Friday
 nb todo due abc123 tomorrow    # Set due to tomorrow
 nb todo due abc123 "dec 25"    # Set due to specific date
+nb todo due abc123 +7          # Set due 7 days from now
+nb todo due abc123 +30         # Set due 30 days from now
 nb todo due abc123 none        # Remove due date
 nb todo due abc def friday     # Set multiple todos at once
 
@@ -778,6 +783,26 @@ Notes related to myproject
     projects/config-guide.md
     shared tags: #project, #docs, similar content (65%)
 ```
+
+### Web Clipping
+
+Clip content from URLs or convert local files to markdown notes:
+
+```bash
+# Clip from URLs
+nb clip https://example.com/article           # Append to today's note
+nb clip https://example.com/article -n bookmarks  # Create note in notebook
+nb clip https://example.com/article --to projects/research  # Append to note
+nb clip https://example.com/article --section "Installation"  # Extract section
+nb clip https://example.com/article --tag research --tag python
+
+# Convert local files (PDF, DOCX, PPTX, etc.)
+nb clip ~/Documents/report.pdf               # Convert PDF to markdown
+nb clip ./meeting-notes.docx -n work         # DOCX to work notebook
+nb clip presentation.pptx --title "Q4 Deck"  # Custom title
+```
+
+Supported file types: PDF, DOCX, DOC, PPTX, XLSX, ODT, EPUB, RTF, HTML, and more.
 
 ### Attachments
 
@@ -1225,9 +1250,11 @@ Metadata can be added inline after the todo text:
 
 | Element | Syntax | Examples |
 |---------|--------|----------|
-| Due date | `@due(...)` | `@due(friday)`, `@due(2025-12-01)`, `@due(next week)`, `@due(tomorrow)` |
-| Priority | `@priority(1\|2\|3)` | `@priority(1)` (1=high, 2=medium, 3=low) |
+| Due date | `@due(...)` | `@due(friday)`, `@due(2025-12-01)`, `@due(next week)`, `@due(+7)` |
+| Priority | `@priority(...)` | `@priority(1)`, `@priority(high)`, `@priority(low)` |
 | Tags | `#tag` | `#work`, `#urgent`, `#project-alpha` |
+
+Priority levels: `1` or `high`, `2` or `medium`, `3` or `low`
 
 **Tag Inheritance**: Todos automatically inherit tags from their note's frontmatter. For example, if a note has `tags: [project, urgent]` in frontmatter, all todos in that note will have those tags in addition to any inline `#tags`.
 

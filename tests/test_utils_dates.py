@@ -15,6 +15,7 @@ from nb.utils.dates import (
     parse_date_from_filename,
     parse_date_range,
     parse_fuzzy_date,
+    parse_fuzzy_date_future,
     parse_week_folder_name,
 )
 
@@ -609,3 +610,45 @@ class TestFormatDatetime:
 
         dt = datetime(2025, 12, 1, 14, 30)
         assert format_datetime(dt, include_time=False) == "2025-12-01"
+
+
+class TestPlusNSyntax:
+    """Tests for +N days syntax in date parsing."""
+
+    def test_plus_zero(self, fixed_today: date):
+        result = parse_fuzzy_date_future("+0")
+        assert result == fixed_today
+
+    def test_plus_one(self, fixed_today: date):
+        result = parse_fuzzy_date_future("+1")
+        assert result == fixed_today + timedelta(days=1)
+
+    def test_plus_seven(self, fixed_today: date):
+        result = parse_fuzzy_date_future("+7")
+        assert result == fixed_today + timedelta(days=7)
+
+    def test_plus_thirty(self, fixed_today: date):
+        result = parse_fuzzy_date_future("+30")
+        assert result == fixed_today + timedelta(days=30)
+
+    def test_plus_with_time(self, fixed_today: date):
+        from datetime import datetime, time
+
+        from nb.utils.dates import parse_fuzzy_datetime_future
+
+        result = parse_fuzzy_datetime_future("+3 2pm")
+        expected = datetime.combine(fixed_today + timedelta(days=3), time(14, 0))
+        assert result == expected
+
+    def test_plus_is_relative(self):
+        from nb.utils.dates import is_relative_date
+
+        assert is_relative_date("+7") is True
+        assert is_relative_date("+30") is True
+        assert is_relative_date("+1") is True
+
+    def test_plus_with_time_is_relative(self):
+        from nb.utils.dates import is_relative_date
+
+        assert is_relative_date("+7 2pm") is True
+        assert is_relative_date("+1 9am") is True

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 
 from nb.cli.completion import complete_notebook
@@ -14,7 +16,7 @@ def register_clip_commands(cli: click.Group) -> None:
 
 
 @click.command()
-@click.argument("url")
+@click.argument("source")
 @click.option(
     "--notebook",
     "-n",
@@ -49,7 +51,7 @@ def register_clip_commands(cli: click.Group) -> None:
     help="Don't auto-tag with source domain",
 )
 def clip(
-    url: str,
+    source: str,
     notebook: str | None,
     target_note: str | None,
     tags: tuple[str, ...],
@@ -57,10 +59,12 @@ def clip(
     title: str | None,
     no_domain_tag: bool,
 ) -> None:
-    """Clip web content to a note.
+    """Clip content from URL or file to a note.
 
-    Fetches content from URL, converts to markdown, and saves as a note.
+    Fetches content from URL or converts local file to markdown and saves as a note.
     By default appends to today's daily note.
+
+    Supported file types: PDF, DOCX, DOC, PPTX, XLSX, ODT, EPUB, RTF, HTML, and more.
 
     \b
     Examples:
@@ -69,18 +73,20 @@ def clip(
       nb clip https://example.com/article --to projects/research.md
       nb clip https://example.com/article --tag research --tag python
       nb clip https://example.com/article --section "Installation"
-      nb clip https://example.com/article --title "My Custom Title"
+      nb clip ~/Documents/report.pdf
+      nb clip ./meeting-notes.docx -n work
+      nb clip presentation.pptx --title "Q4 Presentation"
     """
     import httpx
 
     from nb.config import get_config
-    from nb.core.clip import clip_url, save_clipped_note
+    from nb.core.clip import clip_file, clip_url, save_clipped_note
 
     config = get_config()
 
-    # Validate URL
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
+    # Detect if source is a file or URL
+    source_path = Path(source).expanduser()
+    is_file = source_path.exists()
 
     # Resolve target note if specified
     resolved_target = None
@@ -92,21 +98,41 @@ def clip(
         # Don't use notebook when appending to specific note
         notebook = None
 
-    # Clip the URL
-    console.print(f"[dim]Fetching {url}...[/dim]")
+    if is_file:
+        # Clip local file
+        console.print(f"[dim]Converting {source_path.name}...[/dim]")
 
-    try:
-        clipped = clip_url(url, section=section, title=title)
-    except httpx.HTTPStatusError as e:
-        console.print(f"[red]HTTP error: {e.response.status_code}[/red]")
-        console.print(f"[dim]{e.response.reason_phrase}[/dim]")
-        raise SystemExit(1) from None
-    except httpx.RequestError as e:
-        console.print(f"[red]Request failed: {e}[/red]")
-        raise SystemExit(1) from None
-    except Exception as e:
-        console.print(f"[red]Failed to clip URL: {e}[/red]")
-        raise SystemExit(1) from None
+        try:
+            clipped = clip_file(source_path, section=section, title=title)
+        except FileNotFoundError as e:
+            console.print(f"[red]File not found: {e}[/red]")
+            raise SystemExit(1) from None
+        except ValueError as e:
+            console.print(f"[red]Conversion failed: {e}[/red]")
+            raise SystemExit(1) from None
+        except Exception as e:
+            console.print(f"[red]Failed to convert file: {e}[/red]")
+            raise SystemExit(1) from None
+    else:
+        # Clip URL
+        url = source
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+
+        console.print(f"[dim]Fetching {url}...[/dim]")
+
+        try:
+            clipped = clip_url(url, section=section, title=title)
+        except httpx.HTTPStatusError as e:
+            console.print(f"[red]HTTP error: {e.response.status_code}[/red]")
+            console.print(f"[dim]{e.response.reason_phrase}[/dim]")
+            raise SystemExit(1) from None
+        except httpx.RequestError as e:
+            console.print(f"[red]Request failed: {e}[/red]")
+            raise SystemExit(1) from None
+        except Exception as e:
+            console.print(f"[red]Failed to clip URL: {e}[/red]")
+            raise SystemExit(1) from None
 
     console.print(f"[green]Clipped:[/green] {clipped.title}")
 

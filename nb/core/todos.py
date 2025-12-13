@@ -20,7 +20,12 @@ from nb.utils.hashing import make_attachment_id, make_todo_id
 # Captures: [ ] pending, [x]/[X] completed, [^] in progress
 TODO_PATTERN = re.compile(r"^(?P<indent>\s*)- \[(?P<state>[ xX^])\] (?P<content>.+)$")
 DUE_PATTERN = re.compile(r"@due\((?P<date>[^)]+)\)")
-PRIORITY_PATTERN = re.compile(r"@priority\((?P<level>[123])\)")
+PRIORITY_PATTERN = re.compile(
+    r"@priority\((?P<level>[123]|high|medium|low)\)", re.IGNORECASE
+)
+
+# Named priority to integer mapping
+PRIORITY_NAMES: dict[str, int] = {"high": 1, "medium": 2, "low": 3}
 TAG_PATTERN = re.compile(r"#([^ ]+)")
 ATTACH_PATTERN = re.compile(r"^\s*@attach:\s*(.+)$")
 
@@ -66,10 +71,19 @@ def parse_due_date(content: str) -> datetime | None:
 
 
 def parse_priority(content: str) -> Priority | None:
-    """Extract priority from todo content."""
+    """Extract priority from todo content.
+
+    Supports both numeric (@priority(1)) and named (@priority(high)) syntax.
+    Named priorities: high=1, medium=2, low=3.
+    """
     match = PRIORITY_PATTERN.search(content)
     if match:
-        level = int(match.group("level"))
+        level_str = match.group("level").lower()
+        # Check if it's a named priority
+        if level_str in PRIORITY_NAMES:
+            level = PRIORITY_NAMES[level_str]
+        else:
+            level = int(level_str)
         return Priority.from_int(level)
     return None
 

@@ -503,22 +503,26 @@ def _build_notebook_panel(by_notebook: dict[str, dict[str, int]]) -> Panel:
     table.add_column("Notebook", width=max_name_len, no_wrap=True)
     table.add_column("Progress", justify="left", no_wrap=True)
     table.add_column("Count", justify="right")
+    table.add_column("Overdue", justify="right")
 
     for nb_name, nb_stats in sorted_notebooks:
         total = nb_stats["total"]
         completed = nb_stats["completed"]
+        overdue = nb_stats.get("overdue", 0)
         rate = (completed / total * 100) if total > 0 else 0
 
         bar = render_bar(completed, total, width=12)
         rate_str = f"{rate:>4.0f}%"
 
         # Color overdue indicator
-        if nb_stats.get("overdue", 0) > 0:
+        if overdue > 0:
             nb_display = f"[red]{nb_name}[/red]"
+            overdue_display = f"[red]{overdue}[/red]"
         else:
             nb_display = nb_name
+            overdue_display = "[dim]-[/dim]"
 
-        table.add_row(nb_display, f"{bar}{rate_str}", str(total))
+        table.add_row(nb_display, f"{bar}{rate_str}", str(total), overdue_display)
 
     return Panel(table, title="By Notebook", border_style="green")
 

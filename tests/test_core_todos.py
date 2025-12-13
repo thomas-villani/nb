@@ -159,6 +159,24 @@ class TestParsePriority:
         result = parse_priority("Task without priority")
         assert result is None
 
+    def test_parses_named_high_priority(self):
+        result = parse_priority("Task @priority(high)")
+        assert result == Priority.HIGH
+
+    def test_parses_named_medium_priority(self):
+        result = parse_priority("Task @priority(medium)")
+        assert result == Priority.MEDIUM
+
+    def test_parses_named_low_priority(self):
+        result = parse_priority("Task @priority(low)")
+        assert result == Priority.LOW
+
+    def test_named_priority_case_insensitive(self):
+        assert parse_priority("@priority(HIGH)") == Priority.HIGH
+        assert parse_priority("@priority(High)") == Priority.HIGH
+        assert parse_priority("@priority(LOW)") == Priority.LOW
+        assert parse_priority("@priority(Medium)") == Priority.MEDIUM
+
 
 class TestParseTags:
     """Tests for parse_tags function."""

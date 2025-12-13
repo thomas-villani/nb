@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import click
@@ -38,6 +38,7 @@ def register_note_commands(cli: click.Group) -> None:
     cli.add_command(new_note)
     cli.add_command(edit_note)
     cli.add_command(add_to_note)
+    cli.add_command(log_to_note)
     cli.add_command(list_notes_cmd)
     cli.add_command(alias_note)
     cli.add_command(unalias_note)
@@ -814,6 +815,82 @@ def add_to_note(
             f.write(f"\n{content}\n")
 
         console.print(f"[green]Added to {path.name}[/green]")
+
+
+@click.command("log")
+@click.argument("text", required=False)
+@click.option(
+    "--note",
+    "-N",
+    "target_note",
+    help="Add to specific note (path, alias, or notebook/note format)",
+)
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook to search for note (used with --note)",
+)
+def log_to_note(
+    text: str | None, target_note: str | None, notebook: str | None
+) -> None:
+    """Log timestamped content to a note (defaults to today's daily note).
+
+    Prepends a timestamp using configured date_format and time_format.
+    Accepts text as an argument or from stdin (piped input).
+
+    \b
+    Examples:
+      nb log "Started working on feature X"              # Today's daily note
+      nb log "Meeting notes: discussed roadmap"          # With timestamp
+      nb log "Status update" --note work/project         # Specific note
+      nb log "Entry" -N proj                             # Using alias
+
+    \b
+    Piping examples:
+      git diff --stat | nb log --note work/changes      # Log git changes
+      echo "Completed task" | nb log                     # Log via pipe
+    """
+    config = get_config()
+
+    # Check stdin first, then use argument
+    content = get_stdin_content() or text
+
+    if not content:
+        console.print("[red]No content provided.[/red]")
+        console.print('[dim]Usage: nb log "text" or echo "text" | nb log[/dim]')
+        raise SystemExit(1)
+
+    # Prepend timestamp using config formats
+    now = datetime.now()
+    timestamp = now.strftime(f"{config.date_format} {config.time_format}")
+    timestamped_content = f"{timestamp}: {content}"
+
+    if target_note:
+        resolved_path = resolve_note_ref(target_note, notebook=notebook)
+        if not resolved_path:
+            console.print(f"[red]Note not found: {target_note}[/red]")
+            raise SystemExit(1)
+
+        # Append the timestamped content
+        with resolved_path.open("a", encoding="utf-8") as f:
+            f.write(f"\n{timestamped_content}\n")
+
+        console.print(f"[green]Logged to {resolved_path.name}[/green]")
+    else:
+        # Default: add to today's daily note
+        if notebook:
+            console.print(
+                "[yellow]Warning: --notebook/-n ignored without --note[/yellow]"
+            )
+
+        dt = date.today()
+        path = ensure_daily_note(dt)
+
+        # Append the timestamped content
+        with path.open("a", encoding="utf-8") as f:
+            f.write(f"\n{timestamped_content}\n")
+
+        console.print(f"[green]Logged to {path.name}[/green]")
 
 
 @click.command("list")

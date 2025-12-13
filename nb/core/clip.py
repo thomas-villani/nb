@@ -321,6 +321,81 @@ def clip_url(
     )
 
 
+def clip_file(
+    file_path: Path,
+    section: str | None = None,
+    title: str | None = None,
+) -> ClippedContent:
+    """Clip content from a local file and convert to markdown.
+
+    Uses all2md to convert various file formats (PDF, DOCX, PPTX, etc.) to markdown.
+
+    Args:
+        file_path: Path to the file to convert
+        section: Optional section name/pattern to extract
+        title: Optional custom title (overrides extracted title)
+
+    Returns:
+        ClippedContent with the converted markdown and metadata
+
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        ValueError: If conversion fails
+    """
+    from all2md import to_markdown
+
+    if not file_path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    # Get file stats for metadata
+    file_stat = file_path.stat()
+
+    # Convert file to markdown (all2md auto-detects format from extension)
+    try:
+        markdown = to_markdown(file_path, source_format="auto")
+    except Exception as e:
+        raise ValueError(f"Failed to convert file: {e}") from e
+
+    # If section extraction requested, apply it
+    if section:
+        from all2md import to_ast
+        from all2md.ast.sections import extract_sections
+
+        try:
+            doc = to_ast(markdown, source_format="markdown")
+            extracted = extract_sections(doc, section, case_sensitive=False)
+            markdown = to_markdown(extracted)
+        except ValueError as e:
+            # Section not found - include error message and full content
+            markdown = (
+                f"*Note: Section '{section}' not found. Error: {e}*\n\n{markdown}"
+            )
+
+    # Determine title
+    if title:
+        resolved_title = title
+    else:
+        # Try to extract from markdown, otherwise use filename
+        resolved_title = extract_title_from_markdown(markdown)
+        if resolved_title == "Untitled":
+            resolved_title = file_path.stem  # Filename without extension
+
+    # Build metadata from file info
+    document_metadata = {
+        "source_file": str(file_path.absolute()),
+        "file_size": str(file_stat.st_size),
+        "file_type": file_path.suffix.lstrip(".").upper() or "unknown",
+    }
+
+    return ClippedContent(
+        url=f"file://{file_path.absolute()}",
+        title=resolved_title,
+        markdown=markdown,
+        domain="local-file",
+        document_metadata=document_metadata,
+    )
+
+
 def _safe_reindex(path: Path, notes_root: Path) -> str | None:
     """Re-index a note, handling errors gracefully.
 

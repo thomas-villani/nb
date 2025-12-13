@@ -1,3 +1,29 @@
+# Unreleased
+
+## New Features
+
+- **Named priority syntax**: Use `@priority(low)`, `@priority(medium)`, `@priority(high)` as alternatives to numeric `@priority(1/2/3)` syntax. Case-insensitive.
+
+- **Relative date syntax (+N)**: Use `+7` for "7 days from now" in `nb todo due` and `@due()` metadata. Examples: `nb todo due abc +7`, `@due(+30)`.
+
+- **Log command**: New `nb log` command appends timestamped content to notes using configured date/time formats.
+  ```bash
+  nb log "Started feature X"        # "2025-12-12 14:30: Started feature X"
+  nb log "Note" --note project      # Log to specific note
+  ```
+
+- **File capture with all2md**: The `nb clip` command now supports local files in addition to URLs. Convert PDF, DOCX, PPTX, and other formats to markdown notes.
+  ```bash
+  nb clip ~/Documents/report.pdf
+  nb clip ./meeting.docx -n work
+  ```
+
+## Improvements
+
+- **Overdue by notebook stats**: The `nb stats --by-notebook` panel now displays an "Overdue" column showing the count of overdue todos per notebook (highlighted in red).
+
+---
+
 # v0.2.4 - 2025-12-04
 
 Patch release with usability and CLI improvements: open notes by index from history, deterministic/tighter todo sorting, a shortcut to open the last-modified note, and various CLI/help updates. No breaking changes.

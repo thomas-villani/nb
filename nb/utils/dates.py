@@ -135,6 +135,12 @@ def parse_fuzzy_date_future(text: str) -> date | None:
     if text in CLEAR_DATE_KEYWORDS:
         return None
 
+    # Handle "+N" syntax for N days from now (e.g., "+7" = 7 days from now)
+    plus_days_match = re.match(r"^\+(\d+)$", text)
+    if plus_days_match:
+        days = int(plus_days_match.group(1))
+        return date.today() + timedelta(days=days)
+
     # Check named dates first
     if text in NAMED_DATES:
         return NAMED_DATES[text]()
@@ -234,6 +240,10 @@ def is_relative_date(text: str) -> bool:
 
     last_match = re.match(r"^last\s+(\w+)$", text_without_time)
     if last_match and last_match.group(1) in WEEKDAYS:
+        return True
+
+    # Check for "+N" pattern (N days from now)
+    if re.match(r"^\+\d+$", text_without_time):
         return True
 
     return False
