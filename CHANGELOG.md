@@ -1,4 +1,4 @@
-# Unreleased
+# 0.2.5 - 2025-12-13
 
 ## New Features
 
