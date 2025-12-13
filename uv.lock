@@ -24,14 +24,14 @@ wheels = [
 
 [[package]]
 name = "all2md"
-version = "1.0.0a0"
-source = { path = "wheels/all2md-1.0.0a0-py3-none-any.whl" }
+version = "1.0.0"
+source = { path = "../mdparse/dist/all2md-1.0.0-py3-none-any.whl" }
 dependencies = [
     { name = "pyyaml" },
     { name = "tomli-w" },
 ]
 wheels = [
-    { filename = "all2md-1.0.0a0-py3-none-any.whl", hash = "sha256:bef4743ac78681aac1a2c84d9cb29d8e5558ba59594691f421803e7af9e21d5e" },
+    { filename = "all2md-1.0.0-py3-none-any.whl", hash = "sha256:417addb5d05f6d5599676dd07a93277a1e97f7d5dd24f590df1305320a5ef45b" },
 ]
 
 [package.optional-dependencies]
@@ -43,6 +43,7 @@ html = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bandit", extras = ["toml"], marker = "extra == 'dev'", specifier = ">=1.9.2" },
     { name = "beautifulsoup4", marker = "extra == 'all'", specifier = ">=4.14.2" },
     { name = "beautifulsoup4", marker = "extra == 'dev'", specifier = ">=4.14.2" },
     { name = "beautifulsoup4", marker = "extra == 'html'", specifier = ">=4.13.5" },
@@ -57,6 +58,11 @@ requires-dist = [
     { name = "chardet", marker = "extra == 'textile'", specifier = ">=5.2.0" },
     { name = "chardet", marker = "extra == 'wiki'", specifier = ">=5.2.0" },
     { name = "chardet", marker = "extra == 'xlsx'", specifier = ">=5.2.0" },
+    { name = "defusedxml", marker = "extra == 'all'", specifier = ">=0.7.1" },
+    { name = "defusedxml", marker = "extra == 'dev'", specifier = ">=0.7.1" },
+    { name = "defusedxml", marker = "extra == 'enex'", specifier = ">=0.7.1" },
+    { name = "defusedxml", marker = "extra == 'fb2'", specifier = ">=0.7.1" },
+    { name = "defusedxml", marker = "extra == 'pptx'", specifier = ">=0.7.1" },
     { name = "docutils", marker = "extra == 'all'", specifier = ">=0.20" },
     { name = "docutils", marker = "extra == 'dev'", specifier = ">=0.20" },
     { name = "docutils", marker = "extra == 'rst'", specifier = ">=0.20" },
@@ -70,6 +76,7 @@ requires-dist = [
     { name = "fastmcp", marker = "extra == 'all'", specifier = ">=2.0.0" },
     { name = "fastmcp", marker = "extra == 'dev'", specifier = ">=2.0.0" },
     { name = "fastmcp", marker = "extra == 'mcp'", specifier = ">=2.0.0" },
+    { name = "html5lib", marker = "extra == 'dev'", specifier = ">=1.1" },
     { name = "httpx", marker = "extra == 'all'", specifier = ">=0.28.1" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.1" },
     { name = "httpx", marker = "extra == 'html'", specifier = ">=0.28.1" },
@@ -78,10 +85,14 @@ requires-dist = [
     { name = "jinja2", marker = "extra == 'all'", specifier = ">=3.1.0" },
     { name = "jinja2", marker = "extra == 'dev'", specifier = ">=3.1.0" },
     { name = "jinja2", marker = "extra == 'templates'", specifier = ">=3.1.0" },
+    { name = "langdetect", marker = "extra == 'all'", specifier = ">=1.0.9" },
+    { name = "langdetect", marker = "extra == 'dev'", specifier = ">=1.0.9" },
     { name = "langdetect", marker = "extra == 'langdetect'", specifier = ">=1.0.9" },
     { name = "mistune", marker = "extra == 'all'", specifier = ">=3.0.0" },
     { name = "mistune", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "mistune", marker = "extra == 'markdown'", specifier = ">=3.0.0" },
+    { name = "mwparserfromhell", marker = "extra == 'all'", specifier = ">=0.7.2" },
+    { name = "mwparserfromhell", marker = "extra == 'dev'", specifier = ">=0.7.2" },
     { name = "mwparserfromhell", marker = "extra == 'wiki'", specifier = ">=0.7.2" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.18.2" },
     { name = "odfpy", marker = "extra == 'all'", specifier = ">=1.4.1" },
@@ -112,6 +123,7 @@ requires-dist = [
     { name = "pytesseract", marker = "extra == 'ocr'", specifier = ">=0.3.10" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.0.0" },
+    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.8.0" },
     { name = "pyth3", marker = "extra == 'all'", specifier = ">=0.7" },
     { name = "pyth3", marker = "extra == 'dev'", specifier = ">=0.7" },
     { name = "pyth3", marker = "extra == 'rtf'", specifier = ">=0.7" },
@@ -126,6 +138,8 @@ requires-dist = [
     { name = "pyyaml", marker = "extra == 'all'", specifier = ">=6.0" },
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
     { name = "pyyaml", marker = "extra == 'openapi'", specifier = ">=6.0" },
+    { name = "rank-bm25", marker = "extra == 'all'", specifier = ">=0.2.2" },
+    { name = "rank-bm25", marker = "extra == 'dev'", specifier = ">=0.2.2" },
     { name = "rank-bm25", marker = "extra == 'search'", specifier = ">=0.2.2" },
     { name = "rarfile", marker = "extra == 'all'", specifier = ">=4.2" },
     { name = "rarfile", marker = "extra == 'archive'", specifier = ">=4.2" },
@@ -142,13 +156,14 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.0" },
     { name = "sentence-transformers", marker = "extra == 'search'", specifier = ">=2.2.2" },
     { name = "six", marker = "extra == 'rtf'", specifier = ">=1.16.0" },
-    { name = "sphinx", marker = "extra == 'dev'", specifier = ">=8.2.3" },
-    { name = "sphinx-copybutton", marker = "extra == 'dev'", specifier = ">=0.5.2" },
-    { name = "sphinx-rtd-theme", marker = "extra == 'dev'", specifier = ">=3.0.2" },
+    { name = "sphinx", marker = "python_full_version >= '3.11' and extra == 'dev'", specifier = ">=8.2.3" },
+    { name = "sphinx-copybutton", marker = "python_full_version >= '3.11' and extra == 'dev'", specifier = ">=0.5.2" },
+    { name = "sphinx-rtd-theme", marker = "python_full_version >= '3.11' and extra == 'dev'", specifier = ">=3.0.2" },
     { name = "syrupy", marker = "extra == 'dev'", specifier = ">=4.6.0" },
     { name = "textile", marker = "extra == 'all'", specifier = ">=4.0.1" },
     { name = "textile", marker = "extra == 'dev'", specifier = ">=4.0.1" },
     { name = "textile", marker = "extra == 'textile'", specifier = ">=4.0.1" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.0" },
     { name = "tomli-w", specifier = ">=1.0.0" },
     { name = "tqdm", marker = "extra == 'all'", specifier = ">=4.66.0" },
     { name = "tqdm", marker = "extra == 'cli-extras'", specifier = ">=4.66.0" },
@@ -159,6 +174,7 @@ requires-dist = [
     { name = "types-pillow", marker = "extra == 'dev'" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12.20250915" },
     { name = "types-reportlab", marker = "extra == 'dev'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.0.0" },
     { name = "watchdog", marker = "extra == 'all'", specifier = ">=4.0.0" },
     { name = "watchdog", marker = "extra == 'cli-extras'", specifier = ">=4.0.0" },
     { name = "watchdog", marker = "extra == 'dev'", specifier = ">=4.0.0" },
@@ -761,7 +777,7 @@ wheels = [
 
 [[package]]
 name = "nb-cli"
-version = "0.2.4"
+version = "0.2.5"
 source = { editable = "." }
 dependencies = [
     { name = "all2md", extra = ["html"] },
@@ -797,7 +813,7 @@ recorder = [
 
 [package.metadata]
 requires-dist = [
-    { name = "all2md", extras = ["html"], path = "wheels/all2md-1.0.0a0-py3-none-any.whl" },
+    { name = "all2md", extras = ["html"], path = "../mdparse/dist/all2md-1.0.0-py3-none-any.whl" },
     { name = "black", marker = "extra == 'dev'" },
     { name = "click", specifier = ">=8.0" },
     { name = "deepgram-sdk", marker = "extra == 'recorder'", specifier = ">=3.0.0" },
