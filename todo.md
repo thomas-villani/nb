@@ -118,7 +118,6 @@ todo_exclude: true
 - [x] Better daily metrics - what was completed today? By notebook. `nb completed` or `nb done` something
 - [x] Add --about flag
 - [x] `nb new <existing>` should prompt to open when exists
-- [ ] give notes a unique ID as well so they can be quick loaded and included on listings like the todos
 - [x] Add numbering to `nb history` list and allow loading notes from history command like `nb history open 2` or `nb open --history 2`
 - [x] Capture url and other file attachments as markdown using all2md #feature
 - [x] default sort order for todo items: due-section -> due-date (soonest first) -> created-date (oldest first) -> priority -> file/section -> line #
@@ -128,23 +127,23 @@ todo_exclude: true
 - [x] Allow `tb todo due` to allow multiple todo items, and allow "next week" or "+7" as options too
 - [x] Add a way to create a log-style command `nb log` which is like `nb add` but will insert a date/time as well.
 - [x] Add "overdue-by-notebook" to stats and "what's behind"
+- [ ] give notes a unique ID as well so they can be quick loaded and included on listings like the todos
+- [ ] Streaming command improvements
+  - [ ] Need a way to have the stream output go straight to stdout if piped
+  - [ ] Should show recently modified (most recent first) by default
+  - [ ] Add a way to search
 
 
 ### Phase 5: Wijjit TUI
 - [x] Full Wijjit-based todo list view with richer interactions #feature
 - [x] Wijjit-based todo review #feature
 - [ ] Full Wijjit based viewer/editor for notes #feature
+  - [ ] Needs to have clickable links to go from note to note
 - [x] Stream/continuous view (`nb stream`) with lazy loading
 - [x] Interactive filtering UI #feature
 - [x] Navigation and links #feature
 - [ ] Browser plugin to add notes from webpages
 
-Notes: 
-The Wijjit TUI has been implemented - there's a bug in the stream interface so it's not yet working.
-There needs to be some improvement on the TODO interface, it's too easy to click one and have it disappear. Need to 
-better style the checkboxes to show the tags and whatnot. Perhaps using checkboxes is not the right approach
-
-The nb todo -i and nb todo review commands are too similar - what should really be the difference? nb todo -i should be for interactive viewing of todos on different lists and whatnot I think.
 
 ### Phase 6: Future Enhancements
 - [ ] Recurring todos (`@recur(weekly)`) #feature
@@ -155,10 +154,13 @@ The nb todo -i and nb todo review commands are too similar - what should really 
 - [ ] Due date reminders (optional notifications) #feature
   These can use the `win11toast` library which is dead simple.
 - [ ] Add '@startby' to todos #feature
+- [ ] Web clipper via integration with raindrop
 
 ### AI Ideas:
 - [ ] Generate narrative of what was completed in the week
-- 
+- [ ] Summarize notes, generate TL;DR
+- [ ] Weekly/daily planner
+- [ ] 
 
 
 ## Technical Debt

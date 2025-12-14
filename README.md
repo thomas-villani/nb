@@ -418,41 +418,88 @@ Use `-a/--all` to include all todos, `-n <notebook>` to view a specific notebook
 
 #### Interactive Mode
 
+Launch a full-featured todo management interface with keyboard navigation:
+
 ```bash
-nb todo -i              # Launch interactive viewer
+nb todo -i              # Launch interactive todo manager
+nb todo -i -c           # Include completed todos
+nb todo -i -t work      # Filter by tag
+nb todo -i -n daily     # Filter by notebook
 ```
 
+The interactive mode uses a three-panel layout:
+
+```
+┌─────────────────────────── Todo Manager ─────────────────────────────────────┐
+│ ┌─ Notebooks ─┐  ┌────────────────────── Todos ──────────────────────────────┐│
+│ │ > All       │  │ [ ] Review PR for auth module       projects     Today    ││
+│ │   daily     │  │ [^] Write documentation             daily        Tomorrow ││
+│ │   projects  │  │ [ ] Fix login bug                   work         Dec 20   ││
+│ │   work      │  │ [ ] Update dependencies             projects     No date  ││
+│ ├─── Notes ───┤  │                                                           ││
+│ │ > All       │  │                                                           ││
+│ │  2025-12-13 │  │                                                           ││
+│ │  project-a  │  │                                                           ││
+│ └─────────────┘  └───────────────────────────────────────────────────────────┘│
+│                                                                               │
+│ Filter: (•) Incomplete ( ) All    12 items                                    │
+│ [d]one [s]tart [t]omorrow [D]ate [a]dd [e]dit [x]del [T]ag [q]uit            │
+└───────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Panels:**
+- **Notebooks** - Filter by notebook (select "All" to see all notebooks)
+- **Notes** - Filter by specific note within selected notebook
+- **Todos** - Main todo list with status, content, source, and due date
+
+**Keyboard shortcuts:**
+
+| Key | Action | Description |
+|-----|--------|-------------|
+| `d` | Toggle done | Mark selected todo complete/incomplete |
+| `s` | Toggle started | Mark as in-progress (`[^]`) or back to pending |
+| `t` | Tomorrow | Reschedule selected todo to tomorrow |
+| `D` | Custom date | Enter a custom due date (e.g., "friday", "dec 25") |
+| `a` | Add todo | Add new todo to selected note |
+| `e` | Edit | Open note containing the todo in editor |
+| `x` | Delete | Delete selected todo (with confirmation) |
+| `T` | Tag filter | Filter by tag |
+| `Tab` | Focus | Cycle focus between panels |
+| `q` | Quit | Exit the TUI |
+
+**Filter toggle:** Use the radio buttons or arrow keys to switch between showing incomplete todos only or all todos.
+
 #### Interactive Review
+
+Review and triage todos one-by-one with quick rescheduling options:
 
 ```bash
 nb todo review              # Review overdue + due today (TUI)
 nb todo review --weekly     # Include this week + no-due-date items
 nb todo review --all        # Review all incomplete todos
+nb todo review --no-date    # Review only todos without due dates
 nb todo review -t work      # Review only #work tagged todos
 nb todo review -n daily     # Review only from daily notebook
 ```
 
-Actions in review TUI:
-- `d` - Mark done
-- `t` - Reschedule to tomorrow
-- `f` - This Friday
-- `F` - Next Friday
-- `w` - Next Monday
-- `n` - Next month
-- `e` - Edit in editor
-- `s` - Skip (move to next)
-- `x` - Delete
-- `q` - Quit review
+**Keyboard shortcuts:**
 
-Keyboard shortcuts:
-- `j/k` - Navigate up/down
-- `Space` - Toggle completion
-- `s` - Toggle in-progress status (start/pause)
-- `e` - Edit (open source file)
-- `c` - Toggle showing completed
-- `g/G` - Jump to top/bottom
-- `r` - Refresh
-- `q` - Quit
+| Key | Action | Description |
+|-----|--------|-------------|
+| `d` | Done | Mark todo as complete |
+| `s` | Start | Toggle in-progress status (`[^]`) |
+| `t` | Tomorrow | Reschedule to tomorrow |
+| `f` | This Friday | Reschedule to this Friday |
+| `m` | Next Monday | Reschedule to next Monday |
+| `w` | Next week | Reschedule to next Monday |
+| `n` | Next month | Reschedule to first of next month |
+| `D` | Custom date | Enter custom date (e.g., "dec 25", "+7") |
+| `e` | Edit | Open source file in editor |
+| `k` | Skip | Skip to next todo |
+| `x` | Delete | Delete todo (with confirmation) |
+| `q` | Quit | Exit and show summary |
+
+The review TUI displays a summary at the end showing how many todos were completed, rescheduled, deleted, or skipped.
 
 #### Kanban View
 

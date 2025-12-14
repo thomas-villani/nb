@@ -483,7 +483,7 @@ def index_all_notes(
                 index_note(path, notes_root, index_vectors=index_vectors)
                 count += 1
                 if on_progress:
-                    on_progress(count)
+                    on_progress(1)  # Advance by 1 (not cumulative count)
             except Exception:
                 pass
         return count
@@ -502,7 +502,7 @@ def index_all_notes(
                 future.result()
                 count += 1
                 if on_progress:
-                    on_progress(count)
+                    on_progress(1)  # Advance by 1 (not cumulative count)
             except Exception:
                 # Log error but continue with other files
                 pass
@@ -782,8 +782,7 @@ def rebuild_search_index(
             count += indexed
             # Report progress for all notes in the batch
             if on_progress:
-                for _ in range(pending_progress):
-                    on_progress(count)
+                on_progress(pending_progress)  # Advance by batch size
             pending_progress = 0
 
     # Flush any remaining notes
@@ -791,8 +790,7 @@ def rebuild_search_index(
         indexed = flush_batch()
         count += indexed
         if on_progress:
-            for _ in range(pending_progress):
-                on_progress(count)
+            on_progress(pending_progress)  # Advance by remaining count
 
     return count
 
@@ -945,8 +943,7 @@ def sync_search_index(
             count += indexed
             # Report progress for all notes in the batch
             if on_progress:
-                for _ in range(pending_progress):
-                    on_progress(count)
+                on_progress(pending_progress)  # Advance by batch size
             pending_progress = 0
 
     # Flush any remaining notes
@@ -954,8 +951,7 @@ def sync_search_index(
         indexed = flush_batch()
         count += indexed
         if on_progress:
-            for _ in range(pending_progress):
-                on_progress(count)
+            on_progress(pending_progress)  # Advance by remaining count
 
     return count
 
@@ -1364,7 +1360,7 @@ def scan_linked_notes(
             )
             total_notes += 1
             if on_progress:
-                on_progress(total_notes)
+                on_progress(1)  # Advance by 1 (not cumulative count)
 
     return total_notes
 

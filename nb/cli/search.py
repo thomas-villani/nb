@@ -68,12 +68,14 @@ def search_cmd(
     By default uses hybrid search (70% semantic, 30% keyword).
     Use --semantic for pure semantic search, --keyword for pure keyword search.
 
+    \b
     Date filtering:
         --when "last 3 months"    Fuzzy date range
         --when "this week"        Current week
         --since friday            From a date onwards
         --until "nov 20"          Up to a date
 
+    \b
     Examples:
         nb search "machine learning"
         nb search -s "project ideas" --recent
@@ -396,31 +398,32 @@ def index_cmd(
         console.print("[green]Database rebuilt.[/green]")
         force = True  # Force reindex after rebuild
 
-    # Count files to index
+    # Track what we did for the summary
+    indexed_notes = 0
+    indexed_linked = 0
+    search_synced = 0
+    removed_count = 0
+
+    # Count and index changed notes
     files_count = count_files_to_index(force=force, notebook=notebook)
 
     if files_count > 0:
         scope = f"'{notebook}'" if notebook else "all notebooks"
-        with progress_bar(f"Indexing {scope}", total=files_count) as advance:
-            indexed = index_all_notes(
+        with progress_bar(f"Scanning {scope}", total=files_count) as advance:
+            indexed_notes = index_all_notes(
                 force=force,
                 notebook=notebook,
                 on_progress=advance,
             )
-        console.print(f"[green]Indexed {indexed} files.[/green]")
-    else:
-        console.print("[dim]No files need indexing.[/dim]")
 
-    # Index linked notes
+    # Index linked notes (always re-scanned)
     linked_total = count_linked_notes(notebook_filter=notebook)
     if linked_total > 0:
-        with progress_bar("Indexing linked notes", total=linked_total) as advance:
-            linked_count = scan_linked_notes(
+        with progress_bar("Scanning linked notes", total=linked_total) as advance:
+            indexed_linked = scan_linked_notes(
                 notebook_filter=notebook,
                 on_progress=advance,
             )
-        if linked_count:
-            console.print(f"[green]Indexed {linked_count} linked notes.[/green]")
 
     if embeddings:
         # Rebuild semantic search vectors
@@ -429,31 +432,45 @@ def index_cmd(
             from nb.index.scanner import rebuild_search_index
 
             with progress_bar("Building embeddings", total=search_total) as advance:
-                search_count = rebuild_search_index(
+                search_synced = rebuild_search_index(
                     notebook=notebook,
                     on_progress=advance,
                 )
-            console.print(f"[green]Indexed {search_count} notes for search.[/green]")
-        else:
-            console.print("[dim]No notes to index for search.[/dim]")
     else:
         # Sync any notes missing from VectorDB (lightweight operation)
         from nb.index.scanner import sync_search_index
 
         with spinner("Syncing search index"):
-            synced = sync_search_index(notebook=notebook)
-        if synced:
-            console.print(f"[dim]Synced {synced} notes to search index.[/dim]")
+            search_synced = sync_search_index(notebook=notebook)
 
     # Clean up notes and todos for files that no longer exist
-    removed = remove_deleted_notes(notebook=notebook)
-    if removed:
-        console.print(f"[dim]Removed {removed} deleted notes.[/dim]")
+    removed_count = remove_deleted_notes(notebook=notebook)
 
+    # Print summary
+    console.print()
+    if indexed_notes > 0:
+        console.print(f"[green]Indexed {indexed_notes} notes[/green]")
+    else:
+        console.print("[dim]Notes: no changes[/dim]")
+
+    if indexed_linked > 0:
+        console.print(f"[dim]Linked notes: {indexed_linked} scanned[/dim]")
+
+    if search_synced > 0:
+        if embeddings:
+            console.print(f"[dim]Search: {search_synced} embeddings built[/dim]")
+        else:
+            console.print(f"[dim]Search: {search_synced} notes synced[/dim]")
+
+    if removed_count > 0:
+        console.print(f"[dim]Cleanup: {removed_count} deleted notes removed[/dim]")
+
+    # Todo summary
     stats = get_todo_stats()
-    console.print(f"Todos: {stats['open']} open, {stats['completed']} completed")
+    todo_line = f"Todos: {stats['open']} open, {stats['completed']} completed"
     if stats["overdue"]:
-        console.print(f"[red]{stats['overdue']} overdue[/red]")
+        todo_line += f" [red]({stats['overdue']} overdue)[/red]"
+    console.print(todo_line)
 
 
 @click.command("stream")
