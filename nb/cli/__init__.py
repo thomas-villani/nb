@@ -22,6 +22,7 @@ from nb.cli.completion import (
 )
 from nb.cli.config_cmd import register_config_commands
 from nb.cli.graph import register_graph_commands
+from nb.cli.inbox import register_inbox_commands
 from nb.cli.links import register_link_commands
 from nb.cli.note_links import register_note_link_commands
 from nb.cli.notebooks import register_notebook_commands
@@ -217,6 +218,7 @@ register_web_commands(cli)
 register_record_commands(cli)
 register_transcribe_commands(cli)
 register_clip_commands(cli)
+register_inbox_commands(cli)
 
 
 def main() -> None:

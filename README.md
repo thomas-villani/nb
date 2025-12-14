@@ -22,6 +22,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Interactive mode** - Keyboard-driven todo management
 - **Web viewer** - Browse notes with clickable links, backlinks panel, and graph view
 - **Meeting recording** - Record audio and transcribe with speaker diarization (optional)
+- **Raindrop inbox** - Pull bookmarks from Raindrop.io and clip them as notes
 
 ## Installation
 
@@ -854,6 +855,75 @@ nb clip presentation.pptx --title "Q4 Deck"  # Custom title
 
 Supported file types: PDF, DOCX, DOC, PPTX, XLSX, ODT, EPUB, RTF, HTML, and more.
 
+### Raindrop Inbox
+
+Pull bookmarks from Raindrop.io and clip them as markdown notes.
+
+#### Setup
+
+1. Get a Raindrop API token from https://app.raindrop.io/settings/integrations
+2. Set `RAINDROP_API_KEY` environment variable
+3. Create an "nb-inbox" collection in Raindrop (or configure a different one)
+
+```bash
+# PowerShell
+$env:RAINDROP_API_KEY = "your-token-here"
+
+# Bash/Zsh
+export RAINDROP_API_KEY="your-token-here"
+```
+
+#### Commands
+
+```bash
+nb inbox list                    # Show pending items (already-clipped hidden)
+nb inbox list -l 50              # Show up to 50 items
+nb inbox list -c reading         # List from 'reading' collection
+nb inbox list --all              # Include already-clipped items
+
+nb inbox pull                    # Interactive: clip each item
+nb inbox pull --auto             # Clip all to default notebook
+nb inbox pull -n bookmarks       # Clip all to 'bookmarks' notebook
+nb inbox pull -l 5               # Process only 5 items
+nb inbox pull -t research        # Add #research tag to all
+nb inbox pull --all              # Include already-clipped items
+
+nb inbox clear                   # Archive all without clipping
+nb inbox clear -y                # Skip confirmation
+
+nb inbox history                 # Show previously clipped items
+```
+
+#### Interactive Mode
+
+When running `nb inbox pull` without `--auto`, you can use these commands at each prompt:
+
+| Command | Action |
+|---------|--------|
+| `Enter` | Clip to default/specified notebook |
+| `<name>` | Clip to different notebook |
+| `s` | Skip this item |
+| `d` | Mark as duplicate and skip |
+| `q` | Quit processing |
+
+#### Configuration
+
+```bash
+nb config set inbox.default_notebook reading
+nb config set inbox.raindrop.collection my-inbox
+nb config set inbox.raindrop.auto_archive false
+```
+
+Or in `config.yaml`:
+
+```yaml
+inbox:
+  default_notebook: reading
+  raindrop:
+    collection: nb-inbox
+    auto_archive: true
+```
+
 ### Attachments
 
 ```bash
@@ -1172,6 +1242,13 @@ recorder:
   loopback_device: null   # Device index or null for default
   sample_rate: 48000      # 48000 for WASAPI devices, 16000 for MME
   auto_delete_audio: false
+
+# Raindrop inbox settings (requires RAINDROP_API_KEY env var)
+inbox:
+  default_notebook: bookmarks   # Where clipped items go by default
+  raindrop:
+    collection: nb-inbox        # Raindrop collection to pull from
+    auto_archive: true          # Move to archive after clipping
 ```
 
 ### Notebook Options
@@ -1190,6 +1267,8 @@ recorder:
 
 - `NB_NOTES_ROOT` - Override notes root directory
 - `EDITOR` - Default editor
+- `RAINDROP_API_KEY` - Raindrop.io API token for inbox feature
+- `DEEPGRAM_API_KEY` - Deepgram API key for meeting transcription
 
 ## Directory Structure
 

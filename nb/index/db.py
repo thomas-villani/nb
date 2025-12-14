@@ -12,7 +12,7 @@ from typing import Any
 _logger = logging.getLogger(__name__)
 
 # Current schema version
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -298,6 +298,26 @@ CREATE TABLE IF NOT EXISTS todo_sections (
 CREATE INDEX IF NOT EXISTS idx_todo_sections_section ON todo_sections(section);
 """
 
+# Phase 16 additions: inbox items tracking for Raindrop integration
+SCHEMA_V16 = """
+-- Inbox items (tracks bookmarks pulled from external services like Raindrop)
+CREATE TABLE IF NOT EXISTS inbox_items (
+    id TEXT PRIMARY KEY,           -- External service item ID (e.g., Raindrop ID)
+    source TEXT NOT NULL,          -- Source service (e.g., 'raindrop')
+    url TEXT NOT NULL,             -- Original URL of the bookmark
+    title TEXT,                    -- Title of the bookmark
+    clipped_at TEXT,               -- When the item was clipped to a note
+    note_path TEXT,                -- Path to the note where content was clipped
+    archived INTEGER DEFAULT 0,    -- Whether item was archived in source service
+    skipped INTEGER DEFAULT 0,     -- Whether item was skipped during pull
+    created_at TEXT NOT NULL       -- When this record was created
+);
+
+CREATE INDEX IF NOT EXISTS idx_inbox_items_source ON inbox_items(source);
+CREATE INDEX IF NOT EXISTS idx_inbox_items_url ON inbox_items(url);
+CREATE INDEX IF NOT EXISTS idx_inbox_items_clipped ON inbox_items(clipped_at);
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -315,6 +335,7 @@ MIGRATIONS: dict[int, str] = {
     13: SCHEMA_V13,
     14: SCHEMA_V14,
     15: SCHEMA_V15,
+    16: SCHEMA_V16,
 }
 
 

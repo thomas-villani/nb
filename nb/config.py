@@ -103,6 +103,24 @@ class ClipConfig:
 
 
 @dataclass
+class RaindropConfig:
+    """Configuration for Raindrop.io integration."""
+
+    collection: str = "nb-inbox"  # Collection to pull from
+    auto_archive: bool = True  # Move to archive after clipping
+    api_token: str | None = None  # Raindrop API token (set via env or config)
+
+
+@dataclass
+class InboxConfig:
+    """Configuration for inbox/web clipping integration."""
+
+    source: str = "raindrop"  # Source service (currently only "raindrop")
+    default_notebook: str = "bookmarks"  # Where clips go by default
+    raindrop: RaindropConfig = field(default_factory=RaindropConfig)
+
+
+@dataclass
 class TodoViewConfig:
     """Configuration for a saved todo view.
 
@@ -199,6 +217,7 @@ class Config:
     todo: TodoConfig = field(default_factory=TodoConfig)
     recorder: RecorderConfig = field(default_factory=RecorderConfig)
     clip: ClipConfig = field(default_factory=ClipConfig)
+    inbox: InboxConfig = field(default_factory=InboxConfig)
     date_format: str = "%Y-%m-%d"
     time_format: str = "%H:%M"
     daily_title_format: str = "%A, %B %d, %Y"  # e.g., "Friday, November 28, 2025"
@@ -512,6 +531,30 @@ def _parse_clip_config(data: dict[str, Any] | None) -> ClipConfig:
     )
 
 
+def _parse_raindrop_config(data: dict[str, Any] | None) -> RaindropConfig:
+    """Parse Raindrop configuration."""
+    if data is None:
+        return RaindropConfig()
+    # Check environment variable for API token
+    api_token = os.environ.get("RAINDROP_API_KEY") or data.get("api_token")
+    return RaindropConfig(
+        collection=data.get("collection", "nb-inbox"),
+        auto_archive=data.get("auto_archive", True),
+        api_token=api_token,
+    )
+
+
+def _parse_inbox_config(data: dict[str, Any] | None) -> InboxConfig:
+    """Parse inbox configuration."""
+    if data is None:
+        return InboxConfig()
+    return InboxConfig(
+        source=data.get("source", "raindrop"),
+        default_notebook=data.get("default_notebook", "bookmarks"),
+        raindrop=_parse_raindrop_config(data.get("raindrop")),
+    )
+
+
 def load_config(config_path: Path | None = None) -> Config:
     """Load configuration from YAML file.
 
@@ -554,6 +597,7 @@ def load_config(config_path: Path | None = None) -> Config:
     todo_config = _parse_todo_config(data.get("todo"))
     recorder_config = _parse_recorder_config(data.get("recorder"))
     clip_config = _parse_clip_config(data.get("clip"))
+    inbox_config = _parse_inbox_config(data.get("inbox"))
     date_format = data.get("date_format", "%Y-%m-%d")
     time_format = data.get("time_format", "%H:%M")
     daily_title_format = data.get("daily_title_format", "%A, %B %d, %Y")
@@ -570,6 +614,7 @@ def load_config(config_path: Path | None = None) -> Config:
         todo=todo_config,
         recorder=recorder_config,
         clip=clip_config,
+        inbox=inbox_config,
         date_format=date_format,
         time_format=time_format,
         daily_title_format=daily_title_format,
@@ -648,6 +693,22 @@ def save_config(config: Config) -> None:
     if not config.clip.auto_tag_domain:
         clip_data["auto_tag_domain"] = config.clip.auto_tag_domain
 
+    # Build inbox config dict (only include non-default values)
+    inbox_data: dict[str, Any] = {}
+    if config.inbox.source != "raindrop":
+        inbox_data["source"] = config.inbox.source
+    if config.inbox.default_notebook != "bookmarks":
+        inbox_data["default_notebook"] = config.inbox.default_notebook
+    # Raindrop sub-config
+    raindrop_data: dict[str, Any] = {}
+    if config.inbox.raindrop.collection != "nb-inbox":
+        raindrop_data["collection"] = config.inbox.raindrop.collection
+    if not config.inbox.raindrop.auto_archive:
+        raindrop_data["auto_archive"] = config.inbox.raindrop.auto_archive
+    # Note: api_token is NOT saved to config file for security - use env var
+    if raindrop_data:
+        inbox_data["raindrop"] = raindrop_data
+
     # Note: linked_todos and linked_notes are stored in the database, not config
     data: dict[str, Any] = {
         "notes_root": str(config.notes_root),
@@ -682,6 +743,10 @@ def save_config(config: Config) -> None:
     # Only include clip config if there are non-default settings
     if clip_data:
         data["clip"] = clip_data
+
+    # Only include inbox config if there are non-default settings
+    if inbox_data:
+        data["inbox"] = inbox_data
 
     config.config_path.parent.mkdir(parents=True, exist_ok=True)
     with config.config_path.open("w", encoding="utf-8") as f:
@@ -854,6 +919,10 @@ CONFIGURABLE_SETTINGS = {
     "clip.user_agent": "User-Agent header for web clipping requests",
     "clip.timeout": "Request timeout in seconds (default 30)",
     "clip.auto_tag_domain": "Auto-tag clipped content with source domain (true/false)",
+    "inbox.source": "Inbox source service (currently only 'raindrop')",
+    "inbox.default_notebook": "Default notebook for clipped items (default: bookmarks)",
+    "inbox.raindrop.collection": "Raindrop collection to pull from (default: nb-inbox)",
+    "inbox.raindrop.auto_archive": "Move items to archive after clipping (true/false)",
 }
 
 # Notebook-specific settings (accessed via notebook.<name>.<setting>)
@@ -1034,6 +1103,16 @@ def get_config_value(key: str) -> Any:
         attr = parts[1]
         if hasattr(config.clip, attr):
             return getattr(config.clip, attr)
+    elif parts[0] == "inbox" and len(parts) == 2:
+        # Inbox setting
+        attr = parts[1]
+        if hasattr(config.inbox, attr):
+            return getattr(config.inbox, attr)
+    elif parts[0] == "inbox" and len(parts) == 3 and parts[1] == "raindrop":
+        # Inbox raindrop setting: inbox.raindrop.<attr>
+        attr = parts[2]
+        if hasattr(config.inbox.raindrop, attr):
+            return getattr(config.inbox.raindrop, attr)
     elif parts[0] == "notebook" and len(parts) == 3:
         # Notebook-specific setting: notebook.<name>.<setting>
         nb_name, setting = parts[1], parts[2]
@@ -1185,6 +1264,27 @@ def set_config_value(key: str, value: str) -> bool:
                 raise
         elif attr == "auto_tag_domain":
             config.clip.auto_tag_domain = value.lower() in ("true", "1", "yes")
+        else:
+            return False
+    elif parts[0] == "inbox" and len(parts) == 2:
+        # Inbox setting
+        attr = parts[1]
+        if attr == "source":
+            valid_sources = ("raindrop",)
+            if value not in valid_sources:
+                raise ValueError(f"source must be one of: {', '.join(valid_sources)}")
+            config.inbox.source = value
+        elif attr == "default_notebook":
+            config.inbox.default_notebook = value if value else "bookmarks"
+        else:
+            return False
+    elif parts[0] == "inbox" and len(parts) == 3 and parts[1] == "raindrop":
+        # Inbox raindrop setting: inbox.raindrop.<attr>
+        attr = parts[2]
+        if attr == "collection":
+            config.inbox.raindrop.collection = value if value else "nb-inbox"
+        elif attr == "auto_archive":
+            config.inbox.raindrop.auto_archive = value.lower() in ("true", "1", "yes")
         else:
             return False
     elif parts[0] == "notebook" and len(parts) == 3:

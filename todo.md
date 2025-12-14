@@ -135,6 +135,7 @@ todo_exclude: true
 - [ ] Add an interactive search TUI
 - [ ] Need to improve the `nb list` command - should have a way to list recently modified. Should allow combining `nb list --week` and --details, etc.
 - [ ] Need to allow `nb history` to show recently modified as well
+- [ ] Allow pinned notes
 
 ### Phase 5: Wijjit TUI
 - [x] Full Wijjit-based todo list view with richer interactions #feature
@@ -144,7 +145,7 @@ todo_exclude: true
 - [x] Stream/continuous view (`nb stream`) with lazy loading
 - [x] Interactive filtering UI #feature
 - [x] Navigation and links #feature
-- [ ] Browser plugin to add notes from webpages
+- [x] Browser plugin to add notes from webpages
 
 
 ### Phase 6: Future Enhancements
