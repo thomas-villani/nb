@@ -99,7 +99,8 @@ def create_note(
     if template:
         from nb.core.templates import read_template, render_template
 
-        template_content = read_template(template, notes_root)
+        # Always use config's notes_root for templates (templates are global, not per-notes-root)
+        template_content = read_template(template)
         if template_content:
             # Determine notebook from path
             notebook = path.parts[0] if len(path.parts) > 1 else None

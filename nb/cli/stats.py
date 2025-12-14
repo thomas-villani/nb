@@ -18,40 +18,12 @@ from nb.index.todos_repo import (
     get_tag_stats,
     get_todo_activity,
 )
+from nb.utils.dates import get_week_range
 
 
 def register_stats_commands(cli: click.Group) -> None:
     """Register all stats-related commands with the CLI."""
     cli.add_command(stats_cmd)
-
-
-def _get_week_start(target_date: date, week_start_day: str) -> date:
-    """Get the start of the calendar week containing target_date.
-
-    Args:
-        target_date: The date to find the week for.
-        week_start_day: "monday" or "sunday".
-
-    Returns:
-        The first day of the calendar week containing target_date.
-    """
-    # Monday = 0, Sunday = 6
-    week_start_day_lower = week_start_day.lower()
-    if week_start_day_lower == "monday":
-        start_weekday = 0
-    elif week_start_day_lower == "sunday":
-        start_weekday = 6
-    else:
-        print(
-            f"Warning: Invalid week_start_day '{week_start_day}', defaulting to monday",
-            file=sys.stderr,
-        )
-        start_weekday = 0
-    current_weekday = target_date.weekday()
-
-    # Calculate days back to week start
-    days_back = (current_weekday - start_weekday) % 7
-    return target_date - timedelta(days=days_back)
 
 
 def _sum_range(
@@ -87,7 +59,6 @@ SPARK_BLOCKS_ASCII = " _.,-~*#@"
 
 def _can_use_unicode() -> bool:
     """Check if terminal can display Unicode sparkline characters."""
-    import sys
 
     # Check if stdout encoding supports Unicode
     try:
@@ -306,10 +277,10 @@ def _render_compact_stats(stats: dict, activity: dict) -> None:
     config = get_config()
     today = date.today()
     days = activity["days"]
-    this_week_start = _get_week_start(today, config.week_start_day)
-    this_week_end = this_week_start + timedelta(days=6)
-    last_week_start = this_week_start - timedelta(days=7)
-    last_week_end = this_week_start - timedelta(days=1)
+    this_week_start, this_week_end = get_week_range(today, config.week_start_day)
+    last_week_start, last_week_end = get_week_range(
+        this_week_start - timedelta(days=1), config.week_start_day
+    )
 
     this_week_created = _sum_range(created_values, this_week_start, this_week_end, days)
     this_week_completed = _sum_range(
@@ -442,10 +413,10 @@ def _build_overview_panel(stats: dict, activity: dict, days: int) -> Panel:
     # Calendar week stats based on config's week_start_day
     config = get_config()
     today = date.today()
-    this_week_start = _get_week_start(today, config.week_start_day)
-    this_week_end = this_week_start + timedelta(days=6)
-    last_week_start = this_week_start - timedelta(days=7)
-    last_week_end = this_week_start - timedelta(days=1)
+    this_week_start, this_week_end = get_week_range(today, config.week_start_day)
+    last_week_start, last_week_end = get_week_range(
+        this_week_start - timedelta(days=1), config.week_start_day
+    )
 
     this_week_created = _sum_range(created_values, this_week_start, this_week_end, days)
     this_week_completed = _sum_range(

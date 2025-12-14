@@ -54,21 +54,19 @@ def config_get(key: str) -> None:
     """Get a configuration value.
 
     \b
-    Available keys:
-      editor                Text editor command
-      date_format           Date display format
-      time_format           Time display format
-      embeddings.provider   Embeddings provider
-      embeddings.model      Embeddings model
-      embeddings.base_url   Custom API endpoint
-      embeddings.api_key    API key
+    Common keys:
+      editor, date_format, time_format, week_start_day
+      embeddings.provider, embeddings.model
+      search.vector_weight, search.score_threshold
+      todo.default_sort, todo.inbox_file
+      clip.auto_tag_domain, clip.timeout
 
     \b
     Notebook-specific keys (notebook.<name>.<setting>):
-      notebook.<name>.color        Display color
-      notebook.<name>.icon         Display icon/emoji
-      notebook.<name>.date_based   Date-based organization
-      notebook.<name>.todo_exclude Exclude from nb todo
+      color, icon, date_based, todo_exclude, template
+
+    \b
+    Run 'nb config list' for the full set of configurable settings.
     """
     from nb.config import get_config_value
 
@@ -88,27 +86,25 @@ def config_set(key: str, value: str) -> None:
     """Set a configuration value.
 
     \b
-    Available keys:
-      editor                Text editor command
-      date_format           Date display format
-      time_format           Time display format
-      embeddings.provider   Embeddings provider
-      embeddings.model      Embeddings model
-      embeddings.base_url   Custom API endpoint
-      embeddings.api_key    API key
+    Common keys:
+      editor, date_format, time_format, week_start_day
+      embeddings.provider, embeddings.model
+      search.vector_weight, search.score_threshold
+      todo.default_sort, todo.inbox_file
+      clip.auto_tag_domain, clip.timeout
 
     \b
     Notebook-specific keys (notebook.<name>.<setting>):
-      notebook.<name>.color        Display color
-      notebook.<name>.icon         Display icon/emoji (or name like 'wrench')
-      notebook.<name>.date_based   Date-based organization (true/false)
-      notebook.<name>.todo_exclude Exclude from nb todo (true/false)
+      color, icon, date_based, todo_exclude, template
 
     \b
     Examples:
+      nb config set editor code
       nb config set notebook.work.color blue
       nb config set notebook.projects.icon wrench
-      nb config set notebook.daily.icon calendar
+
+    \b
+    Run 'nb config list' for the full set of configurable settings.
     """
     from nb.config import set_config_value
 
