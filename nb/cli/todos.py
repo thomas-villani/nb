@@ -2467,6 +2467,19 @@ def todo_delete(todo_id: tuple[str, ...], force: bool) -> None:
     is_flag=True,
     help="Review all incomplete todos",
 )
+@click.option(
+    "--no-due-date",
+    "-u",
+    "no_due_date",
+    is_flag=True,
+    help="Review only todos with no due date",
+)
+@click.option(
+    "--priority",
+    "-p",
+    type=click.Choice(["1", "2", "3", "high", "medium", "low"], case_sensitive=False),
+    help="Filter by priority (1/high, 2/medium, 3/low)",
+)
 @click.option("--tag", "-t", help="Filter by tag", shell_complete=complete_tag)
 @click.option(
     "--notebook",
@@ -2490,6 +2503,8 @@ def todo_delete(todo_id: tuple[str, ...], force: bool) -> None:
 def todo_review(
     weekly: bool,
     show_all: bool,
+    no_due_date: bool,
+    priority: str | None,
     tag: str | None,
     notebook: tuple[str, ...],
     note: tuple[str, ...],
@@ -2502,27 +2517,31 @@ def todo_review(
 
     \b
     Scopes:
-      (default)   Overdue + due today
-      --weekly    Overdue + this week + items with no due date
-      --all       All incomplete todos
+      (default)      Overdue + due today
+      --weekly       Overdue + this week + items with no due date
+      --all          All incomplete todos
+      --no-due-date  Only todos with no due date
 
     \b
     Actions (in TUI):
-      d  Mark done         t  Reschedule to tomorrow
-      f  This Friday       F  Next Friday
-      w  Next Monday       n  Next month
-      e  Edit in editor    s  Skip (move to next)
+      d  Mark done         s  Start (in progress)
+      t  Tomorrow          f  This Friday
+      m  Next Monday       w  Next week
+      n  Next month        D  Custom date
+      e  Edit in editor    k  Skip (move to next)
       x  Delete            q  Quit review
 
     \b
     Navigation:
-      j/k  Move up/down    [/]  Previous/next page
+      Up/Down  Move selection    Enter  Select
 
     \b
     Examples:
       nb todo review              Review overdue + due today
       nb todo review --weekly     Include this week's todos
       nb todo review --all        Review everything incomplete
+      nb todo review -u           Review todos with no due date
+      nb todo review -p high      Review only high priority todos
       nb todo review -t work      Review only #work tagged todos
       nb todo review -n daily     Review only from daily notebook
     """
@@ -2533,12 +2552,20 @@ def todo_review(
     config = get_config()
 
     # Determine scope
-    if show_all:
+    if no_due_date:
+        scope = "no_due_date"
+    elif show_all:
         scope = "all"
     elif weekly:
         scope = "weekly"
     else:
         scope = "daily"
+
+    # Convert priority string to integer
+    priority_int: int | None = None
+    if priority:
+        priority_map = {"high": 1, "medium": 2, "low": 3, "1": 1, "2": 2, "3": 3}
+        priority_int = priority_map.get(priority.lower())
 
     # Resolve notebooks with fuzzy matching
     effective_notebooks: list[str] = []
@@ -2588,6 +2615,7 @@ def todo_review(
     run_review(
         scope=scope,
         tag=tag,
+        priority=priority_int,
         notebooks=notebooks_filter,
         notes=notes_filter,
         exclude_notebooks=all_excluded_notebooks,

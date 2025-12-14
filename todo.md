@@ -119,26 +119,32 @@ todo_exclude: true
 - [x] Add --about flag
 - [x] `nb new <existing>` should prompt to open when exists
 - [ ] give notes a unique ID as well so they can be quick loaded and included on listings like the todos
-- [ ] Add numbering to `nb history` list and allow loading notes from history command like `nb history open 2` or `nb open --history 2`
-- [ ] Capture url and other file attachments as markdown using all2md #feature
+- [x] Add numbering to `nb history` list and allow loading notes from history command like `nb history open 2` or `nb open --history 2`
+- [x] Capture url and other file attachments as markdown using all2md #feature
 - [x] default sort order for todo items: due-section -> due-date (soonest first) -> created-date (oldest first) -> priority -> file/section -> line #
-- [ ] Allow low priority items (priority(low))
+- [x] Allow low priority items (priority(low))
 - [x] 'nb open last -n personal' should work to open last note in personal as well (`nb last -n personal` works fine)
 - [x] `nb stream --modified-today` and `nb stream --viewed-today` or something like that - does that exist?
-- [ ] Allow `tb todo due` to allow multiple todo items, and allow "next week" or "+7" as options too
-- [ ] Add a way to create a log-style command `nb log` which is like `nb add` but will insert a date/time as well.
-- [ ] Add "overdue-by-notebook" to stats and "what's behind"
+- [x] Allow `tb todo due` to allow multiple todo items, and allow "next week" or "+7" as options too
+- [x] Add a way to create a log-style command `nb log` which is like `nb add` but will insert a date/time as well.
+- [x] Add "overdue-by-notebook" to stats and "what's behind"
 
 
 ### Phase 5: Wijjit TUI
-- [ ] Full Wijjit-based todo list view with richer interactions #feature
-- [ ] Wijjit-based todo review #feature
+- [x] Full Wijjit-based todo list view with richer interactions #feature
+- [x] Wijjit-based todo review #feature
 - [ ] Full Wijjit based viewer/editor for notes #feature
 - [x] Stream/continuous view (`nb stream`) with lazy loading
-- [ ] Interactive filtering UI #feature
+- [x] Interactive filtering UI #feature
 - [x] Navigation and links #feature
 - [ ] Browser plugin to add notes from webpages
 
+Notes: 
+The Wijjit TUI has been implemented - there's a bug in the stream interface so it's not yet working.
+There needs to be some improvement on the TODO interface, it's too easy to click one and have it disappear. Need to 
+better style the checkboxes to show the tags and whatnot. Perhaps using checkboxes is not the right approach
+
+The nb todo -i and nb todo review commands are too similar - what should really be the difference? nb todo -i should be for interactive viewing of todos on different lists and whatnot I think.
 
 ### Phase 6: Future Enhancements
 - [ ] Recurring todos (`@recur(weekly)`) #feature
@@ -149,6 +155,10 @@ todo_exclude: true
 - [ ] Due date reminders (optional notifications) #feature
   These can use the `win11toast` library which is dead simple.
 - [ ] Add '@startby' to todos #feature
+
+### AI Ideas:
+- [ ] Generate narrative of what was completed in the week
+- 
 
 
 ## Technical Debt

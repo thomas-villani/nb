@@ -26,7 +26,8 @@ dependencies = [
     "localvectordb",
     "psutil>=7.1.3",
     "httpx>=0.27.0", # web clipping
-    "all2md[html]>=1.0.0", # HTML to markdown conversion
+    "all2md[html]>=1.0.0",
+    "wijjit",
 ]
 [project.scripts]
 nb = "nb.cli:main"
@@ -73,6 +74,7 @@ exclude_lines = [
 [tool.uv.sources]
 localvectordb = { path = "wheels/localvectordb-1.0.0-py3-none-any.whl" }
 all2md = { path = "../mdparse/dist/all2md-1.0.0-py3-none-any.whl" }
+wijjit = { path = "wheels/wijjit-0.1.0a0-py3-none-any.whl" }
 
 
 [tool.bumpversion]

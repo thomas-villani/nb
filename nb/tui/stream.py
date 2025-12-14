@@ -1,338 +1,438 @@
-"""Interactive note streaming viewer for nb."""
+"""Interactive note streaming viewer for nb using Wijjit."""
 
 from __future__ import annotations
 
-import sys
-from dataclasses import dataclass, field
 from pathlib import Path
 
-from rich.console import Console
-from rich.markdown import Markdown
-from rich.panel import Panel
-from rich.text import Text
+from wijjit import Wijjit
 
 from nb.config import get_config
 from nb.models import Note
 
 
-@dataclass
-class StreamState:
-    """State for the interactive note streamer."""
-
-    notes: list[Note]
-    notes_root: Path
-    current_index: int = 0
-    scroll_offset: int = 0
-    terminal_height: int = 24
-    content_lines: list[str] = field(default_factory=list)
-    message: str | None = None
-
-    def current_note(self) -> Note | None:
-        """Get the currently displayed note."""
-        if not self.notes or self.current_index >= len(self.notes):
-            return None
-        return self.notes[self.current_index]
-
-    def next_note(self) -> bool:
-        """Move to next note. Returns False if at end."""
-        if self.current_index < len(self.notes) - 1:
-            self.current_index += 1
-            self.scroll_offset = 0
-            self._load_content()
-            return True
-        return False
-
-    def prev_note(self) -> bool:
-        """Move to previous note. Returns False if at start."""
-        if self.current_index > 0:
-            self.current_index -= 1
-            self.scroll_offset = 0
-            self._load_content()
-            return True
-        return False
-
-    def first_note(self) -> None:
-        """Jump to first note."""
-        self.current_index = 0
-        self.scroll_offset = 0
-        self._load_content()
-
-    def last_note(self) -> None:
-        """Jump to last note."""
-        if self.notes:
-            self.current_index = len(self.notes) - 1
-            self.scroll_offset = 0
-            self._load_content()
-
-    def scroll_down(self, lines: int = 1) -> None:
-        """Scroll down within the current note."""
-        max_offset = max(0, len(self.content_lines) - self.terminal_height + 10)
-        self.scroll_offset = min(self.scroll_offset + lines, max_offset)
-
-    def scroll_up(self, lines: int = 1) -> None:
-        """Scroll up within the current note."""
-        self.scroll_offset = max(0, self.scroll_offset - lines)
-
-    def scroll_to_top(self) -> None:
-        """Scroll to top of current note."""
-        self.scroll_offset = 0
-
-    def scroll_to_bottom(self) -> None:
-        """Scroll to bottom of current note."""
-        max_offset = max(0, len(self.content_lines) - self.terminal_height + 10)
-        self.scroll_offset = max_offset
-
-    def _load_content(self) -> None:
-        """Load content lines for current note."""
-        note = self.current_note()
-        if not note:
-            self.content_lines = []
-            return
-
-        # Get the full path to the note
-        if note.path.is_absolute():
-            full_path = note.path
-        else:
-            full_path = self.notes_root / note.path
-
-        try:
-            content = full_path.read_text(encoding="utf-8")
-            self.content_lines = content.splitlines()
-        except (OSError, UnicodeDecodeError):
-            self.content_lines = ["[Error reading file]"]
-
-
-def get_key() -> str:
-    """Read a single keypress from stdin."""
-    if sys.platform == "win32":
-        import msvcrt
-
-        ch = msvcrt.getch()
-        if ch in (b"\x00", b"\xe0"):  # Special keys
-            ch2 = msvcrt.getch()
-            # Arrow keys
-            if ch2 == b"H":
-                return "up"
-            elif ch2 == b"P":
-                return "down"
-            elif ch2 == b"K":  # Left arrow
-                return "left"
-            elif ch2 == b"M":  # Right arrow
-                return "right"
-            elif ch2 == b"I":  # Page Up
-                return "pageup"
-            elif ch2 == b"Q":  # Page Down
-                return "pagedown"
-            return ""
-        return ch.decode("utf-8", errors="ignore")
-    else:
-        import termios
-        import tty
-
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
-        try:
-            tty.setraw(fd)
-            ch = sys.stdin.read(1)
-            if ch == "\x1b":  # Escape sequence
-                ch2 = sys.stdin.read(1)
-                if ch2 == "[":
-                    ch3 = sys.stdin.read(1)
-                    if ch3 == "A":
-                        return "up"
-                    elif ch3 == "B":
-                        return "down"
-                    elif ch3 == "C":  # Right arrow
-                        return "right"
-                    elif ch3 == "D":  # Left arrow
-                        return "left"
-                    elif ch3 == "5":
-                        sys.stdin.read(1)  # consume ~
-                        return "pageup"
-                    elif ch3 == "6":
-                        sys.stdin.read(1)  # consume ~
-                        return "pagedown"
-                return "\x1b"
-            return ch
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
-
-def render_header(state: StreamState) -> Panel:
-    """Render the header with note info and navigation."""
-    note = state.current_note()
-    if not note:
-        return Panel("No notes", style="dim")
-
-    # Build header text
-    config = get_config()
-    header = Text()
-    header.append(note.title or "Untitled", style="bold")
-    header.append("  ")
-    if note.date:
-        header.append(note.date.strftime(config.date_format), style="cyan")
-    if note.notebook:
-        header.append(f"  [{note.notebook}]", style="magenta")
-
-    # Navigation info
-    nav = Text()
-    nav.append(f"[{state.current_index + 1}/{len(state.notes)}]", style="dim")
-
-    # Scroll indicator
-    if state.content_lines:
-        total_lines = len(state.content_lines)
-        visible_lines = state.terminal_height - 10
-        if total_lines > visible_lines:
-            pct = int((state.scroll_offset / max(1, total_lines - visible_lines)) * 100)
-            nav.append(f"  {pct}%", style="dim")
-
-    header.append("  ")
-    header.append_text(nav)
-
-    return Panel(header, style="blue", padding=(0, 1))
-
-
-def render_help_bar() -> Text:
-    """Render the help bar with keyboard shortcuts."""
-    help_text = Text()
-    help_text.append(" j/k/↑/↓ ", style="bold cyan")
-    help_text.append("scroll  ")
-    help_text.append(" ←/→/PgUp/PgDn ", style="bold cyan")
-    help_text.append("prev/next  ")
-    help_text.append(" g/G ", style="bold cyan")
-    help_text.append("top/bottom  ")
-    help_text.append(" e ", style="bold cyan")
-    help_text.append("edit  ")
-    help_text.append(" q ", style="bold cyan")
-    help_text.append("quit")
-    return help_text
-
-
-def render_view(state: StreamState, console: Console) -> None:
-    """Render the complete streaming view."""
-    console.clear()
-
-    # Get terminal size
-    state.terminal_height = console.height
-
-    # Render header
-    console.print(render_header(state))
-
-    # Render content
-    note = state.current_note()
-    if note:
-        # Calculate visible lines
-        content_height = state.terminal_height - 8  # Header + help bar + margins
-
-        # Get the visible portion of content
-        visible_lines = state.content_lines[
-            state.scroll_offset : state.scroll_offset + content_height
-        ]
-
-        if visible_lines:
-            content = "\n".join(visible_lines)
-            # Render as markdown for nicer formatting
-            try:
-                console.print(Markdown(content))
-            except Exception:
-                # Fall back to plain text if markdown fails
-                console.print(content)
-        else:
-            console.print("[dim]End of note[/dim]")
-    else:
-        console.print("[dim]No note selected[/dim]")
-
-    # Render message if any
-    if state.message:
-        console.print(f"\n[green]{state.message}[/green]")
-
-    # Render help bar
-    console.print()
-    console.print(render_help_bar())
-
-
 def run_note_stream(
     notes: list[Note],
     notes_root: Path,
+    continuous: bool = False,
 ) -> None:
     """Run the interactive note streaming viewer.
 
     Args:
         notes: List of notes to stream through.
         notes_root: Root directory for notes.
+        continuous: If True, show all notes in a continuous flow with dividers.
 
     """
-    from nb.config import get_config
+    from rich.console import Console
+
     from nb.utils.editor import open_in_editor
 
     if not notes:
         Console().print("[yellow]No notes found.[/yellow]")
         return
 
-    console = Console()
     config = get_config()
 
-    state = StreamState(notes=notes, notes_root=notes_root)
-    state._load_content()
+    def load_note_content(note: Note) -> str:
+        """Load content for a note."""
+        if note.path.is_absolute():
+            full_path = note.path
+        else:
+            full_path = notes_root / note.path
 
-    running = True
-    while running:
-        # Render the view
-        render_view(state, console)
-        state.message = None
+        try:
+            return full_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return "[Error reading file]"
 
-        # Get keypress
-        key = get_key()
+    def get_note_path(note: Note) -> Path:
+        """Get the full path for a note."""
+        if note.path.is_absolute():
+            return note.path
+        return notes_root / note.path
 
-        if key in ("q", "\x1b", "\x03"):  # q, Escape, Ctrl+C
-            running = False
+    # Lazy loading settings for continuous mode
+    NOTES_PER_BATCH = 10
 
-        elif key in ("j", "down"):  # Scroll down
-            state.scroll_down()
+    def format_note_header(note: Note, index: int) -> str:
+        """Format a note header for the continuous view."""
+        title = note.title or "Untitled"
+        date_str = note.date.strftime(config.date_format) if note.date else ""
+        notebook = f"[{note.notebook}]" if note.notebook else ""
+        return f"# {title}\n\n*{date_str}* {notebook} — Note {index + 1}/{len(notes)}\n\n---\n\n"
 
-        elif key in ("k", "up"):  # Scroll up
-            state.scroll_up()
+    def build_continuous_content(up_to_index: int) -> str:
+        """Build content for continuous mode with notes up to given index."""
+        parts = []
+        for i in range(min(up_to_index + 1, len(notes))):
+            note = notes[i]
+            header = format_note_header(note, i)
+            content = load_note_content(note)
+            parts.append(header + content)
+        return "\n\n---\n\n".join(parts)
 
-        elif key == "d":  # Half page down
-            state.scroll_down(state.terminal_height // 2)
+    # Load initial content
+    if continuous:
+        # Load first batch only
+        initial_loaded = min(NOTES_PER_BATCH, len(notes)) - 1
+        initial_content = build_continuous_content(initial_loaded)
+    else:
+        initial_loaded = 0
+        initial_content = load_note_content(notes[0])
 
-        elif key == "u":  # Half page up
-            state.scroll_up(state.terminal_height // 2)
+    # Initialize app with state
+    app = Wijjit(
+        initial_state={
+            "notes": notes,
+            "current_index": 0,
+            "note_content": initial_content,
+            "edit_mode": False,
+            "continuous_mode": continuous,
+            "loaded_up_to": initial_loaded,  # For lazy loading in continuous mode
+            "message": "",
+        }
+    )
 
-        elif key in ("n", "right", "pagedown"):  # Next note
-            if not state.next_note():
-                state.message = "Last note"
+    def get_current_note() -> Note | None:
+        """Get the currently displayed note."""
+        notes = app.state.get("notes", [])
+        idx = app.state.get("current_index", 0)
+        if not notes or idx >= len(notes):
+            return None
+        return notes[idx]
 
-        elif key in ("N", "p", "left", "pageup"):  # Previous note
-            if not state.prev_note():
-                state.message = "First note"
+    def refresh_content():
+        """Reload content for current note."""
+        note = get_current_note()
+        if note:
+            app.state["note_content"] = load_note_content(note)
 
-        elif key == "g":  # First note / top of current note
-            if state.scroll_offset > 0:
-                state.scroll_to_top()
+    @app.view("main", default=True)
+    def main_view():
+        """Main note viewing/editing view."""
+
+        def get_data():
+            """Compute fresh data on each render."""
+            notes = app.state.get("notes", [])
+            idx = app.state.get("current_index", 0)
+            note_content = app.state.get("note_content", "")
+            edit_mode = app.state.get("edit_mode", False)
+            continuous_mode = app.state.get("continuous_mode", False)
+
+            # Get current note info
+            note = notes[idx] if notes and idx < len(notes) else None
+
+            loaded_up_to = app.state.get("loaded_up_to", 0)
+            total_notes = len(notes)
+            loaded_count = loaded_up_to + 1 if continuous_mode else 1
+            has_more = continuous_mode and loaded_count < total_notes
+
+            if continuous_mode:
+                title = f"Stream [{loaded_count}/{total_notes} notes]"
+                date_str = ""
+                notebook = ""
+                nav_info = ""
+            elif note:
+                title = note.title or "Untitled"
+                date_str = note.date.strftime(config.date_format) if note.date else ""
+                notebook = note.notebook or ""
+                nav_info = f"[{idx + 1}/{len(notes)}]"
             else:
-                state.first_note()
+                title = "No note"
+                date_str = ""
+                notebook = ""
+                nav_info = ""
 
-        elif key == "G":  # Last note / bottom of current note
-            max_offset = max(0, len(state.content_lines) - state.terminal_height + 10)
-            if state.scroll_offset < max_offset:
-                state.scroll_to_bottom()
-            else:
-                state.last_note()
+            return {
+                "title": title,
+                "date_str": date_str,
+                "notebook": notebook,
+                "nav_info": nav_info,
+                "note_content": note_content,
+                "edit_mode": edit_mode,
+                "continuous_mode": continuous_mode,
+                "has_notes": bool(notes),
+                "has_more": has_more,
+            }
 
-        elif key == "e":  # Edit current note
-            note = state.current_note()
-            if note:
-                console.clear()
-                if note.path.is_absolute():
-                    full_path = note.path
-                else:
-                    full_path = notes_root / note.path
-                open_in_editor(full_path, editor=config.editor)
-                state._load_content()
+        return {
+            "template": """
+{% frame border_style="single" title=title height="fill" %}
+  {% vstack spacing=1 %}
 
-        elif key == " ":  # Space = page down
-            state.scroll_down(state.terminal_height // 2)
+    {# Header with navigation info (paged mode only) #}
+    {% if not continuous_mode %}
+      {% hstack spacing=2 %}
+        {% if date_str %}
+          {% text %}{{ date_str }}{% endtext %}
+        {% endif %}
+        {% if notebook %}
+          {% text dim=true %}[{{ notebook }}]{% endtext %}
+        {% endif %}
+        {% text dim=true %}{{ nav_info }}{% endtext %}
+      {% endhstack %}
+    {% endif %}
 
-    # Clean exit
-    console.clear()
+    {% if has_notes %}
+      {% if state.edit_mode %}
+        {# Edit mode - textarea with wide width to match content view #}
+        {% textarea id="note_editor" height=25 width=120 %}{{ note_content }}{% endtextarea %}
+
+        {% hstack spacing=2 %}
+          {% button action="save" %}Save{% endbutton %}
+          {% button action="cancel" %}Cancel{% endbutton %}
+        {% endhstack %}
+      {% else %}
+        {# Read mode - markdown content view #}
+        {% contentview id="note_viewer" content_type="markdown" height=25 width=120 title="Content" %}
+{{ note_content }}
+{% endcontentview %}
+      {% endif %}
+    {% else %}
+      {% text dim=true %}No notes to display{% endtext %}
+    {% endif %}
+
+    {# Message bar #}
+    {% if state.message %}
+      {% text %}{{ state.message }}{% endtext %}
+    {% endif %}
+
+    {# Navigation buttons (paged mode only) #}
+    {% if not state.edit_mode and not continuous_mode %}
+      {% hstack spacing=1 %}
+        {% button action="prev_note" %}< Prev{% endbutton %}
+        {% button action="next_note" %}Next >{% endbutton %}
+        {% button action="first_note" %}First{% endbutton %}
+        {% button action="last_note" %}Last{% endbutton %}
+        {% button action="edit_inapp" %}Edit{% endbutton %}
+        {% button action="edit_external" %}External{% endbutton %}
+        {% button action="quit" %}Quit{% endbutton %}
+      {% endhstack %}
+    {% endif %}
+
+    {# Continuous mode controls #}
+    {% if not state.edit_mode and continuous_mode %}
+      {% hstack spacing=1 %}
+        {% if has_more %}
+          {% button action="load_more" %}Load More (m){% endbutton %}
+        {% endif %}
+        {% button action="quit" %}Quit{% endbutton %}
+      {% endhstack %}
+      {% if has_more %}
+        {% text dim=true %}Press 'm' to load more notes{% endtext %}
+      {% endif %}
+    {% endif %}
+
+  {% endvstack %}
+{% endframe %}
+            """,
+            "data": get_data,
+        }
+
+    # --- Navigation ---
+
+    def go_next_note():
+        """Navigate to next note."""
+        if app.state.get("edit_mode") or app.state.get("continuous_mode"):
+            return
+        notes = app.state.get("notes", [])
+        idx = app.state.get("current_index", 0)
+        if idx < len(notes) - 1:
+            app.state["current_index"] = idx + 1
+            refresh_content()
+        else:
+            app.state["message"] = "Last note"
+
+    def go_prev_note():
+        """Navigate to previous note."""
+        if app.state.get("edit_mode") or app.state.get("continuous_mode"):
+            return
+        idx = app.state.get("current_index", 0)
+        if idx > 0:
+            app.state["current_index"] = idx - 1
+            refresh_content()
+        else:
+            app.state["message"] = "First note"
+
+    @app.on_key("j")
+    def next_note_j(event):
+        """Go to next note (j key)."""
+        go_next_note()
+
+    @app.on_key("k")
+    def prev_note_k(event):
+        """Go to previous note (k key)."""
+        go_prev_note()
+
+    @app.on_key("n")
+    def next_note_n(event):
+        """Go to next note (n key)."""
+        go_next_note()
+
+    @app.on_key("N")
+    def prev_note_N(event):
+        """Go to previous note (N key)."""
+        go_prev_note()
+
+    @app.on_key("p")
+    def prev_note_p(event):
+        """Go to previous note (p key)."""
+        go_prev_note()
+
+    @app.on_key("g")
+    def first_note(event):
+        """Go to first note."""
+        if app.state.get("edit_mode") or app.state.get("continuous_mode"):
+            return
+        if app.state.get("current_index", 0) != 0:
+            app.state["current_index"] = 0
+            refresh_content()
+
+    @app.on_key("G")
+    def last_note(event):
+        """Go to last note."""
+        if app.state.get("edit_mode") or app.state.get("continuous_mode"):
+            return
+        notes = app.state.get("notes", [])
+        last_idx = len(notes) - 1
+        if notes and app.state.get("current_index", 0) != last_idx:
+            app.state["current_index"] = last_idx
+            refresh_content()
+
+    # --- Load More (continuous mode) ---
+
+    def load_more_notes():
+        """Load more notes in continuous mode."""
+        if not app.state.get("continuous_mode"):
+            return
+
+        notes_list = app.state.get("notes", [])
+        loaded_up_to = app.state.get("loaded_up_to", 0)
+
+        if loaded_up_to >= len(notes_list) - 1:
+            app.state["message"] = "All notes loaded"
+            return
+
+        # Load next batch
+        new_loaded = min(loaded_up_to + NOTES_PER_BATCH, len(notes_list) - 1)
+        app.state["loaded_up_to"] = new_loaded
+        app.state["note_content"] = build_continuous_content(new_loaded)
+        app.state["message"] = f"Loaded {new_loaded + 1}/{len(notes_list)} notes"
+
+    @app.on_key("m")
+    def load_more_key(event):
+        """Load more notes (m key)."""
+        load_more_notes()
+
+    @app.on_action("load_more")
+    def load_more_action(event):
+        """Button: Load more notes."""
+        load_more_notes()
+
+    # --- Editing ---
+
+    @app.on_key("e")
+    def edit_in_app(event):
+        """Enter in-app edit mode."""
+        if app.state.get("edit_mode"):
+            return
+        note = get_current_note()
+        if note:
+            app.state["edit_mode"] = True
+            app.state["message"] = "Editing... Press Save or Cancel when done"
+
+    @app.on_key("E")
+    def edit_external(event):
+        """Open in external editor."""
+        if app.state.get("edit_mode"):
+            return
+        note = get_current_note()
+        if note:
+            full_path = get_note_path(note)
+            open_in_editor(full_path, editor=config.editor)
+            refresh_content()
+            app.state["message"] = "Refreshed after external edit"
+
+    @app.on_action("save")
+    def save_note(event):
+        """Save edited note content."""
+        note = get_current_note()
+        if not note:
+            return
+
+        content = app.state.get("note_editor", "")
+        full_path = get_note_path(note)
+
+        try:
+            full_path.write_text(content, encoding="utf-8")
+            app.state["note_content"] = content
+            app.state["edit_mode"] = False
+            app.state["message"] = "Saved"
+        except (OSError, PermissionError) as e:
+            app.state["message"] = f"Error saving: {e}"
+
+    @app.on_action("cancel")
+    def cancel_edit(event):
+        """Cancel editing and restore original content."""
+        app.state["edit_mode"] = False
+        refresh_content()
+        app.state["message"] = "Edit cancelled"
+
+    # --- Quit ---
+
+    @app.on_key("q")
+    def quit_app(event):
+        """Quit the viewer."""
+        if app.state.get("edit_mode"):
+            app.state["message"] = "Save or cancel edit first"
+            return
+        app.quit()
+
+    # Handle escape to cancel edit or quit
+    @app.on_key("escape")
+    def escape_handler(event):
+        """Handle escape key."""
+        if app.state.get("edit_mode"):
+            cancel_edit(event)
+        else:
+            app.quit()
+
+    # --- Button Action Handlers ---
+
+    @app.on_action("prev_note")
+    def action_prev_note(event):
+        """Button: Previous note."""
+        go_prev_note()
+
+    @app.on_action("next_note")
+    def action_next_note(event):
+        """Button: Next note."""
+        go_next_note()
+
+    @app.on_action("first_note")
+    def action_first_note(event):
+        """Button: First note."""
+        first_note(event)
+
+    @app.on_action("last_note")
+    def action_last_note(event):
+        """Button: Last note."""
+        last_note(event)
+
+    @app.on_action("edit_inapp")
+    def action_edit_inapp(event):
+        """Button: Edit in-app."""
+        edit_in_app(event)
+
+    @app.on_action("edit_external")
+    def action_edit_external(event):
+        """Button: Edit in external editor."""
+        edit_external(event)
+
+    @app.on_action("quit")
+    def action_quit(event):
+        """Button: Quit."""
+        quit_app(event)
+
+    # Run the app
+    app.run()

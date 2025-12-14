@@ -473,6 +473,13 @@ def index_cmd(
 @click.option(
     "--limit", "-l", default=50, help="Limit for --recent/--recently-modified"
 )
+@click.option(
+    "--continuous",
+    "--auto",
+    "-c",
+    is_flag=True,
+    help="Show all notes in continuous flow with dividers",
+)
 def stream_notes(
     notebook: str | None,
     when: str | None,
@@ -482,23 +489,26 @@ def stream_notes(
     recent: bool,
     recently_modified: bool,
     limit: int,
+    continuous: bool,
 ) -> None:
     """Browse notes interactively in a streaming view.
 
     Navigate through notes with keyboard controls:
 
     \b
-    j/k or ↑/↓     - Scroll within note
-    ←/→ or PgUp/Dn - Previous/next note
-    n/N or p       - Next/previous note
-    g/G            - First/last note (or top/bottom of current)
-    d/u            - Half-page down/up
-    e              - Edit current note
+    j/k            - Next/previous note
+    n/N or p       - Next/previous note (alternate)
+    g/G            - First/last note
+    ↑/↓            - Scroll within note (when focused)
+    e              - Edit current note (in-app)
+    E              - Edit in external editor
+    Tab            - Focus content area for scrolling
     q              - Quit
 
-    Examples:
     \b
-      nb stream                      # Stream all notes
+    Examples:
+      nb stream                      # Stream all notes (paged)
+      nb stream -c                   # Continuous flow with dividers
       nb stream -n daily             # Stream daily notes
       nb stream -w "last week"       # Last week's notes
       nb stream -w "this week"       # This week's notes
@@ -506,6 +516,7 @@ def stream_notes(
       nb stream --recent             # Recently viewed notes
       nb stream --recently-modified  # Recently modified notes
       nb stream --recent -l 20       # Last 20 viewed notes
+      nb stream -c -w "this week"    # Continuous flow of this week
 
     """
     from datetime import date as date_type
@@ -632,7 +643,7 @@ def stream_notes(
             return
 
         console.print(f"[dim]Loading {len(notes)} notes...[/dim]")
-        run_note_stream(notes, config.notes_root)
+        run_note_stream(notes, config.notes_root, continuous=continuous)
         return
 
     # Standard date-based query
@@ -706,4 +717,4 @@ def stream_notes(
         )
 
     console.print(f"[dim]Loading {len(notes)} notes...[/dim]")
-    run_note_stream(notes, config.notes_root)
+    run_note_stream(notes, config.notes_root, continuous=continuous)

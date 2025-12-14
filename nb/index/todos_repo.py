@@ -546,6 +546,9 @@ def query_todos(
     if notes:
         note_conditions = []
         for note_path in notes:
+            # Normalize path to use forward slashes (consistent with DB storage)
+            note_path = note_path.replace("\\", "/")
+
             # Check if this looks like a full/absolute path (contains drive letter or starts with /)
             is_full_path = (
                 len(note_path) > 2 and note_path[1] == ":"  # Windows: C:/...
