@@ -949,14 +949,39 @@ inbox:
 
 ### Attachments
 
+Attach files and URLs to notes and todos. Attachments are indexed in the database for fast queries.
+
 ```bash
+# Attach files
 nb attach file ./doc.pdf              # Attach to today's note
 nb attach file ./img.png --to note.md # Attach to specific note
 nb attach file ./ref.pdf --copy       # Copy to .nb/attachments/
+nb attach file report.pdf --to abc123 --title "Q4 Report"  # Attach to todo
+
+# Attach URLs
 nb attach url https://example.com
-nb attach list
-nb attach open note.md --line 15
+nb attach url https://docs.api.com --title "API Docs"
+
+# List attachments
+nb attach list                        # Attachments in today's note
+nb attach list work/project           # Attachments in specific note
+nb attach list --all                  # All attachments (from database)
+nb attach list --all --type file      # Only file attachments
+nb attach list --all --type url       # Only URL attachments
+nb attach list --all --notebook work  # Filter by notebook
+
+# Open attachments
+nb attach open note.md --line 15      # Open attachment at line 15
+
+# Statistics
+nb attach stats                       # Show attachment statistics
+
+# Find orphaned files
+nb attach orphans                     # List files in attachments/ not referenced
+nb attach orphans --delete            # Delete orphan files
 ```
+
+Attachments are automatically indexed when notes are indexed (`nb index`).
 
 ### Index & Maintenance
 

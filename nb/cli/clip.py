@@ -140,9 +140,9 @@ def clip(
     include_domain_tag = config.clip.auto_tag_domain and not no_domain_tag
 
     # Save the clipped content
+    # Temporarily override config setting for this call, using try/finally to ensure restoration
+    original_setting = config.clip.auto_tag_domain
     try:
-        # Temporarily override config setting for this call
-        original_setting = config.clip.auto_tag_domain
         config.clip.auto_tag_domain = include_domain_tag
 
         saved_path = save_clipped_note(
@@ -151,10 +151,6 @@ def clip(
             target_note=resolved_target,
             extra_tags=list(tags) if tags else None,
         )
-
-        # Restore original setting
-        config.clip.auto_tag_domain = original_setting
-
     except FileExistsError:
         console.print("[red]A note with this title already exists.[/red]")
         console.print("[dim]Use --to to append to an existing note.[/dim]")
@@ -162,6 +158,8 @@ def clip(
     except Exception as e:
         console.print(f"[red]Failed to save note: {e}[/red]")
         raise SystemExit(1) from None
+    finally:
+        config.clip.auto_tag_domain = original_setting
 
     # Report success
     if resolved_target:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import http.server
 import json
 import socketserver
-import sqlite3
 import threading
 import webbrowser
 from pathlib import Path
@@ -20,16 +19,14 @@ from nb.core.notes import get_note, get_sections_for_path
 def get_alias_for_path(note_path: Path) -> str | None:
     """Get the alias for a given note path, if one exists.
 
-    Uses a fresh SQLite connection to avoid issues with connection sharing.
+    Uses get_db() to ensure schema is initialized and consistent with rest of app.
     """
+    from nb.index.db import get_db
+
     config = get_config()
     try:
-        # Create a fresh connection to avoid connection sharing issues
-        conn = sqlite3.connect(config.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.execute("SELECT alias, path FROM note_aliases")
-        rows = cursor.fetchall()
-        conn.close()
+        db = get_db()
+        rows = db.fetchall("SELECT alias, path FROM note_aliases")
 
         # Always resolve to absolute path for comparison
         # For relative paths, prepend notes_root before resolving

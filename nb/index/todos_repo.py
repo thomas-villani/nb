@@ -504,11 +504,11 @@ def query_todos(
                 params.append(TodoStatus.PENDING.value)
 
     if due_start:
-        conditions.append("t.due_date >= ?")
+        conditions.append("DATE(t.due_date) >= ?")
         params.append(due_start.isoformat())
 
     if due_end:
-        conditions.append("t.due_date <= ?")
+        conditions.append("DATE(t.due_date) <= ?")
         params.append(due_end.isoformat())
 
     if created_start:
@@ -528,7 +528,7 @@ def query_todos(
         params.append(completed_date_end.isoformat())
 
     if overdue:
-        conditions.append("t.due_date < ? AND t.status != ?")
+        conditions.append("DATE(t.due_date) < ? AND t.status != ?")
         params.append(date.today().isoformat())
         params.append(TodoStatus.COMPLETED.value)
 
@@ -754,11 +754,11 @@ def get_todo_stats() -> dict[str, int]:
         (TodoStatus.IN_PROGRESS.value,),
     )
     overdue = db.fetchone(
-        "SELECT COUNT(*) as count FROM todos WHERE parent_id IS NULL AND status != ? AND due_date < ?",
+        "SELECT COUNT(*) as count FROM todos WHERE parent_id IS NULL AND status != ? AND DATE(due_date) < ?",
         (TodoStatus.COMPLETED.value, date.today().isoformat()),
     )
     due_today = db.fetchone(
-        "SELECT COUNT(*) as count FROM todos WHERE parent_id IS NULL AND status != ? AND due_date = ?",
+        "SELECT COUNT(*) as count FROM todos WHERE parent_id IS NULL AND status != ? AND DATE(due_date) = ?",
         (TodoStatus.COMPLETED.value, date.today().isoformat()),
     )
 
@@ -834,21 +834,21 @@ def get_extended_todo_stats(
 
     # Get overdue count
     overdue_row = db.fetchone(
-        f"SELECT COUNT(*) as count FROM todos WHERE {base_where} AND status != ? AND due_date < ?",
+        f"SELECT COUNT(*) as count FROM todos WHERE {base_where} AND status != ? AND DATE(due_date) < ?",
         tuple(params) + (TodoStatus.COMPLETED.value, today.isoformat()),
     )
     overdue = overdue_row["count"] if overdue_row else 0
 
     # Get due today count
     due_today_row = db.fetchone(
-        f"SELECT COUNT(*) as count FROM todos WHERE {base_where} AND status != ? AND due_date = ?",
+        f"SELECT COUNT(*) as count FROM todos WHERE {base_where} AND status != ? AND DATE(due_date) = ?",
         tuple(params) + (TodoStatus.COMPLETED.value, today.isoformat()),
     )
     due_today = due_today_row["count"] if due_today_row else 0
 
     # Get due this week count (excluding today)
     due_week_row = db.fetchone(
-        f"SELECT COUNT(*) as count FROM todos WHERE {base_where} AND status != ? AND due_date > ? AND due_date <= ?",
+        f"SELECT COUNT(*) as count FROM todos WHERE {base_where} AND status != ? AND DATE(due_date) > ? AND DATE(due_date) <= ?",
         tuple(params)
         + (TodoStatus.COMPLETED.value, today.isoformat(), week_end.isoformat()),
     )
@@ -871,7 +871,7 @@ def get_extended_todo_stats(
     # Get stats by notebook
     notebook_rows = db.fetchall(
         f"""SELECT project, status,
-            SUM(CASE WHEN due_date < ? AND status != ? THEN 1 ELSE 0 END) as overdue_count,
+            SUM(CASE WHEN DATE(due_date) < ? AND status != ? THEN 1 ELSE 0 END) as overdue_count,
             COUNT(*) as count
             FROM todos WHERE {base_where} GROUP BY project, status""",
         tuple(params) + (today.isoformat(), TodoStatus.COMPLETED.value),

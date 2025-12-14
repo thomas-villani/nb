@@ -170,18 +170,6 @@ Configure a default template for a notebook in config:
        date_based: true
        template: meeting
 
-Attachments
------------
-
-Attach files or URLs using the ``@attach:`` syntax:
-
-.. code-block:: markdown
-
-   @attach: ~/Documents/spec.pdf
-   @attach: ./relative/path/to/file.png
-   @attach: https://example.com/resource
-   @attach: [Custom Title](~/path/to/file.pdf)
-
 Note linking
 ------------
 
@@ -230,14 +218,29 @@ Attach files or URLs using the ``@attach:`` syntax:
    @attach: ~/Documents/spec.pdf
    @attach: ./relative/path/to/file.png
    @attach: https://example.com/resource
-   @attach: [Custom Title](~/path/to/file.pdf)
+   @attach: ~/path/to/file.pdf "Custom Title"
 
-Attachments can also be added via command:
+Attachments are automatically indexed when notes are indexed (``nb index``),
+enabling fast queries across all attachments.
+
+**Add attachments via CLI:**
 
 .. code-block:: bash
 
-   nb attach file ./doc.pdf
+   nb attach file ./doc.pdf              # Attach to today's note
+   nb attach file ./ref.pdf --copy       # Copy to .nb/attachments/
    nb attach url https://example.com
+
+**Query attachments:**
+
+.. code-block:: bash
+
+   nb attach list --all                  # All attachments
+   nb attach list --all --type file      # Only files
+   nb attach stats                       # Statistics
+   nb attach orphans                     # Find unreferenced files
+
+See :doc:`../commands/management` for full attachment command reference
 
 Complete example
 ----------------

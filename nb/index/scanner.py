@@ -13,6 +13,11 @@ from pathlib import Path
 from nb.config import get_config
 from nb.core.notes import get_note
 from nb.core.todos import extract_todos, normalize_due_dates_in_file
+from nb.index.attachments_repo import (
+    delete_attachments_for_note,
+    extract_attachments_from_content,
+    upsert_attachments_batch,
+)
 from nb.index.db import Database, get_db
 from nb.index.todos_repo import (
     delete_todos_for_source,
@@ -376,6 +381,19 @@ def index_note(
     todos = extract_todos(full_path, source_type=source_type, notes_root=notes_root)
     upsert_todos_batch(todos, preserved_dates=preserved_dates)
 
+    # Index attachments (delete existing first, then extract from content)
+    delete_attachments_for_note(full_path)
+    if content:
+        # Extract note-level attachments
+        note_attachments = extract_attachments_from_content(
+            content,
+            parent_type="note",
+            parent_id=normalized_note_path,
+            source_path=full_path,
+        )
+        if note_attachments:
+            upsert_attachments_batch(note_attachments)
+
 
 def count_files_to_index(
     notes_root: Path | None = None,
@@ -664,6 +682,19 @@ def index_note_threadsafe(
     # Extract and index new todos (batch for performance, use thread-local db)
     todos = extract_todos(full_path, source_type=source_type, notes_root=notes_root)
     upsert_todos_batch(todos, db=db, preserved_dates=preserved_dates)
+
+    # Index attachments (delete existing first, then extract from content)
+    delete_attachments_for_note(full_path, db=db)
+    if content:
+        # Extract note-level attachments
+        note_attachments = extract_attachments_from_content(
+            content,
+            parent_type="note",
+            parent_id=normalized_note_path,
+            source_path=full_path,
+        )
+        if note_attachments:
+            upsert_attachments_batch(note_attachments, db=db)
 
 
 def rebuild_search_index(

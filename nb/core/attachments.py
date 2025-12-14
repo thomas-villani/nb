@@ -179,7 +179,7 @@ def attach_to_note(
         The created Attachment object.
 
     """
-    from nb.utils.hashing import make_note_hash
+    from nb.utils.hashing import make_note_hash, normalize_path
 
     # Create the attachment
     content = note_path.read_text(encoding="utf-8")
@@ -200,6 +200,17 @@ def attach_to_note(
 
     with note_path.open("a", encoding="utf-8") as f:
         f.write(attach_line + "\n")
+
+    # Also upsert to database for fast queries
+    try:
+        from nb.index.attachments_repo import upsert_attachment
+
+        # Use normalized note path as parent_id (consistent with indexer)
+        parent_id = normalize_path(note_path)
+        upsert_attachment(attachment, parent_type="note", parent_id=parent_id)
+    except Exception:
+        # Don't fail the attach operation if DB upsert fails
+        pass
 
     return attachment
 
@@ -263,6 +274,15 @@ def attach_to_todo(
 
     # Write back
     note_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    # Also upsert to database for fast queries
+    try:
+        from nb.index.attachments_repo import upsert_attachment
+
+        upsert_attachment(attachment, parent_type="todo", parent_id=todo_id)
+    except Exception:
+        # Don't fail the attach operation if DB upsert fails
+        pass
 
     return attachment
 

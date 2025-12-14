@@ -120,14 +120,38 @@ def attach_url(url: str, target: str | None, title: str | None) -> None:
 
 @attach.command("list")
 @click.argument("target", required=False)
-def attach_list(target: str | None) -> None:
-    """List attachments in a note.
+@click.option(
+    "--all",
+    "-a",
+    "list_all",
+    is_flag=True,
+    help="List all attachments across all notes",
+)
+@click.option(
+    "--type",
+    "-t",
+    "attach_type",
+    type=click.Choice(["file", "url"]),
+    help="Filter by type",
+)
+@click.option("--notebook", "-n", help="Filter by notebook")
+def attach_list(
+    target: str | None,
+    list_all: bool,
+    attach_type: str | None,
+    notebook: str | None,
+) -> None:
+    """List attachments in a note or across all notes.
 
     Shows all @attach lines in the specified note (or today's note by default).
+    Use --all to list all attachments across the entire database.
 
     Examples:
         nb attach list
         nb attach list daily/2025-11-27.md
+        nb attach list --all
+        nb attach list --all --type file
+        nb attach list --all --notebook projects
 
     """
     from datetime import date
@@ -136,6 +160,31 @@ def attach_list(target: str | None) -> None:
     from nb.core.notes import ensure_daily_note
     from nb.models import Attachment
 
+    # If --all flag, query from database
+    if list_all:
+        from nb.index.attachments_repo import query_attachments
+
+        attachments = query_attachments(
+            attachment_type=attach_type,
+            notebook=notebook,
+        )
+
+        if not attachments:
+            console.print("[dim]No attachments found.[/dim]")
+            return
+
+        console.print(f"\n[bold]All Attachments ({len(attachments)}):[/bold]\n")
+
+        for attachment, parent_type, parent_id in attachments:
+            type_badge = (
+                "[cyan]url[/cyan]" if attachment.type == "url" else "[blue]file[/blue]"
+            )
+            parent_short = parent_id[-40:] if len(parent_id) > 40 else parent_id
+            console.print(f"  {type_badge} {attachment.path}")
+            console.print(f"       [dim]{parent_type}: {parent_short}[/dim]")
+        return
+
+    # Otherwise, show attachments for a specific note
     if target is None:
         note_path = ensure_daily_note(date.today())
     else:
@@ -145,15 +194,15 @@ def attach_list(target: str | None) -> None:
         console.print(f"[red]Note not found: {target}[/red]")
         raise SystemExit(1)
 
-    attachments = list_attachments_in_file(note_path)
+    attachments_in_file = list_attachments_in_file(note_path)
 
-    if not attachments:
+    if not attachments_in_file:
         console.print("[dim]No attachments found.[/dim]")
         return
 
     console.print(f"\n[bold]Attachments in {note_path.name}:[/bold]\n")
 
-    for line_num, path in attachments:
+    for line_num, path in attachments_in_file:
         # Check if file exists
         from nb.core.attachments import is_url
 
@@ -234,3 +283,94 @@ def attach_open(target: str, line: int | None) -> None:
     else:
         console.print(f"[red]Failed to open:[/red] {found}")
         raise SystemExit(1)
+
+
+@attach.command("stats")
+def attach_stats() -> None:
+    """Show attachment statistics.
+
+    Displays counts of attachments by type, parent type, and storage method.
+
+    Examples:
+        nb attach stats
+
+    """
+    from nb.index.attachments_repo import get_attachment_stats
+
+    stats = get_attachment_stats()
+
+    if stats["total"] == 0:
+        console.print("[dim]No attachments indexed.[/dim]")
+        console.print("[dim]Run 'nb index' to index attachments from your notes.[/dim]")
+        return
+
+    console.print("\n[bold]Attachment Statistics[/bold]\n")
+    console.print(f"  Total: {stats['total']}")
+
+    # By type
+    console.print("\n  [bold]By Type:[/bold]")
+    for attach_type, count in stats["by_type"].items():
+        console.print(f"    {attach_type}: {count}")
+
+    # By parent type
+    console.print("\n  [bold]By Owner:[/bold]")
+    for parent_type, count in stats["by_parent_type"].items():
+        console.print(f"    {parent_type}: {count}")
+
+    # Storage method
+    console.print("\n  [bold]Storage:[/bold]")
+    console.print(f"    Copied: {stats['copied']}")
+    console.print(f"    Linked: {stats['linked']}")
+
+
+@attach.command("orphans")
+@click.option("--delete", "-d", is_flag=True, help="Delete orphan files")
+def attach_orphans(delete: bool) -> None:
+    """Find attachment files not referenced by any note.
+
+    Scans the attachments directory for files that have no corresponding
+    @attach: reference in any note.
+
+    Examples:
+        nb attach orphans
+        nb attach orphans --delete
+
+    """
+    from nb.index.attachments_repo import find_orphan_attachment_files
+
+    orphans = find_orphan_attachment_files()
+
+    if not orphans:
+        console.print("[green]No orphan attachments found.[/green]")
+        return
+
+    console.print(f"\n[bold]Orphan Attachments ({len(orphans)}):[/bold]\n")
+
+    total_size = 0
+    for path in orphans:
+        size = path.stat().st_size
+        total_size += size
+        size_str = _format_size(size)
+        console.print(f"  {path.name}  [dim]{size_str}[/dim]")
+
+    console.print(f"\n  [dim]Total: {_format_size(total_size)}[/dim]")
+
+    if delete:
+        console.print()
+        for path in orphans:
+            try:
+                path.unlink()
+                console.print(f"  [red]Deleted:[/red] {path.name}")
+            except OSError as e:
+                console.print(f"  [red]Failed to delete {path.name}: {e}[/red]")
+    else:
+        console.print("\n[dim]Use --delete to remove these files.[/dim]")
+
+
+def _format_size(size: int) -> str:
+    """Format a file size in human-readable form."""
+    for unit in ["B", "KB", "MB", "GB"]:
+        if size < 1024:
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"

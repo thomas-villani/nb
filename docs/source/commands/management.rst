@@ -661,10 +661,12 @@ List tags with usage counts.
 Attachments
 -----------
 
+Attach files and URLs to notes and todos. Attachments are indexed in the database for fast queries.
+
 nb attach file
 ^^^^^^^^^^^^^^
 
-Attach a file to a note.
+Attach a file to a note or todo.
 
 **Usage:** ``nb attach file [OPTIONS] PATH``
 
@@ -676,9 +678,11 @@ Attach a file to a note.
 
    * - Option
      - Description
-   * - ``--to NOTE``
-     - Attach to specific note (default: today's)
-   * - ``--copy``
+   * - ``--to TARGET``
+     - Attach to specific note or todo ID (default: today's note)
+   * - ``--title, -t TEXT``
+     - Display title for the attachment
+   * - ``--copy, -c``
      - Copy file to ``.nb/attachments/``
 
 **Examples:**
@@ -688,33 +692,14 @@ Attach a file to a note.
    nb attach file ./doc.pdf              # Attach to today's note
    nb attach file ./img.png --to note.md
    nb attach file ./ref.pdf --copy
+   nb attach file report.pdf --to abc123 --title "Q4 Report"
 
 nb attach url
 ^^^^^^^^^^^^^
 
-Attach a URL to a note.
+Attach a URL to a note or todo.
 
-**Usage:** ``nb attach url URL``
-
-**Example:**
-
-.. code-block:: bash
-
-   nb attach url https://example.com
-
-nb attach list
-^^^^^^^^^^^^^^
-
-List attachments.
-
-**Usage:** ``nb attach list``
-
-nb attach open
-^^^^^^^^^^^^^^
-
-Open an attachment.
-
-**Usage:** ``nb attach open NOTE [OPTIONS]``
+**Usage:** ``nb attach url [OPTIONS] URL``
 
 **Options:**
 
@@ -724,8 +709,127 @@ Open an attachment.
 
    * - Option
      - Description
-   * - ``--line N``
+   * - ``--to TARGET``
+     - Attach to specific note or todo ID (default: today's note)
+   * - ``--title, -t TEXT``
+     - Display title for the URL
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb attach url https://example.com
+   nb attach url https://docs.api.com --title "API Docs"
+
+nb attach list
+^^^^^^^^^^^^^^
+
+List attachments in a note or across all notes.
+
+**Usage:** ``nb attach list [OPTIONS] [TARGET]``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``TARGET``
+     - Note path (default: today's note)
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``--all, -a``
+     - List all attachments from database
+   * - ``--type, -t TYPE``
+     - Filter by type (``file`` or ``url``)
+   * - ``--notebook, -n NAME``
+     - Filter by notebook
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb attach list                        # Attachments in today's note
+   nb attach list work/project           # Attachments in specific note
+   nb attach list --all                  # All attachments (from database)
+   nb attach list --all --type file      # Only file attachments
+   nb attach list --all --notebook work  # Filter by notebook
+
+nb attach open
+^^^^^^^^^^^^^^
+
+Open an attachment with the system default handler.
+
+**Usage:** ``nb attach open TARGET [OPTIONS]``
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``--line, -l N``
      - Open attachment at specific line
+
+**Example:**
+
+.. code-block:: bash
+
+   nb attach open note.md --line 15
+
+nb attach stats
+^^^^^^^^^^^^^^^
+
+Show attachment statistics.
+
+**Usage:** ``nb attach stats``
+
+Displays counts of attachments by type, parent type, and storage method.
+
+**Example:**
+
+.. code-block:: bash
+
+   nb attach stats
+
+nb attach orphans
+^^^^^^^^^^^^^^^^^
+
+Find attachment files not referenced by any note.
+
+**Usage:** ``nb attach orphans [OPTIONS]``
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``--delete, -d``
+     - Delete orphan files
+
+Scans the ``.nb/attachments/`` directory for files that have no corresponding
+``@attach:`` reference in any note.
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb attach orphans              # List orphan files
+   nb attach orphans --delete     # Delete orphan files
 
 Export
 ------

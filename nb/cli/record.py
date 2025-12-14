@@ -718,7 +718,7 @@ def _transcribe_recording(
         raise SystemExit(1) from e
 
     finish_time = time.time() - start_time
-    console.print(f"[cyan]Finished transcription ({finish_time / 60:.2f} min.)[/cyan])")
+    console.print(f"[cyan]Finished transcription ({finish_time / 60:.2f} min.)[/cyan]")
 
     # Post-process dictation transcripts
     if dictation:
