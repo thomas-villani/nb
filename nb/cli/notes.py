@@ -18,10 +18,12 @@ from nb.cli.utils import (
 )
 from nb.config import get_config
 from nb.core.notes import (
+    copy_note,
     create_note,
     delete_note,
     ensure_daily_note,
     list_daily_notes,
+    move_note,
     open_note,
 )
 from nb.utils.fuzzy import UserCancelled
@@ -45,6 +47,8 @@ def register_note_commands(cli: click.Group) -> None:
     cli.add_command(list_aliases_cmd)
     cli.add_command(delete_note_cmd)
     cli.add_command(where_cmd)
+    cli.add_command(mv_cmd)
+    cli.add_command(cp_cmd)
 
 
 @click.command()
@@ -1550,3 +1554,135 @@ def where_cmd(ref: str, notebook: str | None) -> None:
     for p in paths_found:
         # Print absolute path (plain text for piping)
         print(str(p.resolve()))
+
+
+@click.command("mv")
+@click.argument("source_ref")
+@click.argument("dest_ref")
+@click.option("--force", "-f", is_flag=True, help="Overwrite destination if exists")
+def mv_cmd(source_ref: str, dest_ref: str, force: bool) -> None:
+    """Move a note to a new location.
+
+    SOURCE_REF and DEST_REF can be:
+    - notebook/note format (e.g., work/project -> archive/project)
+    - Just a note name with notebook context
+    - A date reference for date-based notebooks
+
+    Moving a note will:
+    - Move the file to the new location
+    - Update the database index
+    - Generate new todo IDs (since IDs include the file path)
+
+    \b
+    Examples:
+      nb mv work/old-project archive/old-project
+      nb mv daily/friday archive/2025-01-10
+      nb mv myproject work/myproject        # Move myproject.md to work/
+      nb mv work/draft work/final -f        # Overwrite if exists
+    """
+    from nb.cli.utils import get_display_path
+
+    config = get_config()
+
+    # Resolve source path
+    try:
+        source_path = resolve_note_ref(source_ref)
+    except UserCancelled:
+        console.print("[dim]Cancelled.[/dim]")
+        raise SystemExit(1) from None
+
+    if not source_path:
+        console.print(f"[red]Could not resolve source note: {source_ref}[/red]")
+        raise SystemExit(1)
+
+    # Parse destination - could be notebook/note or just notebook
+    dest_parts = dest_ref.split("/", 1)
+    if len(dest_parts) == 1:
+        # Just a name, put in same notebook as source
+        dest_path = source_path.parent / f"{dest_ref}.md"
+    else:
+        # Full notebook/note path
+        dest_path = config.notes_root / f"{dest_ref}.md"
+
+    source_display = get_display_path(source_path)
+
+    try:
+        result = move_note(
+            source_path, dest_path, notes_root=config.notes_root, force=force
+        )
+        console.print(
+            f"[green]Moved:[/green] {source_display} -> {get_display_path(result)}"
+        )
+    except FileNotFoundError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1) from None
+    except FileExistsError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1) from None
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1) from None
+
+
+@click.command("cp")
+@click.argument("source_ref")
+@click.argument("dest_ref")
+def cp_cmd(source_ref: str, dest_ref: str) -> None:
+    """Copy a note to a new location.
+
+    SOURCE_REF and DEST_REF can be:
+    - notebook/note format (e.g., work/template -> work/new-project)
+    - Just a note name with notebook context
+    - A date reference for date-based notebooks
+
+    Copying a note will:
+    - Create a copy at the new location
+    - Index the new note
+    - Generate new todo IDs for the copy (since IDs include the file path)
+
+    \b
+    Examples:
+      nb cp work/template work/new-project
+      nb cp daily/friday archive/2025-01-10
+      nb cp mytemplate work/myproject        # Copy to work/
+    """
+    from nb.cli.utils import get_display_path
+
+    config = get_config()
+
+    # Resolve source path
+    try:
+        source_path = resolve_note_ref(source_ref)
+    except UserCancelled:
+        console.print("[dim]Cancelled.[/dim]")
+        raise SystemExit(1) from None
+
+    if not source_path:
+        console.print(f"[red]Could not resolve source note: {source_ref}[/red]")
+        raise SystemExit(1)
+
+    # Parse destination - could be notebook/note or just notebook
+    dest_parts = dest_ref.split("/", 1)
+    if len(dest_parts) == 1:
+        # Just a name, put in same notebook as source
+        dest_path = source_path.parent / f"{dest_ref}.md"
+    else:
+        # Full notebook/note path
+        dest_path = config.notes_root / f"{dest_ref}.md"
+
+    source_display = get_display_path(source_path)
+
+    try:
+        result = copy_note(source_path, dest_path, notes_root=config.notes_root)
+        console.print(
+            f"[green]Copied:[/green] {source_display} -> {get_display_path(result)}"
+        )
+    except FileNotFoundError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1) from None
+    except FileExistsError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1) from None
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1) from None

@@ -153,6 +153,20 @@ nb delete work/myproject   # Delete using notebook/note format
 nb delete myalias          # Delete note by alias
 nb delete friday -f        # Skip confirmation
 
+nb mv work/old-project archive/old-project  # Move a note
+nb mv friday archive/2025-01-10             # Move daily note to archive
+nb mv work/draft work/final -f              # Overwrite if exists
+
+nb cp work/template work/new-project  # Copy a note
+nb cp daily/friday archive/backup     # Copy to different notebook
+
+nb export friday report.pdf           # Export note to PDF
+nb export work/project docs.docx      # Export to Word
+nb export myproject output.html       # Export to HTML
+nb export daily/ journal.pdf          # Export entire notebook (all notes)
+nb export daily/ archive.pdf --sort modified  # Sort by modification time
+nb export daily/ archive.pdf --reverse        # Newest first
+
 nb stream                  # Recently modified notes (default, TUI)
 nb stream --by-date        # Sort by note date instead
 nb stream -n daily         # Browse daily notes
@@ -361,6 +375,15 @@ nb todo show abc123     # Show todo details
 nb todo edit abc123     # Open source file at todo line
 nb todo delete abc123   # Delete todo from source file
 nb todo delete abc -f   # Delete without confirmation
+
+# Move/copy todos between notes
+nb todo mv abc123 work/project           # Move todo to another note
+nb todo mv abc123 def456 work/project    # Move multiple todos
+nb todo mv abc123 work/project::Tasks    # Move to specific section
+
+nb todo cp abc123 work/project           # Copy todo to another note
+nb todo cp abc123 def456 work/project    # Copy multiple todos
+nb todo cp abc123 work/project::Tasks    # Copy to specific section
 
 # Change due dates
 nb todo due abc123 friday      # Set due to next Friday

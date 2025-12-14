@@ -1009,3 +1009,185 @@ def delete_note(path: Path, notes_root: Path | None = None) -> bool:
     path.unlink()
 
     return True
+
+
+def move_note(
+    source_path: Path,
+    dest_path: Path,
+    notes_root: Path | None = None,
+    force: bool = False,
+) -> Path:
+    """Move a note from source to destination.
+
+    Moves the file, updates the database, and re-indexes at the new location.
+
+    Args:
+        source_path: Path to the source note (absolute or relative to notes_root)
+        dest_path: Path for the destination (absolute or relative to notes_root)
+        notes_root: Override notes root directory
+        force: If True, overwrite destination if it exists
+
+    Returns:
+        Absolute path to the moved note.
+
+    Raises:
+        FileNotFoundError: If source doesn't exist
+        FileExistsError: If destination exists and force=False
+        ValueError: If source is a linked/external note
+
+    """
+    from nb.index.db import get_db
+    from nb.index.scanner import index_note
+    from nb.index.todos_repo import delete_todos_for_source
+    from nb.utils.hashing import normalize_path
+
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    # Resolve source path
+    if not source_path.is_absolute():
+        source_full = notes_root / source_path
+    else:
+        source_full = source_path
+
+    if not source_full.exists():
+        raise FileNotFoundError(f"Note not found: {source_path}")
+
+    # Check if source is an external/linked note
+    try:
+        source_relative = source_full.relative_to(notes_root)
+    except ValueError:
+        raise ValueError(
+            f"Cannot move linked notes. Use 'nb unlink' first: {source_path}"
+        ) from None
+
+    # Also check if it's marked as external in the database
+    db = get_db()
+    note_row = db.fetchone(
+        "SELECT external FROM notes WHERE path = ?",
+        (normalize_path(source_relative),),
+    )
+    if note_row and note_row["external"]:
+        raise ValueError("Cannot move linked notes. Use 'nb unlink' first.")
+
+    # Resolve destination path
+    if not dest_path.is_absolute():
+        dest_full = notes_root / dest_path
+    else:
+        dest_full = dest_path
+
+    # Ensure destination is within notes_root
+    try:
+        dest_full.relative_to(notes_root)
+    except ValueError:
+        raise ValueError(
+            f"Destination must be within notes root: {dest_path}"
+        ) from None
+
+    # Ensure .md extension
+    if dest_full.suffix.lower() != ".md":
+        dest_full = dest_full.with_suffix(".md")
+
+    # Check if destination exists
+    if dest_full.exists() and not force:
+        raise FileExistsError(
+            f"Destination already exists: {dest_path}. Use --force to overwrite."
+        )
+
+    # Read source content
+    content = source_full.read_text(encoding="utf-8")
+
+    # Create destination directory structure
+    dest_full.parent.mkdir(parents=True, exist_ok=True)
+
+    # Write to destination
+    dest_full.write_text(content, encoding="utf-8")
+
+    # Delete old database entries
+    delete_todos_for_source(source_full)
+    db.execute(
+        "DELETE FROM notes WHERE path = ?",
+        (normalize_path(source_relative),),
+    )
+    db.commit()
+
+    # Delete source file
+    source_full.unlink()
+
+    # Index at new location
+    index_note(dest_full, notes_root=notes_root)
+
+    return dest_full
+
+
+def copy_note(
+    source_path: Path,
+    dest_path: Path,
+    notes_root: Path | None = None,
+) -> Path:
+    """Copy a note from source to destination.
+
+    Copies the file content and indexes the new note.
+
+    Args:
+        source_path: Path to the source note (absolute or relative to notes_root)
+        dest_path: Path for the destination (absolute or relative to notes_root)
+        notes_root: Override notes root directory
+
+    Returns:
+        Absolute path to the copied note.
+
+    Raises:
+        FileNotFoundError: If source doesn't exist
+        FileExistsError: If destination already exists
+
+    """
+    from nb.index.scanner import index_note
+
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    # Resolve source path
+    if not source_path.is_absolute():
+        source_full = notes_root / source_path
+    else:
+        source_full = source_path
+
+    if not source_full.exists():
+        raise FileNotFoundError(f"Note not found: {source_path}")
+
+    # Resolve destination path
+    if not dest_path.is_absolute():
+        dest_full = notes_root / dest_path
+    else:
+        dest_full = dest_path
+
+    # Ensure destination is within notes_root
+    try:
+        dest_full.relative_to(notes_root)
+    except ValueError:
+        raise ValueError(
+            f"Destination must be within notes root: {dest_path}"
+        ) from None
+
+    # Ensure .md extension
+    if dest_full.suffix.lower() != ".md":
+        dest_full = dest_full.with_suffix(".md")
+
+    # Check if destination exists
+    if dest_full.exists():
+        raise FileExistsError(f"Destination already exists: {dest_path}")
+
+    # Read source content
+    content = source_full.read_text(encoding="utf-8")
+
+    # Create destination directory structure
+    dest_full.parent.mkdir(parents=True, exist_ok=True)
+
+    # Write to destination
+    dest_full.write_text(content, encoding="utf-8")
+
+    # Index at new location (new todo IDs since path differs)
+    index_note(dest_full, notes_root=notes_root)
+
+    return dest_full

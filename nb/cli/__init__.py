@@ -21,6 +21,7 @@ from nb.cli.completion import (
     register_completion_commands,
 )
 from nb.cli.config_cmd import register_config_commands
+from nb.cli.export import register_export_commands
 from nb.cli.graph import register_graph_commands
 from nb.cli.inbox import register_inbox_commands
 from nb.cli.links import register_link_commands
@@ -218,6 +219,7 @@ register_web_commands(cli)
 register_record_commands(cli)
 register_transcribe_commands(cli)
 register_clip_commands(cli)
+register_export_commands(cli)
 register_inbox_commands(cli)
 
 

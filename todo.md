@@ -128,14 +128,16 @@ todo_exclude: true
 - [x] Add a way to create a log-style command `nb log` which is like `nb add` but will insert a date/time as well.
 - [x] Add "overdue-by-notebook" to stats and "what's behind"
 - [ ] give notes a unique ID as well so they can be quick loaded and included on listings like the todos
-- [ ] Streaming command improvements
-  - [ ] Need a way to have the stream output go straight to stdout if piped
-  - [ ] Should show recently modified (most recent first) by default
-  - [ ] Add a way to search within TUI
+- [x] Streaming command improvements
+  - [x] Need a way to have the stream output go straight to stdout if piped
+  - [x] Should show recently modified (most recent first) by default
+  - [x] Add a way to search within TUI
 - [ ] Add an interactive search TUI
 - [ ] Need to improve the `nb list` command - should have a way to list recently modified. Should allow combining `nb list --week` and --details, etc.
 - [ ] Need to allow `nb history` to show recently modified as well
-- [ ] Allow pinned notes
+- [ ] Allow pinned notes with `nb pin <NOTE>` and `nb pinned`
+- [x] `nb mv`, `nb cp` to move and copy notes
+- [x] `nb export` to export notes/notebooks 
 
 ### Phase 5: Wijjit TUI
 - [x] Full Wijjit-based todo list view with richer interactions #feature
@@ -157,7 +159,7 @@ todo_exclude: true
 - [ ] Due date reminders (optional notifications) #feature
   These can use the `win11toast` library which is dead simple.
 - [ ] Add '@startby' to todos #feature
-- [ ] Web clipper via integration with raindrop
+- [x] Web clipper via integration with raindrop
 
 ### AI Ideas:
 - [ ] Generate narrative of what was completed in the week
@@ -177,5 +179,5 @@ todo_exclude: true
   - [x] Remove `linked_todos` and `linked_notes` fields from Config dataclass
   - [x] Remove `save_to_config` branches in links.py (add/remove functions)
   - [x] Simplify `list_linked_files()` and `list_linked_notes()` to DB-only
-- [ ] Optimize imports and startup speed of cli #performance
+- [x] Optimize imports and startup speed of cli #performance
 - [x] Evaluate test suite and add e2e tests on actual CLI (if not existing) #testing

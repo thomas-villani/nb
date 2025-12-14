@@ -535,6 +535,86 @@ Delete a note from the filesystem and database.
 
 Note: Linked notes cannot be deleted. Use ``nb unlink`` to remove them.
 
+nb mv
+-----
+
+Move a note to a new location.
+
+**Usage:** ``nb mv [OPTIONS] SOURCE_REF DEST_REF``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``SOURCE_REF``
+     - Source note path, name, or alias
+   * - ``DEST_REF``
+     - Destination path (notebook/note format)
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-f, --force``
+     - Overwrite destination if it exists
+
+Moving a note will:
+
+- Move the file to the new location
+- Update the database index
+- Generate new todo IDs (since IDs include the source path)
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb mv work/old-project archive/old-project
+   nb mv friday archive/2025-01-10
+   nb mv work/draft work/final -f          # Overwrite if exists
+
+Note: Linked notes cannot be moved. Use ``nb unlink`` first.
+
+nb cp
+-----
+
+Copy a note to a new location.
+
+**Usage:** ``nb cp SOURCE_REF DEST_REF``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``SOURCE_REF``
+     - Source note path, name, or alias
+   * - ``DEST_REF``
+     - Destination path (notebook/note format)
+
+Copying a note will:
+
+- Create a copy at the new location
+- Index the new note
+- Generate new todo IDs for the copy (since IDs include the source path)
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb cp work/template work/new-project
+   nb cp daily/friday archive/backup
+
 nb where
 --------
 

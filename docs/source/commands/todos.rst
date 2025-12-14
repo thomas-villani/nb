@@ -275,6 +275,72 @@ Delete a todo from its source file.
    nb todo delete abc123      # Delete with confirmation
    nb todo delete abc -f      # Skip confirmation
 
+nb todo mv
+----------
+
+Move todos to a different note.
+
+**Usage:** ``nb todo mv ID... DEST_NOTE``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``ID``
+     - Todo ID or ID prefix (can specify multiple)
+   * - ``DEST_NOTE``
+     - Destination note path or name (supports ``note::Section`` syntax)
+
+The last argument is the destination note, all preceding arguments are todo IDs.
+Todos will be removed from their source files and added to the destination.
+
+Note: Todo IDs will change after moving since IDs include the source path.
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb todo mv abc123 work/project
+   nb todo mv abc123 def456 work/project    # Multiple todos
+   nb todo mv abc123 work/project::Tasks    # Add under section
+
+nb todo cp
+----------
+
+Copy todos to a different note.
+
+**Usage:** ``nb todo cp ID... DEST_NOTE``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``ID``
+     - Todo ID or ID prefix (can specify multiple)
+   * - ``DEST_NOTE``
+     - Destination note path or name (supports ``note::Section`` syntax)
+
+The last argument is the destination note, all preceding arguments are todo IDs.
+Original todos remain unchanged; copies are added to the destination.
+
+Note: Copied todos will get new IDs since IDs include the source path.
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb todo cp abc123 work/project
+   nb todo cp abc123 def456 work/project    # Multiple todos
+   nb todo cp abc123 work/project::Tasks    # Add under section
+
 nb todo due
 -----------
 

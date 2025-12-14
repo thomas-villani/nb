@@ -1154,3 +1154,319 @@ def normalize_due_dates_in_file(path: Path) -> int:
         path.write_text("\n".join(modified_lines) + "\n", encoding="utf-8")
 
     return changes
+
+
+def get_todo_raw_line(
+    path: Path,
+    line_number: int,
+    expected_content: str | None = None,
+) -> str | None:
+    """Get the full raw todo line from a file.
+
+    Preserves the exact markdown including checkbox, metadata (@due, @priority), and tags.
+
+    Args:
+        path: Path to the file
+        line_number: 1-based line number of the todo (may be stale)
+        expected_content: If provided, verifies/finds the todo by content.
+            This handles cases where line numbers become stale due to file edits.
+
+    Returns:
+        The full raw todo line (e.g., "- [ ] Task @due(2025-01-15) #work"), or None if not found.
+
+    """
+    if not path.exists():
+        return None
+
+    content = path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+
+    # Find the actual line number (may differ from stored if file was edited)
+    if expected_content:
+        actual_line = find_todo_line(lines, line_number, expected_content)
+        if actual_line is None:
+            return None
+    else:
+        # Fall back to trusting the line number (legacy behavior)
+        if line_number < 1 or line_number > len(lines):
+            return None
+        actual_line = line_number
+
+    line = lines[actual_line - 1]
+    match = TODO_PATTERN.match(line)
+
+    if not match:
+        return None
+
+    # Return the full line content (after the checkbox pattern)
+    return match.group("content")
+
+
+def add_raw_todo_to_note(
+    raw_content: str,
+    note_path: Path,
+    section: str | None = None,
+    notes_root: Path | None = None,
+) -> Todo:
+    """Add a raw todo line (preserving metadata) to a note.
+
+    Similar to add_todo_to_note but preserves the exact content including
+    @due(), @priority(), and #tags exactly as they appear.
+
+    Args:
+        raw_content: The raw todo content (without "- [ ] " prefix)
+        note_path: Path to the note (absolute or relative to notes_root)
+        section: Optional section heading to add todo under (case-insensitive)
+        notes_root: Override notes root directory
+
+    Returns:
+        The created Todo object.
+
+    """
+    # The raw_content already includes all metadata, so just pass it through
+    return add_todo_to_note(raw_content, note_path, section, notes_root)
+
+
+def move_todo(
+    todo_id: str,
+    dest_path: Path,
+    section: str | None = None,
+    notes_root: Path | None = None,
+) -> Todo:
+    """Move a todo from its current location to a destination note.
+
+    Deletes the todo from its source file and adds it to the destination.
+    The todo will get a new ID since IDs include the source path.
+
+    Args:
+        todo_id: The ID of the todo to move
+        dest_path: Path to the destination note
+        section: Optional section heading in destination
+        notes_root: Override notes root directory
+
+    Returns:
+        The new Todo object at the destination.
+
+    Raises:
+        ValueError: If todo not found
+        PermissionError: If source is a linked file with sync disabled
+
+    """
+    from nb.index.todos_repo import get_todo_by_id
+
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    # Look up the todo
+    todo = get_todo_by_id(todo_id)
+    if not todo:
+        raise ValueError(f"Todo not found: {todo_id}")
+
+    source_path = todo.source.path
+    if not source_path:
+        raise ValueError(f"Todo has no source path: {todo_id}")
+
+    # Get the raw todo line
+    raw_line = get_todo_raw_line(
+        source_path,
+        todo.line_number,
+        expected_content=todo.content,
+    )
+    if not raw_line:
+        raise ValueError(f"Could not find todo in source file: {todo_id}")
+
+    # Delete from source file
+    deleted_line = delete_todo_from_file(
+        source_path,
+        todo.line_number,
+        expected_content=todo.content,
+    )
+    if deleted_line is None:
+        raise ValueError(f"Failed to delete todo from source: {todo_id}")
+
+    # Add to destination
+    new_todo = add_raw_todo_to_note(raw_line, dest_path, section, notes_root)
+
+    return new_todo
+
+
+def copy_todo(
+    todo_id: str,
+    dest_path: Path,
+    section: str | None = None,
+    notes_root: Path | None = None,
+) -> Todo:
+    """Copy a todo to a destination note.
+
+    The original todo remains unchanged. The copied todo will get a new ID
+    since IDs include the source path.
+
+    Args:
+        todo_id: The ID of the todo to copy
+        dest_path: Path to the destination note
+        section: Optional section heading in destination
+        notes_root: Override notes root directory
+
+    Returns:
+        The new Todo object at the destination.
+
+    Raises:
+        ValueError: If todo not found
+
+    """
+    from nb.index.todos_repo import get_todo_by_id
+
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    # Look up the todo
+    todo = get_todo_by_id(todo_id)
+    if not todo:
+        raise ValueError(f"Todo not found: {todo_id}")
+
+    source_path = todo.source.path
+    if not source_path:
+        raise ValueError(f"Todo has no source path: {todo_id}")
+
+    # Get the raw todo line
+    raw_line = get_todo_raw_line(
+        source_path,
+        todo.line_number,
+        expected_content=todo.content,
+    )
+    if not raw_line:
+        raise ValueError(f"Could not find todo in source file: {todo_id}")
+
+    # Add to destination (don't delete from source)
+    new_todo = add_raw_todo_to_note(raw_line, dest_path, section, notes_root)
+
+    return new_todo
+
+
+def move_todos_batch(
+    todo_ids: list[str],
+    dest_path: Path,
+    section: str | None = None,
+    notes_root: Path | None = None,
+) -> list[Todo]:
+    """Move multiple todos to a destination note.
+
+    Efficiently handles multiple todos from the same source file by grouping
+    operations.
+
+    Args:
+        todo_ids: List of todo IDs to move
+        dest_path: Path to the destination note
+        section: Optional section heading in destination
+        notes_root: Override notes root directory
+
+    Returns:
+        List of new Todo objects at the destination.
+
+    Raises:
+        ValueError: If any todo not found
+        PermissionError: If any source is a linked file with sync disabled
+
+    """
+    from nb.index.todos_repo import get_todo_by_id
+
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    # Gather all todos and their raw lines first
+    todos_to_move: list[tuple[Todo, str]] = []
+    for todo_id in todo_ids:
+        todo = get_todo_by_id(todo_id)
+        if not todo:
+            raise ValueError(f"Todo not found: {todo_id}")
+
+        source_path = todo.source.path
+        if not source_path:
+            raise ValueError(f"Todo has no source path: {todo_id}")
+
+        raw_line = get_todo_raw_line(
+            source_path,
+            todo.line_number,
+            expected_content=todo.content,
+        )
+        if not raw_line:
+            raise ValueError(f"Could not find todo in source file: {todo_id}")
+
+        todos_to_move.append((todo, raw_line))
+
+    # Group by source file for efficient deletion
+    from collections import defaultdict
+
+    by_source: dict[Path, list[tuple[Todo, str]]] = defaultdict(list)
+    for todo, raw_line in todos_to_move:
+        if todo.source.path:
+            by_source[todo.source.path].append((todo, raw_line))
+
+    # Delete from each source file (in reverse line order to preserve line numbers)
+    for source_path, items in by_source.items():
+        # Sort by line number descending so deletions don't affect other line numbers
+        items_sorted = sorted(items, key=lambda x: x[0].line_number, reverse=True)
+        for todo, _raw_line in items_sorted:
+            delete_todo_from_file(
+                source_path,
+                todo.line_number,
+                expected_content=todo.content,
+            )
+
+    # Add all to destination
+    new_todos: list[Todo] = []
+    for _todo, raw_line in todos_to_move:
+        new_todo = add_raw_todo_to_note(raw_line, dest_path, section, notes_root)
+        new_todos.append(new_todo)
+
+    return new_todos
+
+
+def copy_todos_batch(
+    todo_ids: list[str],
+    dest_path: Path,
+    section: str | None = None,
+    notes_root: Path | None = None,
+) -> list[Todo]:
+    """Copy multiple todos to a destination note.
+
+    Args:
+        todo_ids: List of todo IDs to copy
+        dest_path: Path to the destination note
+        section: Optional section heading in destination
+        notes_root: Override notes root directory
+
+    Returns:
+        List of new Todo objects at the destination.
+
+    Raises:
+        ValueError: If any todo not found
+
+    """
+    from nb.index.todos_repo import get_todo_by_id
+
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    new_todos: list[Todo] = []
+    for todo_id in todo_ids:
+        todo = get_todo_by_id(todo_id)
+        if not todo:
+            raise ValueError(f"Todo not found: {todo_id}")
+
+        source_path = todo.source.path
+        if not source_path:
+            raise ValueError(f"Todo has no source path: {todo_id}")
+
+        raw_line = get_todo_raw_line(
+            source_path,
+            todo.line_number,
+            expected_content=todo.content,
+        )
+        if not raw_line:
+            raise ValueError(f"Could not find todo in source file: {todo_id}")
+
+        new_todo = add_raw_todo_to_note(raw_line, dest_path, section, notes_root)
+        new_todos.append(new_todo)
+
+    return new_todos

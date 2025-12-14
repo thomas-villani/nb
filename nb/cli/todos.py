@@ -11,8 +11,10 @@ from nb.cli.completion import complete_notebook, complete_tag, complete_view
 from nb.cli.utils import (
     console,
     find_todo,
+    get_display_path,
     get_notebook_display_info,
     get_stdin_content,
+    resolve_note_ref,
 )
 from nb.config import TodoViewConfig, get_config, save_config
 from nb.core.todos import (
@@ -2930,3 +2932,190 @@ def todo_completed(
         console.print(f"[dim]Showing {displayed} of {total} completed todos[/dim]")
     else:
         console.print(f"[dim]{total} todo(s) completed {period_label}[/dim]")
+
+
+@todo.command("mv")
+@click.argument("args", nargs=-1)
+def todo_mv(args: tuple[str, ...]) -> None:
+    """Move todos to a different note.
+
+    The last argument is the destination note, all preceding arguments are todo IDs.
+    Todos will be removed from their source files and added to the destination.
+
+    Destination can include "::section" to specify a section heading.
+
+    Note: Todo IDs will change after moving since IDs include the source path.
+
+    \b
+    Examples:
+      nb todo mv abc123 work/project
+      nb todo mv abc123 def456 work/project
+      nb todo mv abc123 work/project::Tasks   # Add under "Tasks" section
+      nb todo mv abc123 friday                # Move to today's Friday note
+    """
+    from nb.core.todos import move_todos_batch
+    from nb.utils.fuzzy import UserCancelled
+
+    if len(args) < 2:
+        console.print("[red]Usage: nb todo mv <TODO_ID...> <dest-note>[/red]")
+        console.print(
+            "[dim]Last argument is destination, preceding are todo IDs.[/dim]"
+        )
+        raise SystemExit(1)
+
+    todo_ids = list(args[:-1])
+    dest_ref = args[-1]
+
+    # Parse destination for note::section syntax
+    section = None
+    if "::" in dest_ref:
+        dest_ref, section = dest_ref.split("::", 1)
+
+    config = get_config()
+
+    # Resolve todo IDs (allow partial matches)
+    resolved_ids: list[str] = []
+    todos_info: list[tuple[str, str]] = []  # (id, content) for display
+    for tid in todo_ids:
+        t = find_todo(tid)
+        if not t:
+            console.print(f"[red]Todo not found: {tid}[/red]")
+            console.print(
+                "[dim]Hint: Run 'nb index' to refresh, or 'nb todo' to list todos.[/dim]"
+            )
+            raise SystemExit(1)
+        resolved_ids.append(t.id)
+        todos_info.append((t.id[:8], t.content))
+
+    # Resolve destination note
+    try:
+        dest_path = resolve_note_ref(dest_ref)
+    except UserCancelled:
+        console.print("[dim]Cancelled.[/dim]")
+        raise SystemExit(1) from None
+
+    if not dest_path:
+        console.print(f"[red]Could not resolve destination note: {dest_ref}[/red]")
+        raise SystemExit(1)
+
+    dest_display = get_display_path(dest_path)
+    section_display = f"::{section}" if section else ""
+
+    try:
+        new_todos = move_todos_batch(
+            resolved_ids, dest_path, section=section, notes_root=config.notes_root
+        )
+
+        console.print(
+            f"\n[green]Moved {len(new_todos)} todo(s) to:[/green] {dest_display}{section_display}\n"
+        )
+
+        for (old_id, content), new_todo in zip(todos_info, new_todos, strict=True):
+            new_id = new_todo.id[:8]
+            # Truncate content if needed
+            max_len = 50
+            display_content = (
+                content if len(content) <= max_len else content[: max_len - 3] + "..."
+            )
+            console.print(f"  {display_content}")
+            console.print(f"    [dim]ID: {old_id} -> {new_id}[/dim]")
+
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1) from None
+    except PermissionError as e:
+        console.print(f"[red]{e}[/red]")
+        console.print(
+            "[dim]Hint: Use 'nb link --sync' to enable sync for external files.[/dim]"
+        )
+        raise SystemExit(1) from None
+
+
+@todo.command("cp")
+@click.argument("args", nargs=-1)
+def todo_cp(args: tuple[str, ...]) -> None:
+    """Copy todos to a different note.
+
+    The last argument is the destination note, all preceding arguments are todo IDs.
+    Original todos remain unchanged; copies are added to the destination.
+
+    Destination can include "::section" to specify a section heading.
+
+    Note: Copied todos will get new IDs since IDs include the source path.
+
+    \b
+    Examples:
+      nb todo cp abc123 work/project
+      nb todo cp abc123 def456 work/project
+      nb todo cp abc123 work/project::Tasks   # Add under "Tasks" section
+    """
+    from nb.core.todos import copy_todos_batch
+    from nb.utils.fuzzy import UserCancelled
+
+    if len(args) < 2:
+        console.print("[red]Usage: nb todo cp <TODO_ID...> <dest-note>[/red]")
+        console.print(
+            "[dim]Last argument is destination, preceding are todo IDs.[/dim]"
+        )
+        raise SystemExit(1)
+
+    todo_ids = list(args[:-1])
+    dest_ref = args[-1]
+
+    # Parse destination for note::section syntax
+    section = None
+    if "::" in dest_ref:
+        dest_ref, section = dest_ref.split("::", 1)
+
+    config = get_config()
+
+    # Resolve todo IDs (allow partial matches)
+    resolved_ids: list[str] = []
+    todos_info: list[str] = []  # content for display
+    for tid in todo_ids:
+        t = find_todo(tid)
+        if not t:
+            console.print(f"[red]Todo not found: {tid}[/red]")
+            console.print(
+                "[dim]Hint: Run 'nb index' to refresh, or 'nb todo' to list todos.[/dim]"
+            )
+            raise SystemExit(1)
+        resolved_ids.append(t.id)
+        todos_info.append(t.content)
+
+    # Resolve destination note
+    try:
+        dest_path = resolve_note_ref(dest_ref)
+    except UserCancelled:
+        console.print("[dim]Cancelled.[/dim]")
+        raise SystemExit(1) from None
+
+    if not dest_path:
+        console.print(f"[red]Could not resolve destination note: {dest_ref}[/red]")
+        raise SystemExit(1)
+
+    dest_display = get_display_path(dest_path)
+    section_display = f"::{section}" if section else ""
+
+    try:
+        new_todos = copy_todos_batch(
+            resolved_ids, dest_path, section=section, notes_root=config.notes_root
+        )
+
+        console.print(
+            f"\n[green]Copied {len(new_todos)} todo(s) to:[/green] {dest_display}{section_display}\n"
+        )
+
+        for content, new_todo in zip(todos_info, new_todos, strict=True):
+            new_id = new_todo.id[:8]
+            # Truncate content if needed
+            max_len = 50
+            display_content = (
+                content if len(content) <= max_len else content[: max_len - 3] + "..."
+            )
+            console.print(f"  {display_content}")
+            console.print(f"    [dim]New ID: {new_id}[/dim]")
+
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1) from None

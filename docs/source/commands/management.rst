@@ -727,6 +727,68 @@ Open an attachment.
    * - ``--line N``
      - Open attachment at specific line
 
+Export
+------
+
+nb export
+^^^^^^^^^
+
+Export a note or notebook to PDF, DOCX, or HTML.
+
+**Usage:** ``nb export [OPTIONS] NOTE_REF OUTPUT``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``NOTE_REF``
+     - Note name, path, date, alias, or notebook name (with trailing ``/``)
+   * - ``OUTPUT``
+     - Destination filename (format inferred from extension)
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-f, --format``
+     - Output format: ``pdf``, ``docx``, or ``html`` (inferred from extension if not provided)
+   * - ``-n, --notebook NAME``
+     - Notebook containing the note
+   * - ``-s, --sort``
+     - Sort order for notebook export: ``date`` (default), ``modified``, or ``name``
+   * - ``-r, --reverse``
+     - Reverse sort order (newest/last first)
+
+**Single Note Export:**
+
+.. code-block:: bash
+
+   nb export friday report.pdf              # Export to PDF
+   nb export work/project documentation.docx  # Export to Word
+   nb export myalias output.html            # Export to HTML
+   nb export daily/friday report.pdf --format pdf
+
+**Notebook Export:**
+
+Export all notes in a notebook concatenated into a single file. Notes are sorted
+by date (oldest first) by default.
+
+.. code-block:: bash
+
+   nb export daily/ journal.pdf             # Export entire notebook
+   nb export work/ work-notes.docx          # Export to Word
+   nb export daily/ archive.pdf --sort modified  # Sort by modification time
+   nb export daily/ archive.pdf --sort name      # Sort alphabetically
+   nb export daily/ archive.pdf --reverse        # Newest first
+
 Web Viewer
 ----------
 
