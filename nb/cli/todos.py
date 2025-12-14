@@ -35,6 +35,9 @@ from nb.models import TodoStatus
 from nb.utils.dates import get_week_range
 from nb.utils.editor import open_in_editor
 
+# Display length for todo IDs (internal IDs are 8 chars, display 6 for brevity)
+TODO_ID_DISPLAY_LEN = 6
+
 
 def register_todo_commands(cli: click.Group) -> None:
     """Register all todo-related commands with the CLI."""
@@ -193,7 +196,7 @@ def todo(
       nb todo -a              Include todos from excluded notebooks
       nb todo -c              Include completed todos
       nb todo -s tag          Sort by tag instead of source
-      nb todo --due-today     Show only todos due today
+      nb todo --today         Show only todos due today
       nb todo --created-week  Show only todos created this week
 
     \b
@@ -207,8 +210,8 @@ def todo(
     Date Filters:
       --created-today   Show todos created today
       --created-week    Show todos created this week
-      --due-today       Show todos due today
-      --due-week        Show todos due this week
+      -T, --today       Show todos due today
+      -W, --week        Show todos due this week
       --overdue         Show only overdue todos
 
     \b
@@ -1734,7 +1737,7 @@ def _print_todo(
         tags_str = " ".join(f"#{tag}" for tag in t.tags[:3])
 
     # Build the formatted line with alignment
-    short_id = t.id[:6]
+    short_id = t.id[:TODO_ID_DISPLAY_LEN]
 
     # Format with Rich markup and padding
     if t.completed:
@@ -1906,7 +1909,7 @@ def todo_add(text: str | None, add_today: bool, target_note: str | None) -> None
     else:
         t = add_todo_to_inbox(content)
         console.print(f"[green]Added to inbox:[/green] {t.content}")
-    console.print(f"[dim]ID: {t.id[:6]}[/dim]")
+    console.print(f"[dim]ID: {t.id[:TODO_ID_DISPLAY_LEN]}[/dim]")
 
 
 def _complete_todo_with_children(t) -> int:
@@ -1964,7 +1967,9 @@ def todo_done(todo_id: tuple[str, ...]) -> None:
             raise SystemExit(1)
 
         if t.completed:
-            console.print(f"[yellow]Todo {_todo[:6]} is already completed.[/yellow]")
+            console.print(
+                f"[yellow]Todo {_todo[:TODO_ID_DISPLAY_LEN]} is already completed.[/yellow]"
+            )
             continue
 
         # Toggle in source file (pass content to handle stale line numbers)
@@ -2019,7 +2024,9 @@ def todo_undone(todo_id: tuple[str, ...]) -> None:
             raise SystemExit(1)
 
         if not t.completed:
-            console.print(f"[yellow]Todo {_todo[:6]} is not completed.[/yellow]")
+            console.print(
+                f"[yellow]Todo {_todo[:TODO_ID_DISPLAY_LEN]} is not completed.[/yellow]"
+            )
             continue
 
         # Toggle in source file (pass content to handle stale line numbers)
@@ -2070,12 +2077,14 @@ def todo_start(todo_id: tuple[str, ...]) -> None:
 
         if t.completed:
             console.print(
-                f"[yellow]Todo {_todo[:6]} is already completed. Use 'nb todo undone' first.[/yellow]"
+                f"[yellow]Todo {_todo[:TODO_ID_DISPLAY_LEN]} is already completed. Use 'nb todo undone' first.[/yellow]"
             )
             continue
 
         if t.in_progress:
-            console.print(f"[yellow]Todo {_todo[:6]} is already in progress.[/yellow]")
+            console.print(
+                f"[yellow]Todo {_todo[:TODO_ID_DISPLAY_LEN]} is already in progress.[/yellow]"
+            )
             continue
 
         # Set status in source file (pass content to handle stale line numbers)
@@ -2128,12 +2137,14 @@ def todo_pause(todo_id: tuple[str, ...]) -> None:
 
         if t.completed:
             console.print(
-                f"[yellow]Todo {_todo[:6]} is completed. Use 'nb todo undone' first.[/yellow]"
+                f"[yellow]Todo {_todo[:TODO_ID_DISPLAY_LEN]} is completed. Use 'nb todo undone' first.[/yellow]"
             )
             continue
 
         if not t.in_progress:
-            console.print(f"[yellow]Todo {_todo[:6]} is not in progress.[/yellow]")
+            console.print(
+                f"[yellow]Todo {_todo[:TODO_ID_DISPLAY_LEN]} is not in progress.[/yellow]"
+            )
             continue
 
         # Set status in source file (pass content to handle stale line numbers)
@@ -2985,7 +2996,7 @@ def todo_mv(args: tuple[str, ...]) -> None:
             )
             raise SystemExit(1)
         resolved_ids.append(t.id)
-        todos_info.append((t.id[:8], t.content))
+        todos_info.append((t.id[:TODO_ID_DISPLAY_LEN], t.content))
 
     # Resolve destination note
     try:
@@ -3011,7 +3022,7 @@ def todo_mv(args: tuple[str, ...]) -> None:
         )
 
         for (old_id, content), new_todo in zip(todos_info, new_todos, strict=True):
-            new_id = new_todo.id[:8]
+            new_id = new_todo.id[:TODO_ID_DISPLAY_LEN]
             # Truncate content if needed
             max_len = 50
             display_content = (
@@ -3107,7 +3118,7 @@ def todo_cp(args: tuple[str, ...]) -> None:
         )
 
         for content, new_todo in zip(todos_info, new_todos, strict=True):
-            new_id = new_todo.id[:8]
+            new_id = new_todo.id[:TODO_ID_DISPLAY_LEN]
             # Truncate content if needed
             max_len = 50
             display_content = (

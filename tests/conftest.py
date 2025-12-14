@@ -277,8 +277,9 @@ def get_todo_id(cli_runner: CliRunner) -> Callable[[str], str | None]:
                 if parts:
                     # Look for a 6-char hex-like string
                     for part in reversed(parts):
-                        if len(part) == 6 and all(
-                            c in "0123456789abcdef" for c in part
+                        # Todo IDs are displayed as 6 hex characters
+                        if len(part) >= 6 and all(
+                            c in "0123456789abcdef" for c in part[:6]
                         ):
                             return part
         return None

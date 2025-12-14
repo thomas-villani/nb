@@ -310,7 +310,7 @@ DEFAULT_EDITOR = "micro"
 
 DEFAULT_CONFIG_YAML = """\
 # nb configuration
-# See: https://github.com/user/nb-cli
+# See: https://github.com/thomas-villani/nb-cli
 
 # Root directory for all notes
 notes_root: ~/notes
@@ -789,7 +789,7 @@ def init_config(notes_root: Path | None = None) -> Config:
         with config_path.open("w", encoding="utf-8") as f:
             # Write header comment
             f.write("# nb configuration\n")
-            f.write("# See: https://github.com/user/nb-cli\n\n")
+            f.write("# See: https://github.com/thomas-villani/nb-cli\n\n")
             yaml.safe_dump(default_data, f, default_flow_style=False, sort_keys=False)
 
     # Load and ensure directories

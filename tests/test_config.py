@@ -270,7 +270,10 @@ class TestParseEmbeddings:
 class TestLoadConfig:
     """Tests for load_config function."""
 
-    def test_load_existing_config(self, temp_notes_root: Path):
+    def test_load_existing_config(self, temp_notes_root: Path, monkeypatch):
+        # Clear EDITOR env var so config file value is used
+        monkeypatch.delenv("EDITOR", raising=False)
+
         config_path = temp_notes_root / ".nb" / "config.yaml"
         config_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -303,7 +306,10 @@ class TestLoadConfig:
 class TestSaveConfig:
     """Tests for save_config function."""
 
-    def test_save_and_reload(self, temp_notes_root: Path):
+    def test_save_and_reload(self, temp_notes_root: Path, monkeypatch):
+        # Clear EDITOR env var so config file value is used on reload
+        monkeypatch.delenv("EDITOR", raising=False)
+
         cfg = Config(
             notes_root=temp_notes_root,
             editor="code",

@@ -12,6 +12,16 @@ SUPPORTED_FORMATS = {"pdf", "docx", "html"}
 SortOrder = Literal["date", "modified", "name"]
 
 
+def _check_all2md_installed() -> None:
+    """Check if all2md is installed, raise helpful error if not."""
+    try:
+        import all2md  # noqa: F401
+    except ImportError:
+        raise ImportError(
+            "Export requires 'all2md' package. Install with: uv pip install all2md"
+        ) from None
+
+
 def export_note(
     source_path: Path,
     output_path: Path,
@@ -30,7 +40,9 @@ def export_note(
     Raises:
         ValueError: If format is unsupported or cannot be inferred
         FileNotFoundError: If source doesn't exist
+        ImportError: If all2md is not installed
     """
+    _check_all2md_installed()
     from all2md import convert
 
     if not source_path.exists():
@@ -108,7 +120,9 @@ def export_notebook(
     Raises:
         ValueError: If format is unsupported or notebook is empty
         FileNotFoundError: If notebook doesn't exist
+        ImportError: If all2md is not installed
     """
+    _check_all2md_installed()
     from all2md import convert
 
     if not notebook_path.exists():

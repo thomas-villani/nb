@@ -60,7 +60,7 @@ class AliasedGroup(click.Group):
     SPECIAL_ALIASES: ClassVar[dict[str, tuple[str, list[str]]]] = {
         "ss": ("search", ["--semantic"]),  # ss -> search --semantic
         "ta": ("todo", ["add"]),  # ta -> todo add
-        "td": ("todo", ["done"]),  # td -> todo done
+        "tdd": ("todo", ["done"]),  # tdd -> todo done
         "now": ("todo", ["--today"]),  # now -> todo --today
     }
 

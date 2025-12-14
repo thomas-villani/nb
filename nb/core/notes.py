@@ -768,7 +768,7 @@ def get_note(path: Path, notes_root: Path | None = None) -> Note | None:
         date=note_date,
         tags=tags,
         links=links,
-        attachments=[],  # TODO: extract attachments
+        attachments=[],  # Lazy-loaded via get_attachments_for_parent() when needed
         notebook=notebook,
         content_hash=content_hash,
     )
