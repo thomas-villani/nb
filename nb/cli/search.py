@@ -485,11 +485,9 @@ def index_cmd(
 @click.option("--reverse", "-r", is_flag=True, help="Show oldest first")
 @click.option("--recent", is_flag=True, help="Stream recently viewed notes")
 @click.option(
-    "--recently-modified", is_flag=True, help="Stream recently modified notes"
+    "--by-date", is_flag=True, help="Sort by note date instead of modification time"
 )
-@click.option(
-    "--limit", "-l", default=50, help="Limit for --recent/--recently-modified"
-)
+@click.option("--limit", "-l", default=50, help="Limit number of notes")
 @click.option(
     "--continuous",
     "--auto",
@@ -504,11 +502,14 @@ def stream_notes(
     until: str | None,
     reverse: bool,
     recent: bool,
-    recently_modified: bool,
+    by_date: bool,
     limit: int,
     continuous: bool,
 ) -> None:
     """Browse notes interactively in a streaming view.
+
+    By default shows recently modified notes (most recent first).
+    When piped, outputs plain text without the TUI.
 
     Navigate through notes with keyboard controls:
 
@@ -516,6 +517,7 @@ def stream_notes(
     j/k            - Next/previous note
     n/N or p       - Next/previous note (alternate)
     g/G            - First/last note
+    /              - Search notes by title or content
     ↑/↓            - Scroll within note (when focused)
     e              - Edit current note (in-app)
     E              - Edit in external editor
@@ -524,18 +526,20 @@ def stream_notes(
 
     \b
     Examples:
-      nb stream                      # Stream all notes (paged)
+      nb stream                      # Recently modified notes (default)
+      nb stream --by-date            # Notes sorted by date
       nb stream -c                   # Continuous flow with dividers
       nb stream -n daily             # Stream daily notes
       nb stream -w "last week"       # Last week's notes
       nb stream -w "this week"       # This week's notes
       nb stream -n daily -w "last 2 weeks"  # Daily notes from last 2 weeks
       nb stream --recent             # Recently viewed notes
-      nb stream --recently-modified  # Recently modified notes
       nb stream --recent -l 20       # Last 20 viewed notes
       nb stream -c -w "this week"    # Continuous flow of this week
+      nb stream | head -100          # Pipe first 100 lines
 
     """
+    import sys
     from datetime import date as date_type
 
     from nb.index.db import get_db
@@ -545,193 +549,211 @@ def stream_notes(
 
     config = get_config()
 
+    # Check if output is piped (not a tty)
+    is_piped = not sys.stdout.isatty()
+
     # Check for mutually exclusive options
-    if recent and recently_modified:
-        console.print("[red]Cannot use both --recent and --recently-modified[/red]")
+    if recent and by_date:
+        console.print("[red]Cannot use both --recent and --by-date[/red]")
         raise SystemExit(1)
 
-    # Handle --recent (recently viewed) and --recently-modified modes
-    if recent or recently_modified:
-        from nb.core.notes import get_recently_modified_notes, get_recently_viewed_notes
+    # Helper function to output notes to pipe
+    def output_notes_to_pipe(notes_list: list[Note]) -> None:
+        """Output notes as plain text to stdout (for piping)."""
+        for note in notes_list:
+            # Get full path
+            if note.path.is_absolute():
+                full_path = note.path
+            else:
+                full_path = config.notes_root / note.path
 
-        if recent:
-            # Get recently viewed notes
-            view_data = get_recently_viewed_notes(limit=limit * 2, notebook=notebook)
-            if not view_data:
-                console.print("[yellow]No view history found.[/yellow]")
-                return
+            # Read content
+            try:
+                content = full_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                content = "[Error reading file]"
 
-            # Deduplicate by path, keeping first (most recent) occurrence
-            seen_paths: set[Path] = set()
-            unique_views = []
-            for path, viewed_at in view_data:
-                resolved = path.resolve()
-                if resolved not in seen_paths:
-                    seen_paths.add(resolved)
-                    unique_views.append((path, viewed_at))
-                    if len(unique_views) >= limit:
-                        break
+            # Output header
+            title = note.title or "Untitled"
+            date_str = note.date.strftime(config.date_format) if note.date else ""
+            notebook_str = f"[{note.notebook}]" if note.notebook else ""
+            print(f"# {title}")
+            if date_str or notebook_str:
+                print(f"{date_str} {notebook_str}".strip())
+            print(f"Path: {note.path}")
+            print("-" * 40)
+            print(content)
+            print("\n" + "=" * 60 + "\n")
 
-            # Convert to Note objects
-            notes = []
-            db = get_db()
-            for path, _viewed_at in unique_views:
-                # Look up note info from database
-                # Use normalize_path for consistent path format (forward slashes) on all platforms
-                try:
-                    rel_path = normalize_path(path.relative_to(config.notes_root))
-                except ValueError:
-                    # External note: use the stored path as-is
-                    rel_path = normalize_path(path)
-                row = db.fetchone(
-                    "SELECT title, date, notebook FROM notes WHERE path = ?",
-                    (rel_path,),
-                )
-                if row:
-                    note_date = None
-                    if row["date"]:
-                        try:
-                            note_date = date_type.fromisoformat(row["date"])
-                        except ValueError:
-                            pass
-                    notes.append(
-                        Note(
-                            path=Path(rel_path),
-                            title=row["title"] or "",
-                            date=note_date,
-                            tags=[],
-                            links=[],
-                            attachments=[],
-                            notebook=row["notebook"] or "",
-                            content_hash="",
-                        )
+    # Helper function to convert path/mtime data to Note objects
+    def paths_to_notes(path_data: list[tuple]) -> list[Note]:
+        """Convert list of (path, ...) tuples to Note objects."""
+        notes_list = []
+        db = get_db()
+        for item in path_data:
+            path = item[0]
+            try:
+                rel_path = normalize_path(path.relative_to(config.notes_root))
+            except ValueError:
+                rel_path = normalize_path(path)
+            row = db.fetchone(
+                "SELECT title, date, notebook FROM notes WHERE path = ?",
+                (rel_path,),
+            )
+            if row:
+                note_date = None
+                if row["date"]:
+                    try:
+                        note_date = date_type.fromisoformat(row["date"])
+                    except ValueError:
+                        pass
+                notes_list.append(
+                    Note(
+                        path=Path(rel_path),
+                        title=row["title"] or "",
+                        date=note_date,
+                        tags=[],
+                        links=[],
+                        attachments=[],
+                        notebook=row["notebook"] or "",
+                        content_hash="",
                     )
-
-            if reverse:
-                notes = list(reversed(notes))
-
-        else:
-            # Get recently modified notes
-            mod_data = get_recently_modified_notes(limit=limit, notebook=notebook)
-            if not mod_data:
-                console.print("[yellow]No notes found.[/yellow]")
-                return
-
-            # Convert to Note objects
-            notes = []
-            db = get_db()
-            for path, _mtime in mod_data:
-                # Look up note info from database
-                # Use normalize_path for consistent path format (forward slashes) on all platforms
-                try:
-                    rel_path = normalize_path(path.relative_to(config.notes_root))
-                except ValueError:
-                    # External note: use the stored path as-is
-                    rel_path = normalize_path(path)
-                row = db.fetchone(
-                    "SELECT title, date, notebook FROM notes WHERE path = ?",
-                    (rel_path,),
                 )
-                if row:
-                    note_date = None
-                    if row["date"]:
-                        try:
-                            note_date = date_type.fromisoformat(row["date"])
-                        except ValueError:
-                            pass
-                    notes.append(
-                        Note(
-                            path=Path(rel_path),
-                            title=row["title"] or "",
-                            date=note_date,
-                            tags=[],
-                            links=[],
-                            attachments=[],
-                            notebook=row["notebook"] or "",
-                            content_hash="",
-                        )
-                    )
+        return notes_list
 
-            if reverse:
-                notes = list(reversed(notes))
+    # Handle --recent (recently viewed) mode
+    if recent:
+        from nb.core.notes import get_recently_viewed_notes
+
+        view_data = get_recently_viewed_notes(limit=limit * 2, notebook=notebook)
+        if not view_data:
+            console.print("[yellow]No view history found.[/yellow]")
+            return
+
+        # Deduplicate by path, keeping first (most recent) occurrence
+        seen_paths: set[Path] = set()
+        unique_views = []
+        for path, viewed_at in view_data:
+            resolved = path.resolve()
+            if resolved not in seen_paths:
+                seen_paths.add(resolved)
+                unique_views.append((path, viewed_at))
+                if len(unique_views) >= limit:
+                    break
+
+        notes = paths_to_notes(unique_views)
+        if reverse:
+            notes = list(reversed(notes))
 
         if not notes:
             console.print("[yellow]No notes found.[/yellow]")
             return
 
-        console.print(f"[dim]Loading {len(notes)} notes...[/dim]")
-        run_note_stream(notes, config.notes_root, continuous=continuous)
+        if is_piped:
+            output_notes_to_pipe(notes)
+        else:
+            console.print(f"[dim]Loading {len(notes)} notes...[/dim]")
+            run_note_stream(notes, config.notes_root, continuous=continuous)
         return
 
-    # Standard date-based query
-    db = get_db()
+    # Handle --by-date mode or date filter options (when/since/until)
+    if by_date or when or since or until:
+        db = get_db()
 
-    # Build query
-    query = "SELECT path, title, date, notebook FROM notes WHERE 1=1"
-    params: list = []
+        # Build query
+        query = "SELECT path, title, date, notebook FROM notes WHERE 1=1"
+        params: list = []
 
-    # Filter by notebook
-    if notebook:
-        query += " AND notebook = ?"
-        params.append(notebook)
+        # Filter by notebook
+        if notebook:
+            query += " AND notebook = ?"
+            params.append(notebook)
 
-    # Filter by date range
-    # --when takes precedence and uses parse_date_range for week support
-    if when:
-        start, end = parse_date_range(when)
-        if start:
-            query += " AND date >= ?"
-            params.append(start.isoformat())
-        if end:
-            query += " AND date <= ?"
-            params.append(end.isoformat())
-    else:
-        if since:
-            since_date = parse_fuzzy_date(since)
-            if since_date:
+        # Filter by date range
+        if when:
+            start, end = parse_date_range(when)
+            if start:
                 query += " AND date >= ?"
-                params.append(since_date.isoformat())
-
-        if until:
-            until_date = parse_fuzzy_date(until)
-            if until_date:
+                params.append(start.isoformat())
+            if end:
                 query += " AND date <= ?"
-                params.append(until_date.isoformat())
+                params.append(end.isoformat())
+        else:
+            if since:
+                since_date = parse_fuzzy_date(since)
+                if since_date:
+                    query += " AND date >= ?"
+                    params.append(since_date.isoformat())
 
-    # Order by date
-    if reverse:
-        query += " ORDER BY date ASC"
-    else:
-        query += " ORDER BY date DESC"
+            if until:
+                until_date = parse_fuzzy_date(until)
+                if until_date:
+                    query += " AND date <= ?"
+                    params.append(until_date.isoformat())
 
-    rows = db.fetchall(query, tuple(params))
+        # Order by date
+        if reverse:
+            query += " ORDER BY date ASC"
+        else:
+            query += " ORDER BY date DESC"
 
-    if not rows:
+        if limit:
+            query += f" LIMIT {limit}"
+
+        rows = db.fetchall(query, tuple(params))
+
+        if not rows:
+            console.print("[yellow]No notes found.[/yellow]")
+            return
+
+        # Convert to Note objects
+        notes = []
+        for row in rows:
+            note_date = None
+            if row["date"]:
+                try:
+                    note_date = date_type.fromisoformat(row["date"])
+                except ValueError:
+                    pass
+
+            notes.append(
+                Note(
+                    path=Path(row["path"]),
+                    title=row["title"] or "",
+                    date=note_date,
+                    tags=[],
+                    links=[],
+                    attachments=[],
+                    notebook=row["notebook"] or "",
+                    content_hash="",
+                )
+            )
+
+        if is_piped:
+            output_notes_to_pipe(notes)
+        else:
+            console.print(f"[dim]Loading {len(notes)} notes...[/dim]")
+            run_note_stream(notes, config.notes_root, continuous=continuous)
+        return
+
+    # Default: recently modified notes (most recent first)
+    from nb.core.notes import get_recently_modified_notes
+
+    mod_data = get_recently_modified_notes(limit=limit, notebook=notebook)
+    if not mod_data:
         console.print("[yellow]No notes found.[/yellow]")
         return
 
-    # Convert to Note objects
-    notes = []
-    for row in rows:
-        note_date = None
-        if row["date"]:
-            try:
-                note_date = date_type.fromisoformat(row["date"])
-            except ValueError:
-                pass
+    notes = paths_to_notes(mod_data)
+    if reverse:
+        notes = list(reversed(notes))
 
-        notes.append(
-            Note(
-                path=Path(row["path"]),
-                title=row["title"] or "",
-                date=note_date,
-                tags=[],
-                links=[],
-                attachments=[],
-                notebook=row["notebook"] or "",
-                content_hash="",
-            )
-        )
+    if not notes:
+        console.print("[yellow]No notes found.[/yellow]")
+        return
 
-    console.print(f"[dim]Loading {len(notes)} notes...[/dim]")
-    run_note_stream(notes, config.notes_root, continuous=continuous)
+    if is_piped:
+        output_notes_to_pipe(notes)
+    else:
+        console.print(f"[dim]Loading {len(notes)} notes...[/dim]")
+        run_note_stream(notes, config.notes_root, continuous=continuous)

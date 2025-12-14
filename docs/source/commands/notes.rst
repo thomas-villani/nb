@@ -403,6 +403,9 @@ nb stream
 
 Browse notes interactively with keyboard navigation.
 
+By default shows recently modified notes (most recent first). When piped,
+outputs plain text without the TUI.
+
 **Usage:** ``nb stream [OPTIONS]``
 
 **Options:**
@@ -417,26 +420,37 @@ Browse notes interactively with keyboard navigation.
      - Filter by notebook
    * - ``-w, --when RANGE``
      - Date range (e.g., "last week", "last 2 weeks")
+   * - ``--by-date``
+     - Sort by note date instead of modification time
    * - ``--recent``
      - Browse recently viewed notes
-   * - ``--recently-modified``
-     - Browse recently modified notes
    * - ``-l, --limit N``
      - Number of notes to browse
+   * - ``-c, --continuous``
+     - Show all notes in continuous flow (maximized content)
+   * - ``-r, --reverse``
+     - Show oldest first
 
 **Examples:**
 
 .. code-block:: bash
 
-   nb stream                  # All notes
+   nb stream                  # Recently modified notes (default)
+   nb stream --by-date        # Sort by note date
    nb stream -n daily         # Daily notes only
    nb stream -w "last week"   # Date range
    nb stream --recent         # Recently viewed
+   nb stream -c               # Continuous mode
+   nb stream | head -100      # Pipe mode (plain text)
 
 **Keyboard shortcuts:**
 
-- ``j/k`` - Navigate up/down
-- ``Enter`` - Open in editor
+- ``j/k`` or ``n/p`` - Navigate between notes
+- ``g/G`` - Jump to first/last note
+- ``/`` - Search notes by title or content
+- ``e`` - Edit note in-app
+- ``E`` - Edit in external editor
+- ``Escape`` - Clear search filter or quit
 - ``q`` - Quit
 
 nb alias

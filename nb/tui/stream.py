@@ -84,9 +84,12 @@ def run_note_stream(
     app = Wijjit(
         initial_state={
             "notes": notes,
+            "all_notes": notes,  # Keep original list for filtering
             "current_index": 0,
             "note_content": initial_content,
             "edit_mode": False,
+            "search_mode": False,
+            "search_query": "",
             "continuous_mode": continuous,
             "loaded_up_to": initial_loaded,  # For lazy loading in continuous mode
             "message": "",
@@ -107,6 +110,24 @@ def run_note_stream(
         if note:
             app.state["note_content"] = load_note_content(note)
 
+    def filter_notes_by_query(query: str) -> list[Note]:
+        """Filter notes by search query (checks title and content)."""
+        if not query:
+            return list(app.state.get("all_notes", []))
+
+        query_lower = query.lower()
+        matching = []
+        for note in app.state.get("all_notes", []):
+            # Check title
+            if query_lower in (note.title or "").lower():
+                matching.append(note)
+                continue
+            # Check content
+            content = load_note_content(note)
+            if query_lower in content.lower():
+                matching.append(note)
+        return matching
+
     @app.view("main", default=True)
     def main_view():
         """Main note viewing/editing view."""
@@ -114,9 +135,12 @@ def run_note_stream(
         def get_data():
             """Compute fresh data on each render."""
             notes = app.state.get("notes", [])
+            all_notes = app.state.get("all_notes", [])
             idx = app.state.get("current_index", 0)
             note_content = app.state.get("note_content", "")
             edit_mode = app.state.get("edit_mode", False)
+            search_mode = app.state.get("search_mode", False)
+            search_query = app.state.get("search_query", "")
             continuous_mode = app.state.get("continuous_mode", False)
 
             # Get current note info
@@ -127,6 +151,9 @@ def run_note_stream(
             loaded_count = loaded_up_to + 1 if continuous_mode else 1
             has_more = continuous_mode and loaded_count < total_notes
 
+            # Determine if we're showing filtered results
+            is_filtered = len(notes) < len(all_notes)
+
             if continuous_mode:
                 title = f"Stream [{loaded_count}/{total_notes} notes]"
                 date_str = ""
@@ -136,7 +163,10 @@ def run_note_stream(
                 title = note.title or "Untitled"
                 date_str = note.date.strftime(config.date_format) if note.date else ""
                 notebook = note.notebook or ""
-                nav_info = f"[{idx + 1}/{len(notes)}]"
+                if is_filtered:
+                    nav_info = f"[{idx + 1}/{len(notes)} of {len(all_notes)}]"
+                else:
+                    nav_info = f"[{idx + 1}/{len(notes)}]"
             else:
                 title = "No note"
                 date_str = ""
@@ -150,15 +180,35 @@ def run_note_stream(
                 "nav_info": nav_info,
                 "note_content": note_content,
                 "edit_mode": edit_mode,
+                "search_mode": search_mode,
+                "search_query": search_query,
                 "continuous_mode": continuous_mode,
                 "has_notes": bool(notes),
                 "has_more": has_more,
+                "is_filtered": is_filtered,
             }
 
         return {
             "template": """
 {% frame border_style="single" title=title height="fill" %}
   {% vstack spacing=1 %}
+
+    {# Search bar (not in continuous mode) #}
+    {% if not continuous_mode %}
+      {% if state.search_mode %}
+        {% hstack spacing=1 %}
+          {% text %}Search:{% endtext %}
+          {% textinput id="search_input" width=40 placeholder="Type to search..." %}{{ search_query }}{% endtextinput %}
+          {% button action="do_search" %}Find{% endbutton %}
+          {% button action="clear_search" %}Clear{% endbutton %}
+        {% endhstack %}
+      {% elif is_filtered %}
+        {% hstack spacing=1 %}
+          {% text dim=true %}Filtered: "{{ search_query }}"{% endtext %}
+          {% button action="clear_search" %}Clear (Esc){% endbutton %}
+        {% endhstack %}
+      {% endif %}
+    {% endif %}
 
     {# Header with navigation info (paged mode only) #}
     {% if not continuous_mode %}
@@ -182,6 +232,11 @@ def run_note_stream(
           {% button action="save" %}Save{% endbutton %}
           {% button action="cancel" %}Cancel{% endbutton %}
         {% endhstack %}
+      {% elif continuous_mode %}
+        {# Continuous mode - maximized content view, no chrome #}
+        {% contentview id="note_viewer" content_type="markdown" height="fill" width="fill" %}
+{{ note_content }}
+{% endcontentview %}
       {% else %}
         {# Read mode - markdown content view #}
         {% contentview id="note_viewer" content_type="markdown" height=25 width=120 title="Content" %}
@@ -192,35 +247,23 @@ def run_note_stream(
       {% text dim=true %}No notes to display{% endtext %}
     {% endif %}
 
-    {# Message bar #}
-    {% if state.message %}
+    {# Message bar (not in continuous mode) #}
+    {% if state.message and not continuous_mode %}
       {% text %}{{ state.message }}{% endtext %}
     {% endif %}
 
     {# Navigation buttons (paged mode only) #}
-    {% if not state.edit_mode and not continuous_mode %}
+    {% if not state.edit_mode and not state.search_mode and not continuous_mode %}
       {% hstack spacing=1 %}
         {% button action="prev_note" %}< Prev{% endbutton %}
         {% button action="next_note" %}Next >{% endbutton %}
         {% button action="first_note" %}First{% endbutton %}
         {% button action="last_note" %}Last{% endbutton %}
+        {% button action="search" %}/ Search{% endbutton %}
         {% button action="edit_inapp" %}Edit{% endbutton %}
         {% button action="edit_external" %}External{% endbutton %}
         {% button action="quit" %}Quit{% endbutton %}
       {% endhstack %}
-    {% endif %}
-
-    {# Continuous mode controls #}
-    {% if not state.edit_mode and continuous_mode %}
-      {% hstack spacing=1 %}
-        {% if has_more %}
-          {% button action="load_more" %}Load More (m){% endbutton %}
-        {% endif %}
-        {% button action="quit" %}Quit{% endbutton %}
-      {% endhstack %}
-      {% if has_more %}
-        {% text dim=true %}Press 'm' to load more notes{% endtext %}
-      {% endif %}
     {% endif %}
 
   {% endvstack %}
@@ -233,7 +276,11 @@ def run_note_stream(
 
     def go_next_note():
         """Navigate to next note."""
-        if app.state.get("edit_mode") or app.state.get("continuous_mode"):
+        if (
+            app.state.get("edit_mode")
+            or app.state.get("continuous_mode")
+            or app.state.get("search_mode")
+        ):
             return
         notes = app.state.get("notes", [])
         idx = app.state.get("current_index", 0)
@@ -245,7 +292,11 @@ def run_note_stream(
 
     def go_prev_note():
         """Navigate to previous note."""
-        if app.state.get("edit_mode") or app.state.get("continuous_mode"):
+        if (
+            app.state.get("edit_mode")
+            or app.state.get("continuous_mode")
+            or app.state.get("search_mode")
+        ):
             return
         idx = app.state.get("current_index", 0)
         if idx > 0:
@@ -282,7 +333,11 @@ def run_note_stream(
     @app.on_key("g")
     def first_note(event):
         """Go to first note."""
-        if app.state.get("edit_mode") or app.state.get("continuous_mode"):
+        if (
+            app.state.get("edit_mode")
+            or app.state.get("continuous_mode")
+            or app.state.get("search_mode")
+        ):
             return
         if app.state.get("current_index", 0) != 0:
             app.state["current_index"] = 0
@@ -291,7 +346,11 @@ def run_note_stream(
     @app.on_key("G")
     def last_note(event):
         """Go to last note."""
-        if app.state.get("edit_mode") or app.state.get("continuous_mode"):
+        if (
+            app.state.get("edit_mode")
+            or app.state.get("continuous_mode")
+            or app.state.get("search_mode")
+        ):
             return
         notes = app.state.get("notes", [])
         last_idx = len(notes) - 1
@@ -328,6 +387,73 @@ def run_note_stream(
     def load_more_action(event):
         """Button: Load more notes."""
         load_more_notes()
+
+    # --- Search ---
+
+    def enter_search_mode():
+        """Enter search mode."""
+        if app.state.get("edit_mode"):
+            return
+        app.state["search_mode"] = True
+        app.state["message"] = "Type search query and press Enter or click Find"
+
+    def do_search():
+        """Execute search with current query."""
+        query = app.state.get("search_input", "").strip()
+        if not query:
+            app.state["search_mode"] = False
+            app.state["message"] = ""
+            return
+
+        app.state["search_query"] = query
+        matching_notes = filter_notes_by_query(query)
+
+        if matching_notes:
+            app.state["notes"] = matching_notes
+            app.state["current_index"] = 0
+            app.state["note_content"] = load_note_content(matching_notes[0])
+            app.state["message"] = f"Found {len(matching_notes)} matching notes"
+        else:
+            app.state["message"] = f"No notes matching '{query}'"
+
+        app.state["search_mode"] = False
+
+    def clear_search():
+        """Clear search and restore all notes."""
+        all_notes = app.state.get("all_notes", [])
+        app.state["notes"] = list(all_notes)
+        app.state["search_query"] = ""
+        app.state["search_mode"] = False
+        app.state["current_index"] = 0
+        if all_notes:
+            app.state["note_content"] = load_note_content(all_notes[0])
+        app.state["message"] = "Search cleared"
+
+    @app.on_key("/")
+    def search_key(event):
+        """Enter search mode (/ key)."""
+        enter_search_mode()
+
+    @app.on_key("enter")
+    def enter_key(event):
+        """Handle enter key - execute search if in search mode."""
+        if app.state.get("search_mode"):
+            do_search()
+
+    @app.on_action("search")
+    def action_search(event):
+        """Button: Enter search mode."""
+        enter_search_mode()
+
+    @app.on_action("do_search")
+    def action_do_search(event):
+        """Button: Execute search."""
+        do_search()
+
+    @app.on_action("clear_search")
+    def action_clear_search(event):
+        """Button: Clear search filter."""
+        clear_search()
 
     # --- Editing ---
 
@@ -388,12 +514,19 @@ def run_note_stream(
             return
         app.quit()
 
-    # Handle escape to cancel edit or quit
+    # Handle escape to cancel edit, clear search, or quit
     @app.on_key("escape")
     def escape_handler(event):
         """Handle escape key."""
         if app.state.get("edit_mode"):
             cancel_edit(event)
+        elif app.state.get("search_mode"):
+            # Cancel search mode without filtering
+            app.state["search_mode"] = False
+            app.state["message"] = ""
+        elif app.state.get("search_query"):
+            # Clear search filter
+            clear_search()
         else:
             app.quit()
 

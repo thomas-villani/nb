@@ -13,7 +13,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Multiple notebooks** - Organize notes by project, including external directories
 - **Fuzzy finding** - Auto-suggest notebooks and notes when exact match not found
 - **Unified search** - Keyword, semantic, and hybrid search powered by localvectordb
-- **Note streaming** - Browse notes interactively with keyboard navigation
+- **Note streaming** - Browse notes interactively with keyboard navigation and search
 - **Linked files** - Index external todo files and note directories
 - **Note linking** - Wiki-style and markdown links between notes with backlink tracking
 - **Knowledge graph** - Interactive D3.js visualization in web UI, ASCII graph in CLI
@@ -133,11 +133,12 @@ git diff --stat | nb add --note work/log    # Pipe command output
 pbpaste | nb add                            # Pipe clipboard (macOS)
 
 nb list                    # List latest 3 notes per notebook (with colors/tags)
+nb list work               # List notes in 'work' notebook
 nb list --all              # List all notes in all notebooks
 nb list --week             # List this week's daily notes
 nb list --month            # List this month's daily notes
-nb list -n work            # List notes in work notebook
-nb list -n work --week     # List this week's notes in work notebook
+nb list work --week        # List this week's notes in work notebook
+nb list -n work            # Alternative: use -n/--notebook option
 nb list -f                 # Show full paths to notes
 nb list -d                 # Show details (todo count, mtime, date, excluded status)
 nb list -t                 # Display as tree grouped by subdirectory sections
@@ -151,13 +152,15 @@ nb delete work/myproject   # Delete using notebook/note format
 nb delete myalias          # Delete note by alias
 nb delete friday -f        # Skip confirmation
 
-nb stream                  # Browse all notes interactively
+nb stream                  # Recently modified notes (default, TUI)
+nb stream --by-date        # Sort by note date instead
 nb stream -n daily         # Browse daily notes
 nb stream -w "last week"   # Browse last week's notes
 nb stream -n daily -w "last 2 weeks"  # Daily notes from last 2 weeks
 nb stream --recent         # Browse recently viewed notes
-nb stream --recently-modified  # Browse recently modified notes
 nb stream --recent -l 20   # Last 20 viewed notes
+nb stream -c               # Continuous mode (maximized content)
+nb stream | head -100      # Pipe mode (plain text output)
 ```
 
 ### Note Templates

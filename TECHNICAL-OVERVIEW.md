@@ -843,7 +843,45 @@ nb todo --delete-view work   # Delete saved view
 
 ## Text User Interface (TUI)
 
-**Location:** `nb/tui/todos.py`, `nb/tui/review.py`
+**Location:** `nb/tui/todos.py`, `nb/tui/review.py`, `nb/tui/stream.py`
+
+### Note Stream Viewer: `nb stream`
+
+Interactive note browser for reading through notes with keyboard navigation.
+
+**Default Behavior:**
+- Shows recently modified notes (most recent first)
+- Pipes to stdout as plain text when output is not a TTY
+
+**Modes:**
+| Mode | Flag | Description |
+|------|------|-------------|
+| Recently Modified | (default) | Notes sorted by modification time |
+| By Date | `--by-date` | Notes sorted by note date |
+| Recently Viewed | `--recent` | Notes from view history |
+| Continuous | `-c` | All notes in scrollable flow |
+
+**Controls:**
+
+| Key | Action |
+|-----|--------|
+| `j/k` | Next/previous note |
+| `n/N/p` | Alternate navigation |
+| `g/G` | First/last note |
+| `/` | Search notes by title or content |
+| `e` | Edit note in-app |
+| `E` | Edit in external editor |
+| `Escape` | Clear search or quit |
+| `q` | Quit |
+
+**Pipe Mode:**
+When output is piped (not a TTY), notes are output as plain text:
+```bash
+nb stream | head -100      # First 100 lines
+nb stream | grep "TODO"    # Search in output
+```
+
+---
 
 ### Interactive Mode: `nb todo -i`
 

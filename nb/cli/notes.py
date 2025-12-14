@@ -894,8 +894,13 @@ def log_to_note(
 
 
 @click.command("list")
+@click.argument("notebook", required=False, shell_complete=complete_notebook)
 @click.option(
-    "--notebook", "-n", help="Filter by notebook", shell_complete=complete_notebook
+    "--notebook",
+    "-n",
+    "notebook_opt",
+    help="Filter by notebook (alternative to positional argument)",
+    shell_complete=complete_notebook,
 )
 @click.option(
     "--all", "-a", "all_notes", is_flag=True, help="List all notes in all notebooks"
@@ -926,6 +931,7 @@ def log_to_note(
 )
 def list_notes_cmd(
     notebook: str | None,
+    notebook_opt: str | None,
     all_notes: bool,
     week: bool,
     month: bool,
@@ -937,9 +943,16 @@ def list_notes_cmd(
 ) -> None:
     """List notes.
 
-    By default, shows the 3 most recent notes from each notebook.
-    Use --all to list all notes, or --notebook to filter by a specific notebook.
-    Use --week or --month to filter by date (defaults to daily notebook if no --notebook given).
+    NOTEBOOK is an optional notebook name to filter by. You can also use -n/--notebook.
+
+    \b
+    Examples:
+      nb list                  # List latest 3 notes per notebook
+      nb list work             # List notes in 'work' notebook
+      nb list -n work          # Same as above (alternative syntax)
+      nb list --all            # List all notes in all notebooks
+      nb list --week           # List this week's daily notes
+      nb list work --week      # List this week's notes in 'work' notebook
 
     With --details/-d, shows extra information:
     - Todo count (incomplete todos in the note)
@@ -947,6 +960,8 @@ def list_notes_cmd(
     - Note date (from frontmatter)
     - Excluded status (if note is excluded from nb todo)
     """
+    # Resolve notebook: positional argument takes precedence over option
+    notebook = notebook or notebook_opt
     from nb.core.notes import (
         NoteDetails,
         get_all_notes,

@@ -131,8 +131,10 @@ todo_exclude: true
 - [ ] Streaming command improvements
   - [ ] Need a way to have the stream output go straight to stdout if piped
   - [ ] Should show recently modified (most recent first) by default
-  - [ ] Add a way to search
-
+  - [ ] Add a way to search within TUI
+- [ ] Add an interactive search TUI
+- [ ] Need to improve the `nb list` command - should have a way to list recently modified. Should allow combining `nb list --week` and --details, etc.
+- [ ] Need to allow `nb history` to show recently modified as well
 
 ### Phase 5: Wijjit TUI
 - [x] Full Wijjit-based todo list view with richer interactions #feature
