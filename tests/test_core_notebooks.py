@@ -9,6 +9,7 @@ import pytest
 from nb.core.notebooks import (
     create_notebook,
     ensure_notebook_note,
+    get_default_transcript_notebook,
     get_notebook_for_file,
     get_notebook_note_path,
     get_notebook_notes,
@@ -288,3 +289,86 @@ class TestEnsureNotebookNote:
         path = ensure_notebook_note("daily", dt=dt)
 
         assert path.parent.exists()
+
+
+class TestGetDefaultTranscriptNotebook:
+    """Tests for get_default_transcript_notebook function."""
+
+    def test_returns_daily_when_configured(self, mock_config):
+        """Should return 'daily' when it exists in config."""
+        result = get_default_transcript_notebook()
+        assert result == "daily"
+
+    def test_returns_first_date_based_when_no_daily(self, temp_notes_root, monkeypatch):
+        """Should return first date-based notebook when 'daily' doesn't exist."""
+        from nb.config import Config, NotebookConfig, reset_config
+
+        # Config without 'daily' but with a date-based notebook
+        config = Config(
+            notes_root=temp_notes_root,
+            editor="vim",
+            notebooks=[
+                NotebookConfig(name="journal", date_based=True),
+                NotebookConfig(name="projects", date_based=False),
+            ],
+        )
+
+        def mock_get_config():
+            return config
+
+        import nb.core.notebooks
+
+        monkeypatch.setattr(nb.core.notebooks, "get_config", mock_get_config)
+        reset_config()
+
+        result = get_default_transcript_notebook()
+        assert result == "journal"
+
+    def test_returns_first_notebook_when_no_date_based(
+        self, temp_notes_root, monkeypatch
+    ):
+        """Should return first notebook when no date-based notebooks exist."""
+        from nb.config import Config, NotebookConfig, reset_config
+
+        # Config without any date-based notebooks
+        config = Config(
+            notes_root=temp_notes_root,
+            editor="vim",
+            notebooks=[
+                NotebookConfig(name="projects", date_based=False),
+                NotebookConfig(name="work", date_based=False),
+            ],
+        )
+
+        def mock_get_config():
+            return config
+
+        import nb.core.notebooks
+
+        monkeypatch.setattr(nb.core.notebooks, "get_config", mock_get_config)
+        reset_config()
+
+        result = get_default_transcript_notebook()
+        assert result == "projects"
+
+    def test_raises_when_no_notebooks(self, temp_notes_root, monkeypatch):
+        """Should raise ValueError when no notebooks are configured."""
+        from nb.config import Config, reset_config
+
+        # Config with no notebooks
+        config = Config(
+            notes_root=temp_notes_root,
+            editor="vim",
+            notebooks=[],
+        )
+
+        def mock_get_config():
+            return config
+
+        import nb.core.notebooks
+
+        monkeypatch.setattr(nb.core.notebooks, "get_config", mock_get_config)
+        reset_config()
+
+        with pytest.raises(ValueError, match="No notebooks configured"):
+            get_default_transcript_notebook()

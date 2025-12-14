@@ -611,7 +611,7 @@ def record_note_view(path: Path, notes_root: Path | None = None) -> None:
     db = get_db()
     db.execute(
         "INSERT INTO note_views (note_path, viewed_at) VALUES (?, ?)",
-        (str(relative_path), datetime.now().isoformat()),
+        (normalize_path(relative_path), datetime.now().isoformat()),
     )
     db.commit()
 

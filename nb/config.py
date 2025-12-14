@@ -622,93 +622,135 @@ def load_config(config_path: Path | None = None) -> Config:
     )
 
 
+def _serialize_dataclass_fields(
+    obj: Any,
+    defaults: Any | None = None,
+    exclude: set[str] | None = None,
+    include_none: bool = False,
+) -> dict[str, Any]:
+    """Serialize a dataclass to a dict using field introspection.
+
+    Args:
+        obj: The dataclass instance to serialize.
+        defaults: Optional defaults instance to compare against. If provided,
+            only fields that differ from defaults will be included.
+        exclude: Set of field names to exclude from serialization.
+        include_none: If False (default), exclude None values.
+
+    Returns:
+        Dictionary of field names to values.
+
+    """
+    from dataclasses import fields, is_dataclass
+
+    if not is_dataclass(obj):
+        raise TypeError(f"{obj} is not a dataclass instance")
+
+    exclude = exclude or set()
+    result: dict[str, Any] = {}
+
+    for _field in fields(obj):
+        if _field.name in exclude:
+            continue
+
+        value = getattr(obj, _field.name)
+
+        # Skip None values unless explicitly included
+        if value is None and not include_none:
+            continue
+
+        # Compare with defaults if provided
+        if defaults is not None:
+            default_value = getattr(defaults, _field.name, None)
+            if value == default_value:
+                continue
+
+        # Convert Path to string
+        if isinstance(value, Path):
+            value = str(value)
+
+        result[_field.name] = value
+
+    return result
+
+
+def _serialize_notebook(nb: NotebookConfig) -> dict[str, Any]:
+    """Serialize a NotebookConfig to a dict.
+
+    Always includes: name, date_based
+    Conditionally includes: todo_exclude (if True), path, color, icon, template (if not None)
+
+    """
+    result: dict[str, Any] = {
+        "name": nb.name,
+        "date_based": nb.date_based,
+    }
+    if nb.todo_exclude:
+        result["todo_exclude"] = True
+    if nb.path is not None:
+        result["path"] = str(nb.path)
+    if nb.color is not None:
+        result["color"] = nb.color
+    if nb.icon is not None:
+        result["icon"] = nb.icon
+    if nb.template is not None:
+        result["template"] = nb.template
+    return result
+
+
 def save_config(config: Config) -> None:
-    """Save configuration to YAML file."""
-    # Build embeddings dict, excluding None values
-    embeddings_data = {
-        "provider": config.embeddings.provider,
-        "model": config.embeddings.model,
-        "chunk_size": config.embeddings.chunk_size,
-        "chunking_method": config.embeddings.chunking_method,
-    }
-    if config.embeddings.base_url:
-        embeddings_data["base_url"] = config.embeddings.base_url
-    if config.embeddings.api_key:
-        embeddings_data["api_key"] = config.embeddings.api_key
+    """Save configuration to YAML file.
 
-    # Build notebook list with optional fields
-    notebooks_data = []
-    for nb in config.notebooks:
-        nb_dict: dict[str, Any] = {
-            "name": nb.name,
-            "date_based": nb.date_based,
-        }
-        if nb.todo_exclude:
-            nb_dict["todo_exclude"] = True
-        if nb.path is not None:
-            nb_dict["path"] = str(nb.path)
-        if nb.color is not None:
-            nb_dict["color"] = nb.color
-        if nb.icon is not None:
-            nb_dict["icon"] = nb.icon
-        if nb.template is not None:
-            nb_dict["template"] = nb.template
-        notebooks_data.append(nb_dict)
+    This function serializes the Config dataclass to YAML. When adding new fields
+    to Config or its nested dataclasses, ensure they are handled here.
 
-    # Build search config dict
-    search_data = {
-        "vector_weight": config.search.vector_weight,
-        "score_threshold": config.search.score_threshold,
-        "recency_decay_days": config.search.recency_decay_days,
-    }
+    Serialization strategies:
+    - embeddings, search, todo: All fields serialized (use _serialize_dataclass_fields)
+    - recorder, clip: Only non-default values (compare with defaults instance)
+    - inbox: Only non-default values, with nested raindrop config
+    - notebooks: Custom serialization via _serialize_notebook
+    - Security: api_token fields are NOT saved (use environment variables)
 
-    # Build todo config dict
-    todo_data = {
-        "default_sort": config.todo.default_sort,
-        "inbox_file": config.todo.inbox_file,
-        "auto_complete_children": config.todo.auto_complete_children,
-    }
+    """
+    # Notebooks: custom serialization with conditional fields
+    notebooks_data = [_serialize_notebook(nb) for nb in config.notebooks]
 
-    # Build recorder config dict (only include non-default values)
-    recorder_data: dict[str, Any] = {}
-    if config.recorder.mic_device is not None:
-        recorder_data["mic_device"] = config.recorder.mic_device
-    if config.recorder.loopback_device is not None:
-        recorder_data["loopback_device"] = config.recorder.loopback_device
-    if config.recorder.sample_rate != 16000:
-        recorder_data["sample_rate"] = config.recorder.sample_rate
-    if config.recorder.auto_delete_audio:
-        recorder_data["auto_delete_audio"] = config.recorder.auto_delete_audio
-    if config.recorder.transcribe_timeout != 600:
-        recorder_data["transcribe_timeout"] = config.recorder.transcribe_timeout
-    if config.recorder.mic_speaker_label != "You":
-        recorder_data["mic_speaker_label"] = config.recorder.mic_speaker_label
+    # Embeddings: all fields except None, with special handling for api_key
+    embeddings_data = _serialize_dataclass_fields(config.embeddings)
 
-    # Build clip config dict (only include non-default values)
-    clip_data: dict[str, Any] = {}
-    if config.clip.user_agent != "nb-web-clipper/1.0":
-        clip_data["user_agent"] = config.clip.user_agent
-    if config.clip.timeout != 30:
-        clip_data["timeout"] = config.clip.timeout
-    if not config.clip.auto_tag_domain:
-        clip_data["auto_tag_domain"] = config.clip.auto_tag_domain
+    # Search: all fields
+    search_data = _serialize_dataclass_fields(config.search)
 
-    # Build inbox config dict (only include non-default values)
+    # Todo: all fields
+    todo_data = _serialize_dataclass_fields(config.todo)
+
+    # Recorder: only non-default values
+    recorder_defaults = RecorderConfig()
+    recorder_data = _serialize_dataclass_fields(
+        config.recorder, defaults=recorder_defaults
+    )
+
+    # Clip: only non-default values
+    clip_defaults = ClipConfig()
+    clip_data = _serialize_dataclass_fields(config.clip, defaults=clip_defaults)
+
+    # Inbox: only non-default values, with nested raindrop config
     inbox_data: dict[str, Any] = {}
-    if config.inbox.source != "raindrop":
+    inbox_defaults = InboxConfig()
+    if config.inbox.source != inbox_defaults.source:
         inbox_data["source"] = config.inbox.source
-    if config.inbox.default_notebook != "bookmarks":
+    if config.inbox.default_notebook != inbox_defaults.default_notebook:
         inbox_data["default_notebook"] = config.inbox.default_notebook
-    # Raindrop sub-config
-    raindrop_data: dict[str, Any] = {}
-    if config.inbox.raindrop.collection != "nb-inbox":
-        raindrop_data["collection"] = config.inbox.raindrop.collection
-    if not config.inbox.raindrop.auto_archive:
-        raindrop_data["auto_archive"] = config.inbox.raindrop.auto_archive
-    # Note: api_token is NOT saved to config file for security - use env var
+
+    # Raindrop sub-config (exclude api_token for security - use env var)
+    raindrop_defaults = RaindropConfig()
+    raindrop_data = _serialize_dataclass_fields(
+        config.inbox.raindrop, defaults=raindrop_defaults, exclude={"api_token"}
+    )
     if raindrop_data:
         inbox_data["raindrop"] = raindrop_data
 
+    # Build main config dict
     # Note: linked_todos and linked_notes are stored in the database, not config
     data: dict[str, Any] = {
         "notes_root": str(config.notes_root),
@@ -736,15 +778,11 @@ def save_config(config: Config) -> None:
         "week_start_day": config.week_start_day,
     }
 
-    # Only include recorder config if there are non-default settings
+    # Only include optional configs if they have non-default settings
     if recorder_data:
         data["recorder"] = recorder_data
-
-    # Only include clip config if there are non-default settings
     if clip_data:
         data["clip"] = clip_data
-
-    # Only include inbox config if there are non-default settings
     if inbox_data:
         data["inbox"] = inbox_data
 
@@ -987,6 +1025,36 @@ def resolve_emoji(value: str) -> str:
 
     """
     return EMOJI_ALIASES.get(value.lower(), value)
+
+
+# Valid boolean string values
+BOOL_TRUE_VALUES = ("true", "1", "yes", "on")
+BOOL_FALSE_VALUES = ("false", "0", "no", "off")
+
+
+def parse_bool_strict(value: str, setting_name: str) -> bool:
+    """Parse a boolean string value strictly.
+
+    Args:
+        value: String value to parse (e.g., "true", "false", "1", "0")
+        setting_name: Name of the setting (for error messages)
+
+    Returns:
+        Boolean value
+
+    Raises:
+        ValueError: If the value is not a recognized boolean string
+
+    """
+    lower = value.lower()
+    if lower in BOOL_TRUE_VALUES:
+        return True
+    if lower in BOOL_FALSE_VALUES:
+        return False
+    valid = ", ".join(BOOL_TRUE_VALUES + BOOL_FALSE_VALUES)
+    raise ValueError(
+        f"Invalid boolean value '{value}' for {setting_name}. Valid: {valid}"
+    )
 
 
 # Valid Rich color names (standard + bright variants)
@@ -1235,7 +1303,9 @@ def set_config_value(key: str, value: str) -> bool:
         elif attr == "inbox_file":
             config.todo.inbox_file = value
         elif attr == "auto_complete_children":
-            config.todo.auto_complete_children = value.lower() in ("true", "1", "yes")
+            config.todo.auto_complete_children = parse_bool_strict(
+                value, "todo.auto_complete_children"
+            )
         else:
             return False
     elif parts[0] == "recorder" and len(parts) == 2:
@@ -1263,7 +1333,9 @@ def set_config_value(key: str, value: str) -> bool:
                     ) from None
                 raise
         elif attr == "auto_tag_domain":
-            config.clip.auto_tag_domain = value.lower() in ("true", "1", "yes")
+            config.clip.auto_tag_domain = parse_bool_strict(
+                value, "clip.auto_tag_domain"
+            )
         else:
             return False
     elif parts[0] == "inbox" and len(parts) == 2:
@@ -1284,7 +1356,9 @@ def set_config_value(key: str, value: str) -> bool:
         if attr == "collection":
             config.inbox.raindrop.collection = value if value else "nb-inbox"
         elif attr == "auto_archive":
-            config.inbox.raindrop.auto_archive = value.lower() in ("true", "1", "yes")
+            config.inbox.raindrop.auto_archive = parse_bool_strict(
+                value, "inbox.raindrop.auto_archive"
+            )
         else:
             return False
     elif parts[0] == "notebook" and len(parts) == 3:
@@ -1298,7 +1372,7 @@ def set_config_value(key: str, value: str) -> bool:
 
         # Handle boolean settings
         if setting in ("date_based", "todo_exclude"):
-            bool_value = value.lower() in ("true", "1", "yes")
+            bool_value = parse_bool_strict(value, f"notebook.{nb_name}.{setting}")
             setattr(nb, setting, bool_value)
         elif setting == "color":
             # Validate and set color

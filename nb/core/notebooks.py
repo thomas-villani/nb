@@ -231,6 +231,40 @@ def is_notebook_date_based(notebook: str) -> bool:
     return notebook == "daily"
 
 
+def get_default_transcript_notebook() -> str:
+    """Get the default notebook for transcripts and recordings.
+
+    Selection priority:
+    1. "daily" notebook if it exists in config
+    2. First date-based notebook found
+    3. First notebook in config
+
+    Returns:
+        Name of the default notebook for transcripts.
+
+    Raises:
+        ValueError: If no notebooks are configured.
+
+    """
+    config = get_config()
+
+    if not config.notebooks:
+        raise ValueError("No notebooks configured. Run 'nb init' to set up notebooks.")
+
+    # Priority 1: "daily" notebook if configured
+    daily_nb = config.get_notebook("daily")
+    if daily_nb:
+        return "daily"
+
+    # Priority 2: First date-based notebook
+    for nb in config.notebooks:
+        if nb.date_based:
+            return nb.name
+
+    # Priority 3: First notebook
+    return config.notebooks[0].name
+
+
 def get_notebook_for_file(path: Path) -> str | None:
     """Determine which notebook a file belongs to.
 

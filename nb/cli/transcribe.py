@@ -138,7 +138,9 @@ def transcribe_cmd(
 
     # Save Markdown to notebook
     if notebook is None:
-        notebook = "daily"
+        from nb.core.notebooks import get_default_transcript_notebook
+
+        notebook = get_default_transcript_notebook()
 
     # Determine markdown output path
     from nb.core.notebooks import is_notebook_date_based

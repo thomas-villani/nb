@@ -744,7 +744,9 @@ def _transcribe_recording(
 
     # Save Markdown to notebook
     if notebook is None:
-        notebook = "daily"  # Default notebook for transcripts
+        from nb.core.notebooks import get_default_transcript_notebook
+
+        notebook = get_default_transcript_notebook()
 
     # Determine markdown output path
     from nb.core.notebooks import is_notebook_date_based

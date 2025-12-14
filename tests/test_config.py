@@ -452,3 +452,127 @@ class TestRemoveNotebook:
     def test_remove_nonexistent(self, mock_config: Config):
         result = remove_notebook("nonexistent")
         assert result is False
+
+
+class TestParseBoolStrict:
+    """Tests for parse_bool_strict function."""
+
+    def test_true_values(self):
+        from nb.config import parse_bool_strict
+
+        for val in ("true", "True", "TRUE", "1", "yes", "Yes", "on", "ON"):
+            assert parse_bool_strict(val, "test") is True
+
+    def test_false_values(self):
+        from nb.config import parse_bool_strict
+
+        for val in ("false", "False", "FALSE", "0", "no", "No", "off", "OFF"):
+            assert parse_bool_strict(val, "test") is False
+
+    def test_invalid_raises(self):
+        from nb.config import parse_bool_strict
+
+        with pytest.raises(ValueError, match="Invalid boolean value 'trie'"):
+            parse_bool_strict("trie", "test_setting")
+
+        with pytest.raises(ValueError, match="Invalid boolean value 'maybe'"):
+            parse_bool_strict("maybe", "test_setting")
+
+
+class TestSetConfigValueBooleans:
+    """Tests for set_config_value with boolean settings."""
+
+    def test_valid_boolean_values(self, temp_config: Config, temp_notes_root: Path):
+        from nb.config import load_config, set_config_value
+
+        # Test todo.auto_complete_children
+        assert set_config_value("todo.auto_complete_children", "false") is True
+        cfg = load_config(temp_notes_root / ".nb" / "config.yaml")
+        assert cfg.todo.auto_complete_children is False
+
+        assert set_config_value("todo.auto_complete_children", "true") is True
+        cfg = load_config(temp_notes_root / ".nb" / "config.yaml")
+        assert cfg.todo.auto_complete_children is True
+
+    def test_invalid_boolean_raises(self, mock_config: Config):
+        from nb.config import set_config_value
+
+        with pytest.raises(ValueError, match="Invalid boolean value"):
+            set_config_value("todo.auto_complete_children", "trie")
+
+        with pytest.raises(ValueError, match="Invalid boolean value"):
+            set_config_value("notebook.daily.date_based", "nope")
+
+
+class TestSerializeDataclassFields:
+    """Tests for _serialize_dataclass_fields helper function."""
+
+    def test_basic_serialization(self):
+        from nb.config import SearchConfig, _serialize_dataclass_fields
+
+        config = SearchConfig(
+            vector_weight=0.8, score_threshold=0.5, recency_decay_days=60
+        )
+        result = _serialize_dataclass_fields(config)
+
+        assert result == {
+            "vector_weight": 0.8,
+            "score_threshold": 0.5,
+            "recency_decay_days": 60,
+        }
+
+    def test_excludes_none_by_default(self):
+        from nb.config import EmbeddingsConfig, _serialize_dataclass_fields
+
+        config = EmbeddingsConfig(
+            provider="ollama", model="test", base_url=None, api_key=None
+        )
+        result = _serialize_dataclass_fields(config)
+
+        assert "base_url" not in result
+        assert "api_key" not in result
+        assert result["provider"] == "ollama"
+        assert result["model"] == "test"
+
+    def test_with_defaults_only_includes_changes(self):
+        from nb.config import RecorderConfig, _serialize_dataclass_fields
+
+        defaults = RecorderConfig()
+        config = RecorderConfig(sample_rate=44100, auto_delete_audio=True)
+
+        result = _serialize_dataclass_fields(config, defaults=defaults)
+
+        # Only changed fields should be included
+        assert result == {"sample_rate": 44100, "auto_delete_audio": True}
+        # Default values should NOT be included
+        assert "mic_device" not in result
+        assert "loopback_device" not in result
+        assert "transcribe_timeout" not in result
+        assert "mic_speaker_label" not in result
+
+    def test_exclude_parameter(self):
+        from nb.config import RaindropConfig, _serialize_dataclass_fields
+
+        config = RaindropConfig(
+            collection="test", auto_archive=False, api_token="secret"
+        )
+        result = _serialize_dataclass_fields(config, exclude={"api_token"})
+
+        assert "api_token" not in result
+        assert result["collection"] == "test"
+        assert result["auto_archive"] is False
+
+    def test_path_conversion(self, tmp_path: Path):
+        from nb.config import NotebookConfig, _serialize_dataclass_fields
+
+        config = NotebookConfig(name="test", path=tmp_path / "notes")
+        result = _serialize_dataclass_fields(config)
+
+        assert result["path"] == str(tmp_path / "notes")
+        assert isinstance(result["path"], str)
+
+    def test_raises_for_non_dataclass(self):
+        from nb.config import _serialize_dataclass_fields
+
+        with pytest.raises(TypeError, match="is not a dataclass instance"):
+            _serialize_dataclass_fields({"not": "a dataclass"})
