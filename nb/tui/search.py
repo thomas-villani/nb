@@ -355,7 +355,6 @@ def run_interactive_search(
         background_tasks.add(task)
         task.add_done_callback(background_tasks.discard)
 
-
     # --- Result Actions (Ctrl+key to avoid conflicts with text input) ---
 
     @app.on_key("ctrl+e")

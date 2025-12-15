@@ -132,22 +132,23 @@ todo_exclude: true
   - [x] Need a way to have the stream output go straight to stdout if piped
   - [x] Should show recently modified (most recent first) by default
   - [x] Add a way to search within TUI
-- [^] Add an interactive search TUI
+- [x] Add an interactive search TUI
 - [ ] Need to improve the `nb list` command - should have a way to list recently modified. Should allow combining `nb list --week` and --details, etc.
 - [ ] Need to allow `nb history` to show recently modified as well
 - [ ] Allow pinned notes with `nb pin <NOTE>` and `nb pinned`
 - [x] `nb mv`, `nb cp` to move and copy notes
-- [x] `nb export` to export notes/notebooks 
+- [x] `nb export` to export notes/notebooks
 
 ### Phase 5: Wijjit TUI
 - [x] Full Wijjit-based todo list view with richer interactions #feature
 - [x] Wijjit-based todo review #feature
-- [ ] Full Wijjit based viewer/editor for notes #feature
+- [ ] Full Wijjit based viewer/editor for notes and notebooks
   - [ ] Needs to have clickable links to go from note to note
 - [x] Stream/continuous view (`nb stream`) with lazy loading
 - [x] Interactive filtering UI #feature
 - [x] Navigation and links #feature
 - [x] Browser plugin to add notes from webpages
+
 
 
 ### Phase 6: Future Enhancements

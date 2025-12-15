@@ -575,6 +575,8 @@ kanban_boards:
 
 ```bash
 nb search "query"       # Hybrid search (semantic + keyword)
+nb search -i            # Interactive search TUI
+nb search -i "query"    # Interactive TUI with initial query
 nb search -s "query"    # Semantic search only
 nb search -k "query"    # Keyword search only
 nb search -t mytag      # Filter by tag
@@ -590,6 +592,26 @@ nb grep "TODO.*urgent" -C 5  # With context lines
 nb grep "config" -n work     # Filter by notebook
 nb grep "setup" --note myproject  # Filter by specific note
 ```
+
+#### Interactive Search
+
+Launch an interactive search interface with `nb search -i`:
+
+- **Real-time search** - Results update as you type
+- **Live filters** - Filter by notebook and tag using dropdowns
+- **Note preview** - See content of selected result
+- **Direct actions** - Open notes in editor or stream view
+
+**Keyboard shortcuts:**
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Execute search / open note |
+| `↑/↓` | Navigate results |
+| `Tab` | Cycle focus between panels |
+| `e` | Edit selected note |
+| `b` | Browse in stream view |
+| `q` | Quit |
 
 ### Statistics
 
@@ -992,6 +1014,7 @@ nb index -n daily     # Only reindex a specific notebook
 nb index --rebuild    # Drop and recreate database (for schema changes)
 nb index --embeddings # Rebuild search embeddings
 nb index --vectors-only  # Rebuild only vectors (skip file indexing)
+nb index --reset-vectors --vectors-only  # Clear and rebuild vectors (after changing provider)
 ```
 
 ### Web Viewer

@@ -29,6 +29,8 @@ Search notes using keyword, semantic, or hybrid search.
 
    * - Option
      - Description
+   * - ``-i, --interactive``
+     - Launch interactive search TUI with live filtering
    * - ``-s, --semantic``
      - Semantic search only (find conceptually related content)
    * - ``-k, --keyword``
@@ -59,6 +61,8 @@ Hybrid search (default) combines semantic similarity (70%) with keyword matching
 .. code-block:: bash
 
    nb search "query"                    # Hybrid search (default)
+   nb search -i                         # Interactive TUI
+   nb search -i "project ideas"         # TUI with initial query
    nb search -s "query"                 # Semantic search only
    nb search -k "query"                 # Keyword search only
    nb search "query" -t mytag           # Filter by tag
@@ -66,6 +70,48 @@ Hybrid search (default) combines semantic similarity (70%) with keyword matching
    nb search "query" --when "last 2 weeks"
    nb search "query" --since friday
    nb search "query" --recent --limit 5
+
+Interactive search TUI
+^^^^^^^^^^^^^^^^^^^^^^
+
+Launch an interactive search interface with live filtering and note preview:
+
+.. code-block:: bash
+
+   nb search -i                         # Open interactive search
+   nb search -i "initial query"         # Start with a query
+   nb search -i -n work                 # Filter to specific notebook
+   nb search -i -t project              # Filter to specific tag
+
+**Features:**
+
+- Real-time search as you type
+- Filter by notebook and tag using dropdowns
+- Toggle recency boost for results
+- Live preview of selected note content
+- Open notes directly in editor
+- Stream browse selected results
+
+**Keyboard shortcuts:**
+
+.. list-table::
+   :widths: 20 80
+   :header-rows: 1
+
+   * - Key
+     - Action
+   * - ``Enter``
+     - Execute search / open selected note
+   * - ``↑/↓``
+     - Navigate results
+   * - ``Tab``
+     - Cycle focus between panels
+   * - ``e``
+     - Edit selected note in editor
+   * - ``b``
+     - Browse selected note in stream view
+   * - ``q`` / ``Escape``
+     - Quit
 
 nb grep
 -------

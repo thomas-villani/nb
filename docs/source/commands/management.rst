@@ -374,6 +374,8 @@ Rebuild the notes and todos index.
      - Rebuild search embeddings
    * - ``--vectors-only``
      - Rebuild only vectors (skip file indexing)
+   * - ``--reset-vectors``
+     - Delete vector index before rebuilding (use when changing embedding provider/model)
 
 **Examples:**
 
@@ -384,6 +386,7 @@ Rebuild the notes and todos index.
    nb index -n daily           # Specific notebook
    nb index --rebuild          # Recreate database
    nb index --embeddings       # Rebuild embeddings
+   nb index --reset-vectors --vectors-only  # Clear and rebuild vectors (after changing provider)
 
 Note Linking
 ------------

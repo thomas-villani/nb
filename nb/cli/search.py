@@ -352,6 +352,11 @@ def grep_cmd(
     help="Only rebuild vectors (skip file indexing)",
 )
 @click.option(
+    "--reset-vectors",
+    is_flag=True,
+    help="Delete vector index before rebuilding (use when changing embedding provider/model)",
+)
+@click.option(
     "--notebook",
     "-n",
     help="Only reindex this notebook",
@@ -362,6 +367,7 @@ def index_cmd(
     rebuild: bool,
     embeddings: bool,
     vectors_only: bool,
+    reset_vectors: bool,
     notebook: str | None,
 ) -> None:
     """Rebuild the notes and todos index.
@@ -377,6 +383,7 @@ def index_cmd(
       nb index --rebuild     # Drop database and reindex (fixes schema issues)
       nb index --embeddings  # Rebuild semantic search vectors
       nb index --vectors-only  # Rebuild only vectors (e.g., after changing embedding model)
+      nb index --reset-vectors --vectors-only  # Clear and rebuild vectors (after changing provider)
     """
     from nb.cli.utils import progress_bar, spinner
     from nb.index.scanner import (
@@ -388,6 +395,33 @@ def index_cmd(
         scan_linked_notes,
     )
     from nb.index.todos_repo import get_todo_stats
+
+    # Handle --reset-vectors: clear vector index before rebuilding
+    if reset_vectors:
+        if rebuild:
+            console.print("[red]Cannot use --reset-vectors with --rebuild[/red]")
+            console.print("[dim]Hint: --rebuild already clears the vector index.[/dim]")
+            raise SystemExit(1)
+        if not vectors_only and not embeddings:
+            console.print(
+                "[red]--reset-vectors requires --vectors-only or --embeddings[/red]"
+            )
+            console.print(
+                "[dim]Hint: Use --reset-vectors --vectors-only to clear and rebuild vectors.[/dim]"
+            )
+            raise SystemExit(1)
+
+        import shutil
+
+        from nb.config import get_config
+        from nb.index.search import reset_search
+
+        config = get_config()
+        vectors_path = config.vectors_path
+        if vectors_path.exists():
+            reset_search()  # Close any open connections first
+            shutil.rmtree(vectors_path)
+            console.print("[dim]Cleared vector index.[/dim]")
 
     # Handle --vectors-only: skip file indexing, just rebuild vectors
     if vectors_only:
