@@ -785,6 +785,7 @@ dependencies = [
     { name = "httpx" },
     { name = "localvectordb" },
     { name = "psutil" },
+    { name = "pyperclip" },
     { name = "python-dateutil" },
     { name = "python-frontmatter" },
     { name = "pyyaml" },
@@ -802,6 +803,7 @@ dev = [
     { name = "ruff" },
     { name = "sphinx" },
     { name = "sphinx-rtd-theme" },
+    { name = "types-pyperclip" },
     { name = "types-python-dateutil" },
     { name = "types-pyyaml" },
 ]
@@ -824,6 +826,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy", marker = "extra == 'recorder'", specifier = ">=1.24.0" },
     { name = "psutil", specifier = ">=7.1.3" },
+    { name = "pyperclip", specifier = ">=1.11.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "python-dateutil", specifier = ">=2.8" },
@@ -835,6 +838,7 @@ requires-dist = [
     { name = "soundfile", marker = "extra == 'recorder'", specifier = ">=0.12.0" },
     { name = "sphinx", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "sphinx-rtd-theme", marker = "extra == 'dev'", specifier = ">=2.0" },
+    { name = "types-pyperclip", marker = "extra == 'dev'", specifier = ">=1.9.0.20250801" },
     { name = "types-python-dateutil", marker = "extra == 'dev'", specifier = ">=2.9.0.20251115" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12.20250915" },
     { name = "wijjit", path = "wheels/wijjit-0.1.0a0-py3-none-any.whl" },
@@ -1535,6 +1539,15 @@ wheels = [
 ]
 
 [[package]]
+name = "types-pyperclip"
+version = "1.9.0.20250801"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5b/7d/144cc18484621f31b1c04f2b4e6b1cd925a25573f72f00770f0030061cd4/types_pyperclip-1.9.0.20250801.tar.gz", hash = "sha256:37eb1b8f6989ccc1ec2f80e2984316f74ccd2aedb385331c210252928ffc3a1f", size = 7202 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/38/6e/af02c7af8178f2d3933b26560b5428236fcfa78966dbb4a52220f1b2253b/types_pyperclip-1.9.0.20250801-py3-none-any.whl", hash = "sha256:73ad08721a2380506549027d5b13a8b360db909a2480649e728a37d836c36456", size = 7606 },
+]
+
+[[package]]
 name = "types-python-dateutil"
 version = "2.9.0.20251115"
 source = { registry = "https://pypi.org/simple" }
@@ -1633,7 +1646,7 @@ dependencies = [
     { name = "wcwidth" },
 ]
 wheels = [
-    { filename = "wijjit-0.1.0a0-py3-none-any.whl", hash = "sha256:06b88f3eb4286ebb8b1673eebb2de2c34b75333c5963c50dfb766b020ffcfefa" },
+    { filename = "wijjit-0.1.0a0-py3-none-any.whl", hash = "sha256:879436d5b0e673805c859134cb607b0bbde1cb87b8e0c1c74b53e6e9c2a82a92" },
 ]
 
 [package.metadata]

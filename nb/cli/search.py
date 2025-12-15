@@ -21,7 +21,8 @@ def register_search_commands(cli: click.Group) -> None:
 
 
 @click.command("search")
-@click.argument("query")
+@click.argument("query", required=False)
+@click.option("-i", "--interactive", is_flag=True, help="Launch interactive search TUI")
 @click.option(
     "-s", "--semantic", is_flag=True, help="Use pure semantic search (no keyword)"
 )
@@ -51,7 +52,8 @@ def register_search_commands(cli: click.Group) -> None:
     help="Return results above this score (default 0.4)",
 )
 def search_cmd(
-    query: str,
+    query: str | None,
+    interactive: bool,
     semantic: bool,
     keyword: bool,
     tag: str | None,
@@ -67,6 +69,7 @@ def search_cmd(
 
     By default uses hybrid search (70% semantic, 30% keyword).
     Use --semantic for pure semantic search, --keyword for pure keyword search.
+    Use --interactive for an interactive TUI with live filtering.
 
     \b
     Date filtering:
@@ -78,11 +81,40 @@ def search_cmd(
     \b
     Examples:
         nb search "machine learning"
+        nb search -i                              # Interactive TUI
+        nb search -i "project ideas"              # TUI with initial query
         nb search -s "project ideas" --recent
         nb search "TODO" --when "last 2 weeks"
         nb search "meeting notes" --since "last monday"
 
     """
+    # Handle interactive mode
+    if interactive:
+        from nb.tui.search import run_interactive_search
+
+        # Determine search type for TUI
+        if semantic:
+            search_type = "vector"
+        elif keyword:
+            search_type = "keyword"
+        else:
+            search_type = "hybrid"
+
+        run_interactive_search(
+            initial_query=query or "",
+            initial_notebook=notebook,
+            initial_tag=tag,
+            search_type=search_type,
+        )
+        return
+
+    # Non-interactive mode requires a query
+    if not query:
+        console.print(
+            "[red]Error: Missing argument 'QUERY'. Use -i for interactive mode.[/red]"
+        )
+        raise SystemExit(1)
+
     from nb.index.search import get_search
     from nb.utils.dates import parse_date_range, parse_fuzzy_date
 

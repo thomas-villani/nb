@@ -71,6 +71,10 @@ class NoteSearch:
         self.config = config
         self._db: Any = None
 
+    def __del__(self):
+        if self._db is not None:
+            self._db.close()
+
     @property
     def db(self) -> Any:
         """Lazy-initialize the VectorDB connection."""
@@ -245,7 +249,95 @@ class NoteSearch:
             SearchResult(
                 path=r.metadata.get("path", ""),
                 title=r.metadata.get("title"),
-                snippet=r.content[:200] if r.content else "",
+                snippet=r.content or "",  # Store full chunk content
+                score=r.score,
+                notebook=r.metadata.get("notebook"),
+                date=r.metadata.get("date"),
+                tags=r.metadata.get("tags"),
+            )
+            for r in results
+        ]
+
+        # Apply recency boost if requested
+        if recency_boost > 0 and search_results:
+            search_results = self._apply_recency_boost(search_results, recency_boost)
+
+        return search_results[:k]
+
+    async def search_async(
+        self,
+        query: str,
+        search_type: str = "hybrid",
+        k: int = 10,
+        filters: dict | None = None,
+        vector_weight: float | None = None,
+        date_start: str | None = None,
+        date_end: str | None = None,
+        recency_boost: float = 0.0,
+        score_threshold: float | None = None,
+    ) -> list[SearchResult]:
+        """Async search notes using keyword, semantic, or hybrid search.
+
+        This is the async version of search() that uses localvectordb's
+        async query method for non-blocking search in TUI applications.
+
+        Args:
+            query: The search query.
+            search_type: One of "keyword", "vector", or "hybrid".
+            k: Maximum number of results to return.
+            filters: Optional metadata filters (e.g., {"notebook": "daily"}).
+            vector_weight: Weight for vector results in hybrid search (0-1).
+                          If None, uses config.search.vector_weight.
+            date_start: Filter to notes on or after this date (ISO format).
+            date_end: Filter to notes on or before this date (ISO format).
+            recency_boost: Weight (0-1) to boost recent results. 0 = no boost.
+            score_threshold: Minimum score for result to be displayed.
+                            If None, uses config.search.score_threshold.
+
+        Returns:
+            List of search results sorted by relevance (with optional recency boost).
+
+        """
+        # Use config defaults if not specified
+        if vector_weight is None:
+            vector_weight = self.config.search.vector_weight
+        if score_threshold is None:
+            score_threshold = self.config.search.score_threshold
+
+        # Build combined filters
+        combined_filters = dict(filters) if filters else {}
+
+        # Add date range filters
+        if date_start and date_end:
+            combined_filters["date"] = {">=": date_start, "<=": date_end}
+        elif date_start:
+            combined_filters["date"] = {">=": date_start}
+        elif date_end:
+            combined_filters["date"] = {"<=": date_end}
+
+        try:
+            # Fetch more results if we're going to apply recency boost
+            fetch_k = k * 3 if recency_boost > 0 else k
+            results = await self.db.query_async(
+                query,
+                search_type=search_type,
+                k=fetch_k,
+                filters=combined_filters if combined_filters else None,
+                vector_weight=vector_weight,
+                score_threshold=score_threshold,
+                return_type="chunks",  # Return matching chunks, not whole documents
+            )
+        except Exception as e:
+            # Handle case where index is empty or query fails
+            if "empty" in str(e).lower() or "no documents" in str(e).lower():
+                return []
+            raise
+
+        search_results = [
+            SearchResult(
+                path=r.metadata.get("path", ""),
+                title=r.metadata.get("title"),
+                snippet=r.content or "",  # Store full chunk content
                 score=r.score,
                 notebook=r.metadata.get("notebook"),
                 date=r.metadata.get("date"),

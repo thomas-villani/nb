@@ -132,7 +132,7 @@ todo_exclude: true
   - [x] Need a way to have the stream output go straight to stdout if piped
   - [x] Should show recently modified (most recent first) by default
   - [x] Add a way to search within TUI
-- [ ] Add an interactive search TUI
+- [^] Add an interactive search TUI
 - [ ] Need to improve the `nb list` command - should have a way to list recently modified. Should allow combining `nb list --week` and --details, etc.
 - [ ] Need to allow `nb history` to show recently modified as well
 - [ ] Allow pinned notes with `nb pin <NOTE>` and `nb pinned`
@@ -154,7 +154,7 @@ todo_exclude: true
 - [ ] Recurring todos (`@recur(weekly)`) #feature
 - [ ] Contextual views - e.g. set time windows when `nbt` shows certain notebooks (e.g. work notebooks from 9-5p)
 - [ ] Auto TL;DR generation and stash in frontmatter
-- [ ] Export to various formats (HTML, PDF) #feature
+- [x] Export to various formats (HTML, PDF) #feature
 - [ ] Calendar view for due dates #feature
 - [ ] Due date reminders (optional notifications) #feature
   These can use the `win11toast` library which is dead simple.
@@ -165,6 +165,7 @@ todo_exclude: true
 - [ ] Generate narrative of what was completed in the week
 - [ ] Summarize notes, generate TL;DR
 - [ ] Weekly/daily planner
+- [ ] Extract from meeting transcripts and other notes
 - [ ] 
 
 
