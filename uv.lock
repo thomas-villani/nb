@@ -777,7 +777,7 @@ wheels = [
 
 [[package]]
 name = "nb-cli"
-version = "0.3.0"
+version = "0.3.1"
 source = { editable = "." }
 dependencies = [
     { name = "all2md", extra = ["html"] },

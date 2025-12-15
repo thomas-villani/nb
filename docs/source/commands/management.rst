@@ -624,7 +624,7 @@ Tags
 nb tags
 ^^^^^^^
 
-List tags with usage counts.
+List tags with usage counts from both notes and todos.
 
 **Usage:** ``nb tags [OPTIONS]``
 
@@ -646,16 +646,26 @@ List tags with usage counts.
      - Limit to top N tags
    * - ``--open``
      - Only count open (non-completed) todos
+   * - ``-t, --todos``
+     - Only show tags from todos
+   * - ``--notes``
+     - Only show tags from notes
+
+By default, ``nb tags`` shows tags from both notes and todos combined, with a breakdown column showing the count from each source (e.g., ``18t/2n`` means 18 from todos, 2 from notes).
+
+**Tag format:** Tags must start with a letter and can contain letters, numbers, hyphens, and underscores. Examples: ``#work``, ``#FY2025``, ``#project-alpha``. Hex color codes (e.g., ``#ff00ff``) are automatically excluded.
 
 **Examples:**
 
 .. code-block:: bash
 
-   nb tags                     # All tags by count
+   nb tags                     # All tags by count (notes + todos)
    nb tags --sort alpha        # Alphabetical
    nb tags --sources           # Show sources
    nb tags -n work             # Specific notebook
    nb tags --limit 10          # Top 10
+   nb tags --todos             # Only tags from todos
+   nb tags --notes             # Only tags from notes
 
 .. image:: /_static/examples/tags.svg
    :alt: nb tags output

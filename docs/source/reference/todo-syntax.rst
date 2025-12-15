@@ -82,6 +82,17 @@ Use ``#tag`` format:
 
    - [ ] Task #work #urgent #project-alpha
 
+**Tag format rules:**
+
+- Must start with a letter (a-z, A-Z)
+- Can contain letters, numbers, hyphens, and underscores
+- Case-insensitive (stored lowercase)
+- Hex color codes (e.g., ``#ff00ff``, ``#RGB``) are automatically excluded
+
+**Valid examples:** ``#work``, ``#FY2025``, ``#project-alpha``, ``#my_tag``
+
+**Invalid (ignored):** ``#123``, ``#ff00ff``, ``#4``
+
 Tags are also inherited from the note's frontmatter.
 
 Nested todos

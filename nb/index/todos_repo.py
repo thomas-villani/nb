@@ -966,14 +966,24 @@ def get_tag_stats(
     notebooks: list[str] | None = None,
     exclude_notebooks: list[str] | None = None,
     completed: bool | None = None,
+    source: str = "all",
 ) -> list[dict]:
     """Get tag usage statistics.
+
+    Args:
+        include_sources: Include source notebooks/notes for each tag
+        notebooks: Filter by specific notebooks
+        exclude_notebooks: Exclude specific notebooks
+        completed: Filter by todo completion status (None=all, True=completed, False=open)
+        source: Tag source - "todos", "notes", or "all" (default)
 
     Returns:
         [
             {
                 "tag": "work",
                 "count": 15,
+                "todo_count": 10,  # Only when source="all"
+                "note_count": 5,  # Only when source="all"
                 "sources": [  # Only if include_sources=True
                     {"notebook": "daily", "path": "...", "count": 3},
                     ...
@@ -983,68 +993,154 @@ def get_tag_stats(
         ]
     """
     db = get_db()
+    tag_counts: dict[str, dict] = {}
 
-    # Build base conditions
-    base_conditions = ["t.parent_id IS NULL"]
-    params: list = []
+    # Get todo tags if requested
+    if source in ("todos", "all"):
+        # Build base conditions for todos
+        base_conditions = ["t.parent_id IS NULL"]
+        params: list = []
 
-    if notebooks:
-        placeholders = ", ".join("?" for _ in notebooks)
-        base_conditions.append(f"t.project IN ({placeholders})")
-        params.extend(notebooks)
+        if notebooks:
+            placeholders = ", ".join("?" for _ in notebooks)
+            base_conditions.append(f"t.project IN ({placeholders})")
+            params.extend(notebooks)
 
-    if exclude_notebooks:
-        placeholders = ", ".join("?" for _ in exclude_notebooks)
-        base_conditions.append(
-            f"(t.project IS NULL OR t.project NOT IN ({placeholders}))"
-        )
-        params.extend(exclude_notebooks)
-
-    if completed is not None:
-        if completed:
-            base_conditions.append("t.status = ?")
-            params.append(TodoStatus.COMPLETED.value)
-        else:
-            base_conditions.append("t.status != ?")
-            params.append(TodoStatus.COMPLETED.value)
-
-    base_where = " AND ".join(base_conditions)
-
-    # Get tag counts
-    tag_rows = db.fetchall(
-        f"""SELECT tt.tag, COUNT(DISTINCT tt.todo_id) as count
-            FROM todo_tags tt
-            JOIN todos t ON tt.todo_id = t.id
-            WHERE {base_where}
-            GROUP BY tt.tag
-            ORDER BY count DESC""",
-        tuple(params),
-    )
-
-    result = []
-    for row in tag_rows:
-        tag_data: dict = {"tag": row["tag"], "count": row["count"]}
-
-        if include_sources:
-            # Get source breakdown for this tag
-            source_rows = db.fetchall(
-                f"""SELECT t.project as notebook, t.source_path, COUNT(*) as count
-                    FROM todo_tags tt
-                    JOIN todos t ON tt.todo_id = t.id
-                    WHERE {base_where} AND tt.tag = ?
-                    GROUP BY t.project, t.source_path
-                    ORDER BY count DESC""",
-                tuple(params) + (row["tag"],),
+        if exclude_notebooks:
+            placeholders = ", ".join("?" for _ in exclude_notebooks)
+            base_conditions.append(
+                f"(t.project IS NULL OR t.project NOT IN ({placeholders}))"
             )
-            tag_data["sources"] = [
-                {
-                    "notebook": r["notebook"] or "(none)",
-                    "path": r["source_path"],
-                    "count": r["count"],
-                }
-                for r in source_rows
-            ]
+            params.extend(exclude_notebooks)
 
-        result.append(tag_data)
+        if completed is not None:
+            if completed:
+                base_conditions.append("t.status = ?")
+                params.append(TodoStatus.COMPLETED.value)
+            else:
+                base_conditions.append("t.status != ?")
+                params.append(TodoStatus.COMPLETED.value)
+
+        base_where = " AND ".join(base_conditions)
+
+        # Get todo tag counts
+        tag_rows = db.fetchall(
+            f"""SELECT tt.tag, COUNT(DISTINCT tt.todo_id) as count
+                FROM todo_tags tt
+                JOIN todos t ON tt.todo_id = t.id
+                WHERE {base_where}
+                GROUP BY tt.tag""",
+            tuple(params),
+        )
+
+        for row in tag_rows:
+            tag = row["tag"]
+            if tag not in tag_counts:
+                tag_counts[tag] = {
+                    "tag": tag,
+                    "count": 0,
+                    "todo_count": 0,
+                    "note_count": 0,
+                }
+            tag_counts[tag]["todo_count"] = row["count"]
+            tag_counts[tag]["count"] += row["count"]
+
+        # Get sources if requested (only for todos)
+        if include_sources:
+            for tag in tag_counts:
+                source_rows = db.fetchall(
+                    f"""SELECT t.project as notebook, t.source_path, COUNT(*) as count
+                        FROM todo_tags tt
+                        JOIN todos t ON tt.todo_id = t.id
+                        WHERE {base_where} AND tt.tag = ?
+                        GROUP BY t.project, t.source_path
+                        ORDER BY count DESC""",
+                    tuple(params) + (tag,),
+                )
+                tag_counts[tag]["sources"] = [
+                    {
+                        "notebook": r["notebook"] or "(none)",
+                        "path": r["source_path"],
+                        "count": r["count"],
+                        "type": "todo",
+                    }
+                    for r in source_rows
+                ]
+
+    # Get note tags if requested
+    if source in ("notes", "all"):
+        # Build conditions for notes
+        note_conditions = ["1=1"]
+        note_params: list = []
+
+        if notebooks:
+            placeholders = ", ".join("?" for _ in notebooks)
+            note_conditions.append(f"n.notebook IN ({placeholders})")
+            note_params.extend(notebooks)
+
+        if exclude_notebooks:
+            placeholders = ", ".join("?" for _ in exclude_notebooks)
+            note_conditions.append(
+                f"(n.notebook IS NULL OR n.notebook NOT IN ({placeholders}))"
+            )
+            note_params.extend(exclude_notebooks)
+
+        note_where = " AND ".join(note_conditions)
+
+        # Get note tag counts
+        note_tag_rows = db.fetchall(
+            f"""SELECT nt.tag, COUNT(DISTINCT nt.note_path) as count
+                FROM note_tags nt
+                JOIN notes n ON nt.note_path = n.path
+                WHERE {note_where}
+                GROUP BY nt.tag""",
+            tuple(note_params),
+        )
+
+        for row in note_tag_rows:
+            tag = row["tag"]
+            if tag not in tag_counts:
+                tag_counts[tag] = {
+                    "tag": tag,
+                    "count": 0,
+                    "todo_count": 0,
+                    "note_count": 0,
+                }
+            tag_counts[tag]["note_count"] = row["count"]
+            tag_counts[tag]["count"] += row["count"]
+
+        # Get note sources if requested
+        if include_sources:
+            for tag in tag_counts:
+                note_source_rows = db.fetchall(
+                    f"""SELECT n.notebook, nt.note_path, COUNT(*) as count
+                        FROM note_tags nt
+                        JOIN notes n ON nt.note_path = n.path
+                        WHERE {note_where} AND nt.tag = ?
+                        GROUP BY n.notebook, nt.note_path
+                        ORDER BY count DESC""",
+                    tuple(note_params) + (tag,),
+                )
+                # Merge with existing sources or create new list
+                existing_sources = tag_counts[tag].get("sources", [])
+                for r in note_source_rows:
+                    existing_sources.append(
+                        {
+                            "notebook": r["notebook"] or "(none)",
+                            "path": r["note_path"],
+                            "count": r["count"],
+                            "type": "note",
+                        }
+                    )
+                tag_counts[tag]["sources"] = existing_sources
+
+    # Convert to sorted list
+    result = sorted(tag_counts.values(), key=lambda x: -x["count"])
+
+    # Remove breakdown counts if only querying one source
+    if source != "all":
+        for item in result:
+            del item["todo_count"]
+            del item["note_count"]
 
     return result

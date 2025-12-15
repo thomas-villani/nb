@@ -43,16 +43,31 @@ def register_tags_commands(cli: click.Group) -> None:
     is_flag=True,
     help="Only count open (non-completed) todos",
 )
+@click.option(
+    "--todos",
+    "-t",
+    "todos_only",
+    is_flag=True,
+    help="Only show tags from todos",
+)
+@click.option(
+    "--notes",
+    "notes_only",
+    is_flag=True,
+    help="Only show tags from notes",
+)
 def tags_cmd(
     sources: bool,
     sort: str,
     notebooks: tuple[str, ...],
     limit: int | None,
     open_todos: bool,
+    todos_only: bool,
+    notes_only: bool,
 ) -> None:
     """List all tags with usage counts.
 
-    Shows tags used across all todos, sorted by frequency.
+    Shows tags from both notes and todos by default, sorted by frequency.
 
     \b
     Examples:
@@ -62,12 +77,26 @@ def tags_cmd(
       nb tags -n work           Tags from work notebook only
       nb tags --limit 10        Top 10 tags
       nb tags --open            Only count open todos
+      nb tags --todos           Only show tags from todos
+      nb tags --notes           Only show tags from notes
     """
+    # Determine source filter
+    if todos_only and notes_only:
+        console.print("[red]Cannot specify both --todos and --notes[/red]")
+        return
+    elif todos_only:
+        source = "todos"
+    elif notes_only:
+        source = "notes"
+    else:
+        source = "all"
+
     # Get tag statistics
     tag_stats = get_tag_stats(
         include_sources=sources,
         notebooks=list(notebooks) if notebooks else None,
         completed=False if open_todos else None,
+        source=source,
     )
 
     if not tag_stats:
@@ -92,25 +121,31 @@ def tags_cmd(
             count = tag_data["count"]
             console.print(f"[cyan]#{tag}[/cyan] ({count})")
 
-            # Group sources by notebook
-            sources_by_notebook: dict[str, list[tuple[str, int]]] = {}
+            # Group sources by notebook, aggregating counts per path
+            sources_by_notebook: dict[str, dict[str, int]] = {}
             for src in tag_data.get("sources", []):
                 nb = src["notebook"]
                 if nb not in sources_by_notebook:
-                    sources_by_notebook[nb] = []
+                    sources_by_notebook[nb] = {}
                 # Extract note name from path
                 note_name = _get_note_name(src["path"])
-                sources_by_notebook[nb].append((note_name, src["count"]))
+                # Aggregate counts for same path (from todos and notes)
+                sources_by_notebook[nb][note_name] = (
+                    sources_by_notebook[nb].get(note_name, 0) + src["count"]
+                )
 
-            for nb, note_list in sorted(sources_by_notebook.items()):
+            for nb, notes_dict in sorted(sources_by_notebook.items()):
                 # Sum counts for this notebook
-                nb_count = sum(c for _, c in note_list)
+                nb_count = sum(notes_dict.values())
                 console.print(f"  [dim]{nb}[/dim] ({nb_count})")
                 # Show individual notes (limit to top 3 per notebook)
-                for note_name, note_count in sorted(note_list, key=lambda x: -x[1])[:3]:
+                sorted_notes = sorted(notes_dict.items(), key=lambda x: -x[1])
+                for note_name, note_count in sorted_notes[:3]:
                     console.print(f"    [dim]{note_name}[/dim] ({note_count})")
-                if len(note_list) > 3:
-                    console.print(f"    [dim]... and {len(note_list) - 3} more[/dim]")
+                if len(sorted_notes) > 3:
+                    console.print(
+                        f"    [dim]... and {len(sorted_notes) - 3} more[/dim]"
+                    )
 
             console.print()
     else:
@@ -118,9 +153,17 @@ def tags_cmd(
         table = Table(show_header=False, box=None, padding=(0, 2))
         table.add_column("Tag", style="cyan")
         table.add_column("Count", justify="right")
+        if source == "all":
+            table.add_column("Breakdown", style="dim")
 
         for tag_data in tag_stats:
-            table.add_row(f"#{tag_data['tag']}", str(tag_data["count"]))
+            if source == "all":
+                todo_count = tag_data.get("todo_count", 0)
+                note_count = tag_data.get("note_count", 0)
+                breakdown = f"{todo_count}t/{note_count}n"
+                table.add_row(f"#{tag_data['tag']}", str(tag_data["count"]), breakdown)
+            else:
+                table.add_row(f"#{tag_data['tag']}", str(tag_data["count"]))
 
         console.print(table)
 

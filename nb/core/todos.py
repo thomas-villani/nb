@@ -15,6 +15,7 @@ from nb.utils.dates import (
     parse_fuzzy_datetime_future,
 )
 from nb.utils.hashing import make_attachment_id, make_todo_id
+from nb.utils.markdown import is_valid_tag
 
 # Regex patterns for todo parsing
 # Captures: [ ] pending, [x]/[X] completed, [^] in progress
@@ -26,7 +27,12 @@ PRIORITY_PATTERN = re.compile(
 
 # Named priority to integer mapping
 PRIORITY_NAMES: dict[str, int] = {"high": 1, "medium": 2, "low": 3}
-TAG_PATTERN = re.compile(r"#([^ ]+)")
+
+# Tag pattern: must start with a letter, can contain letters, numbers, hyphens, underscores
+# Requires word boundary before # (start of string, whitespace, or parenthesis)
+TAG_PATTERN = re.compile(r"(?:^|[\s(])#([a-zA-Z][a-zA-Z0-9_-]*)")
+# Pattern for removing tags from content (doesn't include prefix to preserve spacing)
+TAG_REMOVAL_PATTERN = re.compile(r"#[a-zA-Z][a-zA-Z0-9_-]*")
 ATTACH_PATTERN = re.compile(r"^\s*@attach:\s*(.+)$")
 
 # Pattern to detect fenced code blocks
@@ -50,7 +56,7 @@ def clean_todo_content(content: str) -> str:
     # Remove @priority(...)
     content = PRIORITY_PATTERN.sub("", content)
     # Remove #tags
-    content = TAG_PATTERN.sub("", content)
+    content = TAG_REMOVAL_PATTERN.sub("", content)
     # Clean up extra whitespace
     content = " ".join(content.split())
     return content.strip()
@@ -89,8 +95,13 @@ def parse_priority(content: str) -> Priority | None:
 
 
 def parse_tags(content: str) -> list[str]:
-    """Extract tags from todo content."""
-    return [tag.lower() for tag in TAG_PATTERN.findall(content)]
+    """Extract tags from todo content.
+
+    Filters out hex color codes (e.g., #ff00ff) which aren't valid tags.
+    """
+    return [
+        tag.lower() for tag in TAG_PATTERN.findall(content) if is_valid_tag(tag.lower())
+    ]
 
 
 def extract_todos(
@@ -955,7 +966,7 @@ def update_todo_due_date(
     else:
         # Add @due() - insert before first #tag or at end
         todo_content = match.group("content")
-        tag_match = TAG_PATTERN.search(todo_content)
+        tag_match = TAG_REMOVAL_PATTERN.search(todo_content)
 
         if tag_match:
             # Insert before first tag

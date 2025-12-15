@@ -23,7 +23,27 @@ MD_LINK_PATTERN = re.compile(r"(?<!!)\[([^\]]+)\]\(([^)]+)\)")
 EXTERNAL_LINK_PREFIXES = ("http://", "https://", "mailto:", "ftp://", "file://")
 
 # Pattern for inline tags: #tag
-INLINE_TAG_PATTERN = re.compile(r"(?:^|[\s(])#(\w+)")
+# Must start with a letter, can contain letters, numbers, hyphens, underscores
+# Requires word boundary before # (start of line, whitespace, or parenthesis)
+INLINE_TAG_PATTERN = re.compile(r"(?:^|[\s(])#([a-zA-Z][a-zA-Z0-9_-]*)")
+
+# Hex color patterns to exclude from tags (3, 4, 6, or 8 hex digits)
+HEX_COLOR_PATTERN = re.compile(
+    r"^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{4}$|^[0-9a-fA-F]{6}$|^[0-9a-fA-F]{8}$"
+)
+
+
+def is_valid_tag(tag: str) -> bool:
+    """Check if a tag is valid (not a hex color).
+
+    Filters out common hex color formats:
+    - #RGB (3 chars)
+    - #RGBA (4 chars)
+    - #RRGGBB (6 chars)
+    - #RRGGBBAA (8 chars)
+    """
+    return not HEX_COLOR_PATTERN.match(tag)
+
 
 # Pattern for first H1 heading
 H1_PATTERN = re.compile(r"^#\s+(.+)$", re.MULTILINE)
@@ -118,7 +138,9 @@ def extract_tags(meta: dict[str, Any], body: str) -> list[str]:
     # Simple approach: just find all #tag patterns
     # A more robust approach would parse markdown properly
     for match in INLINE_TAG_PATTERN.finditer(body):
-        tags.add(match.group(1).lower())
+        tag = match.group(1).lower()
+        if is_valid_tag(tag):
+            tags.add(tag)
 
     return sorted(tags)
 

@@ -635,16 +635,20 @@ The dashboard shows:
 
 ### Tags
 
-List and explore tags used across todos:
+List and explore tags used across both notes and todos:
 
 ```bash
-nb tags                   # List all tags sorted by count
+nb tags                   # List all tags sorted by count (from notes + todos)
 nb tags --sort alpha      # Alphabetical order
 nb tags --sources         # Show which notebooks/notes use each tag
 nb tags -n work           # Tags from work notebook only
 nb tags --limit 10        # Top 10 tags
 nb tags --open            # Only count open (non-completed) todos
+nb tags --todos           # Only show tags from todos
+nb tags --notes           # Only show tags from notes
 ```
+
+Tags must start with a letter and can contain letters, numbers, hyphens, and underscores (e.g., `#work`, `#FY2025`, `#project-alpha`). Hex color codes like `#ff00ff` are automatically excluded.
 
 ### Linked Files
 
