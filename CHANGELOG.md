@@ -1,3 +1,121 @@
+# v0.3.1 - 2025-12-15
+
+Patch release with an interactive TUI search, attachment indexing and management, note/todo move & copy plus export capabilities, safer vector reinitialization for embedding provider changes, and config serialization improvements. Includes one breaking CLI change (todo aliases / flags).
+
+## New Features
+
+- Interactive TUI search
+  - Added nb/tui/search.py: Wijjit-based interactive search UI with live filtering, notebook/tag dropdowns, recency boost, chunk preview, and keybindings for edit, open stream, copy path, and full-note view.
+  - CLI: `nb search --interactive` / `-i` (optional QUERY) to launch TUI; non-interactive queries validated when TUI not requested.
+  - Search internals: nb/index/search.py now supports async search_async(...) (date filters, score threshold, optional recency boost) and returns a chunk snippet in results. TUI ensures DB cleanup via reset_search().
+  - Added pyperclip (and types-pyperclip) for clipboard support used by the TUI.
+
+- Attachment indexing & management
+  - Index attachments when notes are indexed; scanner hooks to delete/re-extract and batch upsert attachments.
+  - New attachment DB layer: nb/index/attachments_repo.py with CRUD, querying, stats, orphan detection, and content extraction.
+  - CLI: attachment management commands (attach --all/--type/--notebook, stats, orphans with --delete). Attachment DB operations are best-effort and do not block attaching.
+
+- Note/todo move & copy, and export
+  - CLI: `nb mv` / `nb cp` for moving and copying notes (with --force). `nb todo mv` / `nb todo cp` for moving/copying todos (single or many, supports note::Section syntax).
+  - Core implementations: move_note, copy_note, move_todo, copy_todo, and batch variants that preserve raw markdown and regenerate todo IDs.
+  - Export feature: nb/core/export.py and nb/cli/export.py to export single notes or entire notebooks to pdf/docx/html via all2md. Supports sorting, reversing, and notebook concatenation.
+
+- Indexing: reset vectors option
+  - Added `--reset-vectors` to `nb index` to clear existing vector index before rebuilding, enabling safe switching of embedding providers.
+  - Validation: `--reset-vectors` cannot be used with `--rebuild`; it requires `--vectors-only` or `--embeddings`.
+
+## Improvements & Refactorings
+
+- Config serialization and boolean parsing
+  - Added _serialize_dataclass_fields and _serialize_notebook helpers; save_config now introspects dataclass fields and writes concise YAML (only non-default/non-None values).
+  - Sensitive tokens (e.g., raindrop.api_token) excluded from saved config; recommend providing API tokens via environment variables.
+  - Added parse_bool_strict and used in set_config_value to reject ambiguous boolean strings and produce clearer errors.
+  - Added get_default_transcript_notebook to choose sensible defaults for record/transcribe commands (daily → first date-based → first notebook).
+  - Normalized note paths when recording views to avoid duplicate DB entries.
+  - Added tests covering boolean parsing, dataclass serialization, and default transcript notebook selection.
+
+- Misc developer-facing improvements
+  - Use DATE(...) in todos_repo queries/stats to compare dates-only and avoid time-of-day comparison bugs.
+  - Use shared DB helper (get_db) in web.get_alias_for_path to ensure consistent DB initialization.
+  - Small TUI cleanup and todo.md updates marking interactive search as implemented.
+  - Updated lockfile and dependency hashes as needed.
+
+## Bug Fixes
+
+- Fixed clip restore to always restore config.auto_tag_domain using try/finally.
+- Swallow DB errors on attachment upsert during CLI attach so attach operations still succeed.
+- Fixed minor formatting and test expectations after changes (todo ID display length, config tests clearing EDITOR env).
+- Added helpful ImportError for missing all2md in export paths to guide installation when export is used.
+
+## Breaking Changes
+
+- CLI aliases and flags changed related to todos and ID display:
+  - `td` alias renamed to `tdd`.
+  - `--due-today` renamed to `--today` (short `-T`).
+  - `--due-week` renamed to `--week` (short `-W`).
+  - TODO ID display length standardized to 6 characters across listing/add/move/copy/status commands.
+- Migration guidance
+  - Update any scripts, aliases, shell completions, CI workflows, or third-party integrations that relied on `td`, `--due-today`, or `--due-week` to use the new names (`tdd`, `--today`/`-T`, `--week`/`-W`).
+  - If your tooling parses todo IDs, ensure it accounts for 6-character displayed IDs.
+  - When changing embedding providers, reinitialize vectors with:
+    - nb index --reset-vectors --vectors-only
+    - or nb index --reset-vectors --embeddings
+    Note: `--reset-vectors` cannot be combined with `--rebuild`.
+  - Export now validates presence of all2md and raises a clear ImportError when missing; install all2md in environments that use export features.
+
+# v0.3.0 - 2025-12-13
+
+This minor release adds a Raindrop-based inbox workflow, major TUI/stream improvements (including interactive search and continuous streaming), a Wijjit-powered TUI rewrite for todos/review/stream, and several developer-facing fixes and refactors (indexing progress, stream pipe mode, DB schema changes). Includes docs and unit tests for the new features.
+
+## New Features
+
+- Add Raindrop "inbox" integration and CLI group (nb inbox) with commands: list, pull, clear, history
+  - Implement Raindrop API client and inbox core (list, archive/delete, duplicate detection)
+  - New config types: InboxConfig / RaindropConfig; RAINDROP_API_KEY is read from environment (token is not persisted to disk)
+  - Add DB migration/schema v16 to track inbox_items and clipping/skipped/archived history
+  - Hook CLI flow to validate target notebook availability before clipping
+  - Add docs, README examples, and unit tests covering config parsing, RaindropItem behavior, DB tracking, and CLI flows
+
+- Replace legacy terminal UIs with a Wijjit-based TUI for todos, review and stream
+  - Richer interactions: modals, dialogs, in-app editor, keyboard handlers, lazy loading
+  - New shared utilities (nb/tui/wijjit_utils.py) for formatting due dates, sources, and common helpers
+  - Add wijjit and related runtime deps to pyproject.toml and lock files
+
+## Enhancements
+
+- Stream / list / TUI improvements
+  - Add interactive search to the TUI ("/" key, search bar, Find/Clear, on-demand content loading)
+  - Add --continuous / -c (continuous mode) to nb stream for a maximized, scrollable flow with lazy loading and dividers
+  - Add --by-date option to sort stream output by note date (default remains recently modified)
+  - nb list now accepts an optional positional NOTEBOOK argument (positional takes precedence over -n/--notebook)
+  - When nb stream output is piped (non-TTY), emit plain-text headers and content for downstream processing
+  - Refactor stream internals: helpers to convert paths -> Note, dedicated output path for pipe-mode, improved deduping of recently viewed notes
+
+- Indexing and progress
+  - Fix progress callbacks in scanner/index routines to report incremental deltas (pass increments instead of cumulative totals)
+  - Update index command to track and print concise summary counts (notes scanned, linked, search sync, removed)
+  - Adjust progress labels for clarity (e.g. "Scanning" replaces "Indexing")
+
+## Bug Fixes
+
+- Fix progress reporting so progress bars advance correctly (callbacks now receive delta counts)
+- Fix pyproject.toml issues and related packaging metadata
+
+## Developer / Migration Notes
+
+- DB migration to schema v16 added to track inbox_items; run your migration workflow (nb db migrate/upgrade) before using inbox features
+- on_progress callback signature changed: callbacks now receive incremental deltas (int) instead of cumulative totals. Update any external callers or integrations that register progress callbacks.
+- New runtime deps (wijjit) added — update your environment/lock files accordingly
+- Stream TUI reads note content on demand for search; consider adding an index if working with very large collections to avoid I/O spikes
+- Token handling for Raindrop: RAINDROP_API_KEY is read from the environment and tokens are deliberately not persisted to disk for privacy/security
+- Tests and docs were added/updated for inbox, stream, and TUI features — consult docs/commands and README for usage and examples
+
+## Internal
+
+- Add tests covering config parsing, Raindrop items, DB tracking, CLI behaviors, and TUI flows
+- Normalize note paths in todos_repo.query_todos to forward slashes for consistent DB filtering
+- Misc: version bumps and housekeeping commits to align packaging and CI files
+
 # 0.2.5 - 2025-12-13
 
 ## New Features
