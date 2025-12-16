@@ -203,34 +203,47 @@ def run_review(
     )
 
     def get_current_todo() -> Todo | None:
-        """Get the currently selected todo from the Select element."""
-        selected_id = app.state.get("selected_todo")
-        if not selected_id:
-            # If nothing selected, get first todo
-            todos = app.state.get("todos", [])
-            return todos[0] if todos else None
+        """Get the currently highlighted todo from the Select element.
 
+        Uses the highlight state key (synced on navigation) to get the
+        currently highlighted item, rather than requiring Enter/Space to select.
+        """
         todos = app.state.get("todos", [])
-        for todo in todos:
-            if todo.id == selected_id:
-                return todo
-        return None
+        if not todos:
+            return None
+
+        # Use highlighted index (updates on arrow key navigation)
+        highlighted_index = app.state.get("selected_todo:highlight")
+        if highlighted_index is not None and 0 <= highlighted_index < len(todos):
+            return todos[highlighted_index]
+
+        # Fall back to first todo
+        return todos[0]
 
     def remove_current():
         """Remove current todo from list after action."""
-        selected_id = app.state.get("selected_todo")
         todos = app.state.get("todos", [])
+        if not todos:
+            return
 
-        # Find and remove the selected todo
-        new_todos = [t for t in todos if t.id != selected_id]
-        app.state["todos"] = new_todos
+        # Get the highlighted index to find which item to remove
+        highlighted_index = app.state.get("selected_todo:highlight", 0)
+        if highlighted_index is None or highlighted_index >= len(todos):
+            highlighted_index = 0
 
-        # Select next item if available
-        if new_todos:
-            app.state["selected_todo"] = new_todos[0].id
-        else:
-            app.state["selected_todo"] = None
-            app.navigate("summary")
+        # Remove the highlighted todo
+        if 0 <= highlighted_index < len(todos):
+            removed_id = todos[highlighted_index].id
+            new_todos = [t for t in todos if t.id != removed_id]
+            app.state["todos"] = new_todos
+
+            # Keep highlight at same position (or last item if at end)
+            if new_todos:
+                new_highlight = min(highlighted_index, len(new_todos) - 1)
+                app.state["selected_todo:highlight"] = new_highlight
+            else:
+                app.state["selected_todo:highlight"] = 0
+                app.quit()  # Exit when done
 
     @app.view("review", default=True)
     def review_view():
@@ -323,58 +336,6 @@ def run_review(
             "data": get_data,
         }
 
-    @app.view("summary")
-    def summary_view():
-        """End-of-session summary."""
-
-        def get_data():
-            completed = app.state.get("stats_completed", 0)
-            rescheduled = app.state.get("stats_rescheduled", 0)
-            deleted = app.state.get("stats_deleted", 0)
-            skipped = app.state.get("stats_skipped", 0)
-            total = app.state.get("stats_total", 0)
-            remaining = total - completed - rescheduled - deleted
-
-            return {
-                "completed": completed,
-                "rescheduled": rescheduled,
-                "deleted": deleted,
-                "skipped": skipped,
-                "remaining": remaining,
-            }
-
-        return {
-            "template": """
-{% frame border_style="double" title="Review Complete!" width=50 height=15 %}
-  {% vstack spacing=1 padding=2 %}
-
-    {% if completed > 0 %}
-      {% text %}Completed:   {{ completed }}{% endtext %}
-    {% endif %}
-    {% if rescheduled > 0 %}
-      {% text %}Rescheduled: {{ rescheduled }}{% endtext %}
-    {% endif %}
-    {% if deleted > 0 %}
-      {% text %}Deleted:     {{ deleted }}{% endtext %}
-    {% endif %}
-    {% if skipped > 0 %}
-      {% text %}Skipped:     {{ skipped }}{% endtext %}
-    {% endif %}
-
-    {% if remaining > 0 %}
-      {% text %}{% endtext %}
-      {% text %}{{ remaining }} todos still need attention{% endtext %}
-    {% endif %}
-
-    {% text %}{% endtext %}
-    {% button action="close" %}Close{% endbutton %}
-
-  {% endvstack %}
-{% endframe %}
-            """,
-            "data": get_data,
-        }
-
     # --- Actions (Select element handles navigation via up/down keys) ---
 
     @app.on_key("d")
@@ -401,7 +362,7 @@ def run_review(
 
     @app.on_key("s")
     def mark_started(event):
-        """Mark current todo as started (in progress)."""
+        """Mark current todo as started (in progress) and remove from list."""
         todo = get_current_todo()
         if not todo:
             return
@@ -416,12 +377,7 @@ def run_review(
             if actual_line is not None:
                 update_todo_status(todo.id, TodoStatus.IN_PROGRESS)
                 app.state["message"] = f"Started: {todo.content[:30]}"
-                # Update the todo in the list to show [^] marker
-                todos = app.state.get("todos", [])
-                for t in todos:
-                    if t.id == todo.id:
-                        t.status = TodoStatus.IN_PROGRESS
-                        break
+                remove_current()
         except PermissionError as e:
             app.state["message"] = f"Error: {e}"
 
@@ -651,14 +607,15 @@ def run_review(
 
     @app.on_key("k")
     def skip_todo(event):
-        """Skip current todo (Select handles navigation, just track the skip)."""
+        """Skip current todo and remove from list."""
         todo = get_current_todo()
         if not todo:
             return
 
         app.state["stats_skipped"] = app.state.get("stats_skipped", 0) + 1
         stats.skipped += 1
-        app.state["message"] = f"Skipped: {todo.content[:30]} (use arrows to navigate)"
+        app.state["message"] = f"Skipped: {todo.content[:30]}"
+        remove_current()
 
     @app.on_key("x")
     def delete_todo(event):
@@ -684,15 +641,32 @@ def run_review(
 
     @app.on_key("q")
     def quit_app(event):
-        """Quit and show summary."""
-        app.navigate("summary")
-
-    @app.on_action("close")
-    def close_summary(event):
-        """Close the summary view."""
+        """Quit the review session."""
         app.quit()
 
     # Run the app
     app.run()
+
+    # Print summary to stdout after app closes
+    remaining = len(app.state.get("todos", []))
+    if (
+        stats.completed > 0
+        or stats.rescheduled > 0
+        or stats.deleted > 0
+        or stats.skipped > 0
+    ):
+        console.print()
+        console.print("[bold]Review Complete![/bold]")
+        if stats.completed > 0:
+            console.print(f"  [green]Completed:[/green]   {stats.completed}")
+        if stats.rescheduled > 0:
+            console.print(f"  [cyan]Rescheduled:[/cyan] {stats.rescheduled}")
+        if stats.deleted > 0:
+            console.print(f"  [red]Deleted:[/red]     {stats.deleted}")
+        if stats.skipped > 0:
+            console.print(f"  [yellow]Skipped:[/yellow]     {stats.skipped}")
+        if remaining > 0:
+            console.print()
+            console.print(f"  [dim]{remaining} todos still need attention[/dim]")
 
     return stats
