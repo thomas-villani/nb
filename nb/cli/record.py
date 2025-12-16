@@ -631,6 +631,180 @@ def record_devices() -> None:
     )
 
 
+@record_group.command("test")
+@click.option("--save", "-s", is_flag=True, help="Save working devices to config")
+def record_test(save: bool) -> None:
+    """Test audio devices and find the best configuration.
+
+    Scans all audio devices, tests which ones actually work, and shows
+    the recommended configuration for meeting recording.
+
+    \b
+    Examples:
+      nb record test           # Test devices and show recommendations
+      nb record test --save    # Test and save working config
+
+    \b
+    For meeting recording (Teams/Zoom), you need:
+      - Microphone: captures your voice
+      - System audio (Stereo Mix): captures other participants
+    """
+    if not _check_recorder_available():
+        raise SystemExit(1)
+
+    from nb.recorder.audio import (
+        _is_loopback_device,
+        _is_microphone_device,
+        list_devices,
+        test_device,
+    )
+
+    config = get_config()
+
+    console.print("[bold]Testing audio devices...[/bold]\n")
+
+    all_devices = list_devices()
+    sample_rate = config.recorder.sample_rate
+
+    # Test microphone devices
+    console.print("[cyan]Microphones:[/cyan]")
+    mic_candidates = [
+        dev
+        for dev in all_devices
+        if dev.max_input_channels > 0 and _is_microphone_device(dev.name)
+    ]
+
+    working_mic = None
+    for dev in mic_candidates:
+        channels = min(1, dev.max_input_channels)
+        works = test_device(dev.index, channels=channels, sample_rate=sample_rate)
+        status = "[green]OK[/green]" if works else "[red]FAILED[/red]"
+        api_tag = f" [dim]({dev.hostapi_name})[/dim]"
+        console.print(f"  [{dev.index}] {dev.name}{api_tag} {status}")
+        if works and working_mic is None:
+            working_mic = dev
+
+    if not mic_candidates:
+        console.print("  [dim]No microphone devices found[/dim]")
+
+    # Test loopback devices
+    console.print("\n[cyan]System Audio (Loopback):[/cyan]")
+    loopback_candidates = [
+        dev
+        for dev in all_devices
+        if dev.max_input_channels > 0 and _is_loopback_device(dev.name)
+    ]
+
+    working_loopback = None
+    for dev in loopback_candidates:
+        channels = min(2, dev.max_input_channels)
+        works = test_device(dev.index, channels=channels, sample_rate=sample_rate)
+        status = "[green]OK[/green]" if works else "[red]FAILED[/red]"
+        api_tag = f" [dim]({dev.hostapi_name})[/dim]"
+        console.print(f"  [{dev.index}] {dev.name}{api_tag} {status}")
+        if works and working_loopback is None:
+            working_loopback = dev
+
+    if not loopback_candidates:
+        console.print("  [dim]No loopback devices found[/dim]")
+        console.print(
+            "  [yellow]Tip: Enable 'Stereo Mix' in Windows Sound settings > Recording[/yellow]"
+        )
+
+    # Show recommendations
+    console.print("\n[bold]Recommendations:[/bold]")
+
+    if working_mic:
+        console.print(
+            f"  Microphone: [{working_mic.index}] {working_mic.name} [green](working)[/green]"
+        )
+    else:
+        console.print("  Microphone: [red]None found[/red]")
+
+    if working_loopback:
+        console.print(
+            f"  System audio: [{working_loopback.index}] {working_loopback.name} [green](working)[/green]"
+        )
+    else:
+        console.print("  System audio: [yellow]None found[/yellow]")
+        console.print(
+            "    [dim]Recording will work with --mic-only but won't capture meeting participants.[/dim]"
+        )
+
+    # Show current config vs recommendations
+    console.print("\n[bold]Current Config:[/bold]")
+    console.print(f"  mic_device: {config.recorder.mic_device}")
+    console.print(f"  loopback_device: {config.recorder.loopback_device}")
+
+    # Check if config needs updating
+    needs_update = False
+    if working_mic and config.recorder.mic_device != working_mic.index:
+        needs_update = True
+    if working_loopback and config.recorder.loopback_device != working_loopback.index:
+        needs_update = True
+
+    if needs_update:
+        if save:
+            # Save to config
+            _save_device_config(
+                working_mic.index if working_mic else None,
+                working_loopback.index if working_loopback else None,
+            )
+            console.print("\n[green]Config updated![/green]")
+            if working_mic:
+                console.print(f"  recorder.mic_device = {working_mic.index}")
+            if working_loopback:
+                console.print(f"  recorder.loopback_device = {working_loopback.index}")
+        else:
+            console.print("\n[yellow]Config update recommended.[/yellow]")
+            console.print(
+                "[dim]Run with --save to update automatically, or manually:[/dim]"
+            )
+            if working_mic:
+                console.print(
+                    f"  nb config set recorder.mic_device {working_mic.index}"
+                )
+            if working_loopback:
+                console.print(
+                    f"  nb config set recorder.loopback_device {working_loopback.index}"
+                )
+    else:
+        console.print("\n[green]Config looks good![/green]")
+
+
+def _save_device_config(mic_device: int | None, loopback_device: int | None) -> None:
+    """Save device configuration to config file."""
+    from nb.config import get_config_path
+
+    config_path = get_config_path()
+    if not config_path.exists():
+        # Create minimal config
+        content = "recorder:\n"
+        if mic_device is not None:
+            content += f"  mic_device: {mic_device}\n"
+        if loopback_device is not None:
+            content += f"  loopback_device: {loopback_device}\n"
+        config_path.write_text(content)
+        return
+
+    # Update existing config
+    import yaml
+
+    with config_path.open() as f:
+        data = yaml.safe_load(f) or {}
+
+    if "recorder" not in data:
+        data["recorder"] = {}
+
+    if mic_device is not None:
+        data["recorder"]["mic_device"] = mic_device
+    if loopback_device is not None:
+        data["recorder"]["loopback_device"] = loopback_device
+
+    with config_path.open("w") as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+
+
 def _format_duration(seconds: float) -> str:
     """Format seconds as MM:SS or HH:MM:SS."""
     total = int(seconds)

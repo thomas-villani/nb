@@ -155,8 +155,65 @@ def get_wasapi_devices() -> tuple[list[AudioDevice], list[AudioDevice]]:
     return inputs, outputs
 
 
+def _is_microphone_device(name: str) -> bool:
+    """Check if device name indicates a physical microphone."""
+    name_lower = name.lower()
+    mic_keywords = ["microphone", "mic array", "mic input", "headset"]
+    exclude_keywords = ["stereo mix", "loopback", "what u hear", "wave out"]
+
+    has_mic_keyword = any(kw in name_lower for kw in mic_keywords)
+    has_exclude_keyword = any(kw in name_lower for kw in exclude_keywords)
+
+    return has_mic_keyword and not has_exclude_keyword
+
+
+def _is_loopback_device(name: str) -> bool:
+    """Check if device name indicates system audio capture capability."""
+    name_lower = name.lower()
+    loopback_keywords = ["stereo mix", "loopback", "what u hear", "wave out", "mixage"]
+    return any(kw in name_lower for kw in loopback_keywords)
+
+
+def test_device(device_index: int, channels: int = 1, sample_rate: int = 16000) -> bool:
+    """Test if a device can actually be opened for recording.
+
+    Args:
+        device_index: The device index to test
+        channels: Number of channels to request
+        sample_rate: Sample rate to request
+
+    Returns:
+        True if device can be opened successfully, False otherwise
+    """
+    require_recorder()
+    import sounddevice as sd
+
+    try:
+        stream = sd.InputStream(
+            device=device_index,
+            channels=channels,
+            samplerate=sample_rate,
+        )
+        stream.start()
+        import time
+
+        time.sleep(0.1)
+        stream.stop()
+        stream.close()
+        return True
+    except Exception:
+        return False
+
+
 def find_default_devices() -> tuple[int | None, int | None]:
     """Find sensible default microphone and loopback devices.
+
+    Uses smart detection with the following priority:
+    1. WASAPI devices (best quality/latency on Windows)
+    2. DirectSound devices (good compatibility)
+    3. MME devices (fallback)
+
+    For loopback (system audio), looks for Stereo Mix or similar.
 
     Returns:
         Tuple of (mic_device_index, loopback_device_index), either may be None
@@ -164,35 +221,176 @@ def find_default_devices() -> tuple[int | None, int | None]:
     require_recorder()
     import sounddevice as sd
 
+    all_devices = list_devices()
+    hostapis = sd.query_hostapis()
+
+    # Find host API indices by priority
+    api_priority = ["WASAPI", "DirectSound", "MME", "WDM-KS"]
+    api_indices: dict[str, int] = {}
+    for i, api in enumerate(hostapis):
+        for api_name in api_priority:
+            if api_name in api["name"]:
+                api_indices[api_name] = i
+                break
+
+    # --- Find microphone device ---
     mic_device = None
+
+    # Group microphone candidates by API
+    mic_candidates: dict[str, list[AudioDevice]] = {api: [] for api in api_priority}
+    for dev in all_devices:
+        if dev.max_input_channels > 0 and _is_microphone_device(dev.name):
+            for api_name in api_priority:
+                if api_name in dev.hostapi_name:
+                    mic_candidates[api_name].append(dev)
+                    break
+
+    # Try APIs in priority order
+    for api_name in api_priority:
+        for dev in mic_candidates[api_name]:
+            mic_device = dev.index
+            break
+        if mic_device is not None:
+            break
+
+    # Fallback: use system default input if no mic found by name
+    if mic_device is None:
+        try:
+            default_input = sd.query_devices(kind="input")
+            if default_input and default_input["max_input_channels"] > 0:
+                # Find the index
+                for i, dev in enumerate(sd.query_devices()):
+                    if dev["name"] == default_input["name"]:
+                        mic_device = i
+                        break
+        except Exception:
+            pass
+
+    # --- Find loopback device ---
     loopback_device = None
 
-    try:
-        # Get default input device as mic
-        default_input = sd.query_devices(kind="input")
-        if default_input:
-            devices = sd.query_devices()
-            for i, dev in enumerate(devices):
-                if dev["name"] == default_input["name"]:
-                    mic_device = i
-                    break
-    except Exception:
-        pass
+    # Loopback devices are typically WDM-KS (Stereo Mix) or explicit loopback
+    # Priority: WDM-KS Stereo Mix > any API with loopback keyword
+    loopback_candidates: list[tuple[int, AudioDevice]] = []  # (priority, device)
 
-    # Try to find a WASAPI loopback device
-    inputs, outputs = get_wasapi_devices()
+    for dev in all_devices:
+        if dev.max_input_channels > 0 and _is_loopback_device(dev.name):
+            # Assign priority (lower is better)
+            if "WDM-KS" in dev.hostapi_name:
+                priority = 0  # WDM-KS is best for Stereo Mix
+            elif "WASAPI" in dev.hostapi_name:
+                priority = 1
+            else:
+                priority = 2
+            loopback_candidates.append((priority, dev))
 
-    # Look for explicit loopback device first
-    for dev in inputs:
-        if "loopback" in dev.name.lower():
+    # Sort by priority and pick best
+    loopback_candidates.sort(key=lambda x: x[0])
+    if loopback_candidates:
+        loopback_device = loopback_candidates[0][1].index
+
+    return mic_device, loopback_device
+
+
+def find_best_devices(
+    sample_rate: int = 16000, validate: bool = True
+) -> tuple[int | None, int | None, list[str]]:
+    """Find the best microphone and loopback devices with optional validation.
+
+    This is a more thorough version of find_default_devices that:
+    1. Tests devices to ensure they can actually be opened
+    2. Returns warnings/suggestions for the user
+
+    Args:
+        sample_rate: Sample rate to test with
+        validate: If True, test that devices can actually be opened
+
+    Returns:
+        Tuple of (mic_device_index, loopback_device_index, warnings)
+        warnings is a list of user-friendly messages about issues found
+    """
+    require_recorder()
+
+    warnings: list[str] = []
+    all_devices = list_devices()
+
+    # --- Find and validate microphone ---
+    mic_device = None
+    mic_candidates = [
+        dev
+        for dev in all_devices
+        if dev.max_input_channels > 0 and _is_microphone_device(dev.name)
+    ]
+
+    # Sort by API preference (WASAPI > DirectSound > others)
+    def mic_sort_key(dev: AudioDevice) -> int:
+        if "WASAPI" in dev.hostapi_name:
+            return 0
+        elif "DirectSound" in dev.hostapi_name:
+            return 1
+        elif "MME" in dev.hostapi_name:
+            return 2
+        return 3
+
+    mic_candidates.sort(key=mic_sort_key)
+
+    for dev in mic_candidates:
+        if validate:
+            channels = min(1, dev.max_input_channels)
+            if test_device(dev.index, channels=channels, sample_rate=sample_rate):
+                mic_device = dev.index
+                break
+            else:
+                warnings.append(f"Mic '{dev.name}' failed to open, trying next...")
+        else:
+            mic_device = dev.index
+            break
+
+    if mic_device is None and mic_candidates:
+        warnings.append("No working microphone found. Check audio permissions.")
+    elif mic_device is None:
+        warnings.append("No microphone detected. Connect a microphone and retry.")
+
+    # --- Find and validate loopback ---
+    loopback_device = None
+    loopback_candidates = [
+        dev
+        for dev in all_devices
+        if dev.max_input_channels > 0 and _is_loopback_device(dev.name)
+    ]
+
+    # Sort by preference (WDM-KS Stereo Mix is usually best)
+    def loopback_sort_key(dev: AudioDevice) -> int:
+        if "WDM-KS" in dev.hostapi_name:
+            return 0
+        elif "WASAPI" in dev.hostapi_name:
+            return 1
+        return 2
+
+    loopback_candidates.sort(key=loopback_sort_key)
+
+    for dev in loopback_candidates:
+        if validate:
+            channels = min(2, dev.max_input_channels)
+            if test_device(dev.index, channels=channels, sample_rate=sample_rate):
+                loopback_device = dev.index
+                break
+            else:
+                warnings.append(
+                    f"Loopback '{dev.name}' failed to open. "
+                    "It may be disabled in Windows Sound settings."
+                )
+        else:
             loopback_device = dev.index
             break
 
-    # If no loopback found, try first WASAPI output (can be used with wasapi_loopback=True)
-    if loopback_device is None and outputs:
-        loopback_device = outputs[0].index
+    if loopback_device is None:
+        warnings.append(
+            "No system audio capture device found. "
+            "Enable 'Stereo Mix' in Windows Sound settings > Recording devices."
+        )
 
-    return mic_device, loopback_device
+    return mic_device, loopback_device, warnings
 
 
 def _process_stereo_chunk(mic_data: Any, loopback_data: Any, np: Any) -> Any:
@@ -453,7 +651,14 @@ def start_recording(
 
     if use_mic:
         mic_info = sd.query_devices(mic_device)
-        mic_channels = min(1, mic_info["max_input_channels"]) or 1
+        # Check if this is actually an input device
+        if mic_info["max_input_channels"] == 0:
+            raise ValueError(
+                f"Device '{mic_info['name']}' cannot capture audio (no input channels). "
+                "Use 'nb record devices' to find a valid microphone device."
+            )
+
+        mic_channels = min(1, mic_info["max_input_channels"])
         mic_stream = sd.InputStream(
             device=mic_device,
             channels=mic_channels,
@@ -464,7 +669,14 @@ def start_recording(
 
     if use_loopback:
         loopback_info = sd.query_devices(loopback_device)
-        loopback_channels = min(2, loopback_info["max_input_channels"]) or 1
+        # Check if this is actually an input device
+        if loopback_info["max_input_channels"] == 0:
+            raise ValueError(
+                f"Device '{loopback_info['name']}' cannot capture audio (no input channels). "
+                "Use 'nb record devices' to find a valid loopback device like 'Stereo Mix'."
+            )
+
+        loopback_channels = min(2, loopback_info["max_input_channels"])
         loopback_stream = sd.InputStream(
             device=loopback_device,
             channels=loopback_channels,
