@@ -42,6 +42,9 @@ def ensure_daily_note(dt: date, notes_root: Path | None = None) -> Path:
 
     Returns the path to the note.
     """
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
     path = get_daily_note_path(dt, notes_root)
 
     if not path.exists():
@@ -51,6 +54,11 @@ def ensure_daily_note(dt: date, notes_root: Path | None = None) -> Path:
         # Write template
         content = create_daily_note_template(dt)
         path.write_text(content, encoding="utf-8")
+
+        # Git auto-commit for new daily note
+        from nb.core.git import auto_commit_file
+
+        auto_commit_file(path, notes_root=notes_root)
 
     return path
 
@@ -118,6 +126,11 @@ def create_note(
 
     # Write file
     full_path.write_text(content, encoding="utf-8")
+
+    # Git auto-commit for new note
+    from nb.core.git import auto_commit_file
+
+    auto_commit_file(full_path, notes_root=notes_root)
 
     return full_path
 
@@ -720,6 +733,11 @@ def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
 
     index_note(path, notes_root, index_vectors=True)
 
+    # Git auto-commit for edited note
+    from nb.core.git import auto_commit_file
+
+    auto_commit_file(path, notes_root=notes_root)
+
 
 def get_note(path: Path, notes_root: Path | None = None) -> Note | None:
     """Parse a note file into a Note model.
@@ -1009,6 +1027,11 @@ def delete_note(path: Path, notes_root: Path | None = None) -> bool:
     # Delete the file from filesystem
     path.unlink()
 
+    # Git auto-commit for deleted note
+    from nb.core.git import auto_commit_file
+
+    auto_commit_file(path, notes_root=notes_root)
+
     return True
 
 
@@ -1117,6 +1140,20 @@ def move_note(
 
     # Index at new location
     index_note(dest_full, notes_root=notes_root)
+
+    # Git auto-commit for moved note (commits both deletion and creation)
+    config = get_config()
+    if config.git.enabled and config.git.auto_commit:
+        from nb.core.git import commit_all, is_git_repo
+
+        if is_git_repo(notes_root):
+            try:
+                dest_rel = dest_full.relative_to(notes_root)
+                commit_all(
+                    f"Move {source_relative} -> {dest_rel}", notes_root=notes_root
+                )
+            except Exception as e:
+                print(f"Warning: Git auto-commit failed: {e}", file=sys.stderr)
 
     return dest_full
 

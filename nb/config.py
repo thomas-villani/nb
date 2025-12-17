@@ -121,6 +121,17 @@ class InboxConfig:
 
 
 @dataclass
+class GitConfig:
+    """Configuration for git integration."""
+
+    enabled: bool = False  # Master switch for git integration
+    auto_commit: bool = True  # Auto-commit after note changes
+    commit_message_template: str = (
+        "Update {path}"  # Supports {path}, {notebook}, {title}, {date}
+    )
+
+
+@dataclass
 class TodoViewConfig:
     """Configuration for a saved todo view.
 
@@ -218,6 +229,7 @@ class Config:
     recorder: RecorderConfig = field(default_factory=RecorderConfig)
     clip: ClipConfig = field(default_factory=ClipConfig)
     inbox: InboxConfig = field(default_factory=InboxConfig)
+    git: GitConfig = field(default_factory=GitConfig)
     date_format: str = "%Y-%m-%d"
     time_format: str = "%H:%M"
     daily_title_format: str = "%A, %B %d, %Y"  # e.g., "Friday, November 28, 2025"
@@ -555,6 +567,17 @@ def _parse_inbox_config(data: dict[str, Any] | None) -> InboxConfig:
     )
 
 
+def _parse_git_config(data: dict[str, Any] | None) -> GitConfig:
+    """Parse git configuration."""
+    if data is None:
+        return GitConfig()
+    return GitConfig(
+        enabled=data.get("enabled", False),
+        auto_commit=data.get("auto_commit", True),
+        commit_message_template=data.get("commit_message_template", "Update {path}"),
+    )
+
+
 def load_config(config_path: Path | None = None) -> Config:
     """Load configuration from YAML file.
 
@@ -598,6 +621,7 @@ def load_config(config_path: Path | None = None) -> Config:
     recorder_config = _parse_recorder_config(data.get("recorder"))
     clip_config = _parse_clip_config(data.get("clip"))
     inbox_config = _parse_inbox_config(data.get("inbox"))
+    git_config = _parse_git_config(data.get("git"))
     date_format = data.get("date_format", "%Y-%m-%d")
     time_format = data.get("time_format", "%H:%M")
     daily_title_format = data.get("daily_title_format", "%A, %B %d, %Y")
@@ -615,6 +639,7 @@ def load_config(config_path: Path | None = None) -> Config:
         recorder=recorder_config,
         clip=clip_config,
         inbox=inbox_config,
+        git=git_config,
         date_format=date_format,
         time_format=time_format,
         daily_title_format=daily_title_format,
@@ -750,6 +775,10 @@ def save_config(config: Config) -> None:
     if raindrop_data:
         inbox_data["raindrop"] = raindrop_data
 
+    # Git: only non-default values
+    git_defaults = GitConfig()
+    git_data = _serialize_dataclass_fields(config.git, defaults=git_defaults)
+
     # Build main config dict
     # Note: linked_todos and linked_notes are stored in the database, not config
     data: dict[str, Any] = {
@@ -785,6 +814,8 @@ def save_config(config: Config) -> None:
         data["clip"] = clip_data
     if inbox_data:
         data["inbox"] = inbox_data
+    if git_data:
+        data["git"] = git_data
 
     config.config_path.parent.mkdir(parents=True, exist_ok=True)
     with config.config_path.open("w", encoding="utf-8") as f:
@@ -961,6 +992,9 @@ CONFIGURABLE_SETTINGS = {
     "inbox.default_notebook": "Default notebook for clipped items (default: bookmarks)",
     "inbox.raindrop.collection": "Raindrop collection to pull from (default: nb-inbox)",
     "inbox.raindrop.auto_archive": "Move items to archive after clipping (true/false)",
+    "git.enabled": "Enable git integration (true/false)",
+    "git.auto_commit": "Auto-commit after note changes (true/false)",
+    "git.commit_message_template": "Commit message template (supports {path}, {notebook}, {title}, {date})",
 }
 
 # Notebook-specific settings (accessed via notebook.<name>.<setting>)
@@ -1181,6 +1215,11 @@ def get_config_value(key: str) -> Any:
         attr = parts[2]
         if hasattr(config.inbox.raindrop, attr):
             return getattr(config.inbox.raindrop, attr)
+    elif parts[0] == "git" and len(parts) == 2:
+        # Git setting
+        attr = parts[1]
+        if hasattr(config.git, attr):
+            return getattr(config.git, attr)
     elif parts[0] == "notebook" and len(parts) == 3:
         # Notebook-specific setting: notebook.<name>.<setting>
         nb_name, setting = parts[1], parts[2]
@@ -1359,6 +1398,17 @@ def set_config_value(key: str, value: str) -> bool:
             config.inbox.raindrop.auto_archive = parse_bool_strict(
                 value, "inbox.raindrop.auto_archive"
             )
+        else:
+            return False
+    elif parts[0] == "git" and len(parts) == 2:
+        # Git setting
+        attr = parts[1]
+        if attr == "enabled":
+            config.git.enabled = parse_bool_strict(value, "git.enabled")
+        elif attr == "auto_commit":
+            config.git.auto_commit = parse_bool_strict(value, "git.auto_commit")
+        elif attr == "commit_message_template":
+            config.git.commit_message_template = value if value else "Update {path}"
         else:
             return False
     elif parts[0] == "notebook" and len(parts) == 3:

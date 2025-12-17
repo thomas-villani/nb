@@ -10,3 +10,6 @@ wheels/
 .venv
 .coverage
 etc/
+
+.claude/
+.idea/

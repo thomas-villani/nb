@@ -29,6 +29,7 @@ dependencies = [
     "all2md[html]>=1.0.0",
     "pyperclip>=1.11.0",
     "wijjit",
+    "gitpython>=3.1.0",  # Git integration for version control
 ]
 [project.scripts]
 nb = "nb.cli:main"
@@ -114,6 +115,8 @@ module = [
     "frontmatter",
     "sounddevice",
     "soundfile",
+    "git",
+    "git.*",
 ]
 ignore_missing_imports = true
 

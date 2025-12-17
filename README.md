@@ -23,6 +23,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Web viewer** - Browse notes with clickable links, backlinks panel, and graph view
 - **Meeting recording** - Record audio and transcribe with speaker diarization (optional)
 - **Raindrop inbox** - Pull bookmarks from Raindrop.io and clip them as notes
+- **Git integration** - Version control notes with auto-commit and GitHub sync
 
 ## Installation
 
@@ -973,6 +974,96 @@ inbox:
     auto_archive: true
 ```
 
+### Git Integration
+
+Version control your notes and sync with GitHub. Git integration provides auto-commit after note changes and manual sync commands.
+
+#### Setup
+
+```bash
+# Initialize git repository in notes directory
+nb git init
+
+# Add a remote (e.g., GitHub)
+nb git remote --add git@github.com:user/notes.git
+
+# Enable auto-commits
+nb config set git.enabled true
+
+# Push existing notes
+nb git push
+```
+
+#### Commands
+
+```bash
+nb git init              # Initialize git repo and create .gitignore
+nb git init --remote URL # Initialize and add remote in one step
+
+nb git status            # Show modified/staged/untracked files
+nb git status -v         # Verbose: list all files
+
+nb git commit "message"  # Manually commit all changes
+nb git commit -a         # Commit with default message
+
+nb git push              # Push to remote
+nb git push --force      # Force push (use with caution)
+
+nb git pull              # Pull from remote (aborts on conflict)
+
+nb git sync              # Pull then push (convenience command)
+
+nb git log               # Show commit history
+nb git log -n 20         # Show last 20 commits
+nb git log --oneline     # Compact one-line format
+
+nb git remote            # Show configured remote
+nb git remote --add URL  # Add remote origin
+nb git remote --remove   # Remove remote origin
+```
+
+#### Auto-Commit
+
+When enabled, git automatically commits after:
+- Creating a new note (`nb new`, `nb today`)
+- Editing a note (after closing editor)
+- Deleting a note (`nb delete`)
+- Moving a note (`nb mv`)
+
+Auto-commits use a configurable message template (default: `Update {path}`).
+
+#### Configuration
+
+```bash
+nb config set git.enabled true              # Enable git integration
+nb config set git.auto_commit false         # Disable auto-commits
+nb config set git.commit_message_template "nb: {path}"  # Custom message
+```
+
+Or in `config.yaml`:
+
+```yaml
+git:
+  enabled: true
+  auto_commit: true
+  commit_message_template: "Update {path}"  # Supports {path}, {notebook}, {title}, {date}
+```
+
+#### Conflict Handling
+
+When pulling encounters conflicts, nb aborts the merge and provides instructions:
+
+```
+Merge conflicts detected. Please resolve manually:
+  cd ~/notes
+  git pull origin main
+  # Resolve conflicts, then: git add . && git commit
+```
+
+The `.gitignore` created by `nb git init` excludes:
+- `.nb/` directory (database, vectors, config)
+- Common temporary files (`.DS_Store`, `*.swp`, etc.)
+
 ### Attachments
 
 Attach files and URLs to notes and todos. Attachments are indexed in the database for fast queries.
@@ -1324,6 +1415,12 @@ inbox:
   raindrop:
     collection: nb-inbox        # Raindrop collection to pull from
     auto_archive: true          # Move to archive after clipping
+
+# Git integration (optional)
+git:
+  enabled: false                # Set to true to enable auto-commits
+  auto_commit: true             # Commit automatically after note changes
+  commit_message_template: "Update {path}"  # Supports {path}, {notebook}, {title}, {date}
 ```
 
 ### Notebook Options

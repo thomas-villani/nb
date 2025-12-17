@@ -96,6 +96,11 @@ Full example:
          tag: urgent
          hide_later: true
 
+   git:
+     enabled: false
+     auto_commit: true
+     commit_message_template: "Update {path}"
+
 Notebook options
 ----------------
 
@@ -242,6 +247,23 @@ Recorder options
    * - ``mic_speaker_label``
      - Label for microphone speaker in transcripts (default: "You")
 
+Git options
+-----------
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``enabled``
+     - Enable git integration (default: false)
+   * - ``auto_commit``
+     - Auto-commit after note changes (default: true)
+   * - ``commit_message_template``
+     - Commit message template (default: "Update {path}")
+
+Template variables: ``{path}``, ``{notebook}``, ``{title}``, ``{date}``
+
 Kanban board options
 --------------------
 
@@ -342,6 +364,15 @@ Notebook settings
    nb config set notebook.projects.icon wrench
    nb config set notebook.daily.icon calendar
    nb config get notebook.work.color
+
+Git settings
+^^^^^^^^^^^^
+
+.. code-block:: bash
+
+   nb config set git.enabled true
+   nb config set git.auto_commit false
+   nb config set git.commit_message_template "nb: {path}"
 
 Todo exclusion
 ^^^^^^^^^^^^^^
