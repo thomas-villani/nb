@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,8 @@ from localvectordb.core import MetadataField, MetadataFieldType
 if TYPE_CHECKING:
     from nb.config import Config
     from nb.models import Note
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -52,6 +55,39 @@ NOTES_SCHEMA = {
     "date": MetadataField(type=MetadataFieldType.DATE, indexed=True),
     "tags": MetadataField(type=MetadataFieldType.JSON),
 }
+
+
+def strip_images_for_embedding(content: str) -> str:
+    """Strip images from markdown content before sending to vector embedding.
+
+    Base64-encoded images can be extremely large and exceed token limits for
+    embedding models. This function removes all images using all2md's AST
+    processing to ensure clean text is sent for embedding.
+
+    Args:
+        content: Markdown content that may contain images.
+
+    Returns:
+        Markdown content with all images removed.
+    """
+    if not content:
+        return content
+
+    try:
+        from all2md import to_markdown
+        from all2md.transforms import RemoveImagesTransform
+
+        # Parse markdown and render with transform applied
+        return to_markdown(
+            content,
+            source_format="markdown",
+            transforms=[RemoveImagesTransform()],
+        )
+    except Exception as e:
+        # If transform fails, fall back to original content
+        # This ensures indexing continues even if all2md has issues
+        _logger.debug("Failed to strip images from content: %s", e)
+        return content
 
 
 class NoteSearch:
@@ -106,8 +142,11 @@ class NoteSearch:
             content: The full text content of the note.
 
         """
+        # Strip images (especially base64) to avoid exceeding embedding token limits
+        clean_content = strip_images_for_embedding(content)
+
         self.db.upsert(
-            documents=[content],
+            documents=[clean_content],
             metadata=[
                 {
                     "path": str(note.path),
@@ -145,7 +184,9 @@ class NoteSearch:
         for note, content in notes:
             if not content:
                 continue
-            documents.append(content)
+            # Strip images (especially base64) to avoid exceeding embedding token limits
+            clean_content = strip_images_for_embedding(content)
+            documents.append(clean_content)
             metadata_list.append(
                 {
                     "path": str(note.path),
