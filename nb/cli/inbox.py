@@ -377,8 +377,8 @@ def pull_items(
 @inbox.command("clear")
 @click.option("--collection", "-c", help="Raindrop collection name")
 @click.option("--limit", "-l", default=50, help="Maximum items to archive")
-@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
-def clear_inbox(collection: str | None, limit: int, yes: bool) -> None:
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation")
+def clear_inbox(collection: str | None, limit: int, force: bool) -> None:
     """Archive all items in inbox without clipping.
 
     Moves all items from the inbox collection to Raindrop's Archive.
@@ -387,7 +387,7 @@ def clear_inbox(collection: str | None, limit: int, yes: bool) -> None:
     \b
     Examples:
       nb inbox clear              # Archive all items (with confirmation)
-      nb inbox clear -y           # Archive without confirmation
+      nb inbox clear -f           # Archive without confirmation
       nb inbox clear -l 10        # Archive only 10 items
       nb inbox clear -c reading   # Clear 'reading' collection
     """
@@ -429,7 +429,7 @@ def clear_inbox(collection: str | None, limit: int, yes: bool) -> None:
     if len(items) > 5:
         console.print(f"  [dim]... and {len(items) - 5} more[/dim]")
 
-    if not yes:
+    if not force:
         if not Confirm.ask("\nArchive all items without clipping?", default=False):
             console.print("[dim]Cancelled.[/dim]")
             return

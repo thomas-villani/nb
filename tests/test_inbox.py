@@ -332,7 +332,7 @@ class TestInboxCLI:
                     with patch(
                         "nb.core.inbox.RaindropClient", return_value=mock_client
                     ):
-                        result = cli_runner.invoke(cli, ["inbox", "clear", "-y"])
+                        result = cli_runner.invoke(cli, ["inbox", "clear", "-f"])
 
         assert result.exit_code == 0
         assert "Done:" in result.output

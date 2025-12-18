@@ -184,7 +184,7 @@ Moves items from your Raindrop inbox collection to Raindrop's Archive. Useful fo
      - Raindrop collection name
    * - ``-l, --limit INTEGER``
      - Maximum items to archive (default: 50)
-   * - ``-y, --yes``
+   * - ``-f, --force``
      - Skip confirmation prompt
 
 **Examples:**
@@ -192,7 +192,7 @@ Moves items from your Raindrop inbox collection to Raindrop's Archive. Useful fo
 .. code-block:: bash
 
    nb inbox clear              # Archive all items (with confirmation)
-   nb inbox clear -y           # Archive without confirmation
+   nb inbox clear -f           # Archive without confirmation
    nb inbox clear -l 10        # Archive only 10 items
    nb inbox clear -c reading   # Clear 'reading' collection
 

@@ -62,17 +62,15 @@ Open yesterday's daily note.
 
    * - Option
      - Description
-   * - ``-s, --show``
-     - Print note to console instead of opening editor
    * - ``-n, --notebook NAME``
-     - Use specified notebook
+     - Open yesterday's note in specified notebook
 
 **Examples:**
 
 .. code-block:: bash
 
-   nb yesterday
-   nb yesterday -n work
+   nb yesterday              # Yesterday's note in default daily notebook
+   nb yesterday -n work      # Yesterday's note in work notebook
 
 nb open
 -------
@@ -210,7 +208,7 @@ Show recently viewed notes.
      - Skip first N entries
    * - ``-n, --notebook NAME``
      - Filter by notebook
-   * - ``-f, --full``
+   * - ``-F, --full``
      - Show full paths instead of filenames
    * - ``-g, --group``
      - Group entries by notebook
@@ -361,11 +359,11 @@ List notes across notebooks.
      - List this month's notes
    * - ``-n, --notebook NAME``
      - Filter by notebook
-   * - ``-f, --full``
+   * - ``-F, --full``
      - Show full paths
    * - ``-d, --details``
      - Show extra details (todo count, mtime, excluded status)
-   * - ``-t, --tree``
+   * - ``-T, --tree``
      - Display as tree grouped by subdirectory sections
    * - ``-S, --section NAME``
      - Filter by path section/subdirectory (repeatable)
@@ -387,10 +385,10 @@ By default, shows title and tags. With ``--details``, also shows:
    nb list --all              # All notes
    nb list --week             # This week's daily notes
    nb list -n work            # Specific notebook
-   nb list -f                 # Show full paths
+   nb list -F                 # Show full paths
    nb list -d                 # Show extra details
    nb list -n work -d         # Notebook with details
-   nb list -t                 # Display as tree
+   nb list -T                 # Display as tree
    nb list -S tasks           # Filter by section
    nb list -xs archive        # Exclude a section
 

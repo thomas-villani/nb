@@ -76,6 +76,7 @@ nb -s -n work             # Show today's note in work notebook
 nb today                  # Same as `nb`
 nb today -n work          # Today's note in work notebook
 nb yesterday              # Open yesterday's note
+nb yesterday -n work      # Yesterday's note in work notebook
 
 nb open "nov 25"          # Open note for a specific date
 nb open "last friday"     # Fuzzy date parsing
@@ -103,7 +104,7 @@ nb history                # Show last 10 viewed notes
 nb history -l 50          # Show last 50 viewed notes
 nb history -o 10          # Skip first 10, show next 10
 nb history -n work        # Filter by notebook
-nb history -f             # Show full paths instead of filenames
+nb history -F             # Show full paths instead of filenames
 nb history -g             # Group entries by notebook
 ```
 
@@ -141,9 +142,9 @@ nb list --week             # List this week's daily notes
 nb list --month            # List this month's daily notes
 nb list work --week        # List this week's notes in work notebook
 nb list -n work            # Alternative: use -n/--notebook option
-nb list -f                 # Show full paths to notes
+nb list -F                 # Show full paths to notes
 nb list -d                 # Show details (todo count, mtime, date, excluded status)
-nb list -t                 # Display as tree grouped by subdirectory sections
+nb list -T                 # Display as tree grouped by subdirectory sections
 nb list -S tasks           # Filter by path section/subdirectory
 nb list -xs archive        # Exclude notes from a section
 nb list -S tasks -xs done  # Combine include and exclude sections
@@ -939,7 +940,7 @@ nb inbox pull -t research        # Add #research tag to all
 nb inbox pull --all              # Include already-clipped items
 
 nb inbox clear                   # Archive all without clipping
-nb inbox clear -y                # Skip confirmation
+nb inbox clear -f                # Skip confirmation
 
 nb inbox history                 # Show previously clipped items
 ```

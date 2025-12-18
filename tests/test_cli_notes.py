@@ -268,7 +268,7 @@ class TestListCommand:
         """Test listing with full paths."""
         indexed_note("projects", "fullpath.md", "# Full Path\n")
 
-        result = cli_runner.invoke(cli, ["list", "-n", "projects", "-f"])
+        result = cli_runner.invoke(cli, ["list", "-n", "projects", "-F"])
         assert result.exit_code == 0
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import click
 
+from nb.cli.completion import complete_notebook
 from nb.cli.utils import console, ensure_note_path, resolve_attachment_target
 
 
@@ -129,12 +130,13 @@ def attach_url(url: str, target: str | None, title: str | None) -> None:
 )
 @click.option(
     "--type",
-    "-t",
     "attach_type",
     type=click.Choice(["file", "url"]),
     help="Filter by type",
 )
-@click.option("--notebook", "-n", help="Filter by notebook")
+@click.option(
+    "--notebook", "-n", help="Filter by notebook", shell_complete=complete_notebook
+)
 def attach_list(
     target: str | None,
     list_all: bool,
@@ -222,7 +224,7 @@ def attach_list(
 
 @attach.command("open")
 @click.argument("target")
-@click.option("--line", "-l", type=int, help="Line number of the attachment")
+@click.option("--line", "-L", type=int, help="Line number of the attachment")
 def attach_open(target: str, line: int | None) -> None:
     """Open an attachment with the system default handler.
 

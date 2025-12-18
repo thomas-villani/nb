@@ -127,8 +127,8 @@ def template_show(name: str) -> None:
 
 @template.command("remove")
 @click.argument("name")
-@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
-def template_remove(name: str, yes: bool) -> None:
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation")
+def template_remove(name: str, force: bool) -> None:
     """Delete a template."""
     from nb.core.templates import remove_template, template_exists
 
@@ -136,7 +136,7 @@ def template_remove(name: str, yes: bool) -> None:
         console.print(f"[red]Template not found:[/red] {name}")
         raise SystemExit(1)
 
-    if not yes:
+    if not force:
         if not click.confirm(f"Delete template '{name}'?"):
             console.print("[dim]Cancelled.[/dim]")
             return

@@ -87,11 +87,35 @@ def today(ctx: click.Context, notebook: str | None) -> None:
 
 
 @click.command()
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook to open yesterday's note in",
+    shell_complete=complete_notebook,
+)
 @click.pass_context
-def yesterday(ctx: click.Context) -> None:
-    """Open yesterday's daily note."""
+def yesterday(ctx: click.Context, notebook: str | None) -> None:
+    """Open yesterday's daily note.
+
+    By default opens yesterday's daily note. Use -n to specify a different notebook.
+
+    \b
+    Examples:
+      nb yesterday           # Yesterday's note in 'daily'
+      nb yesterday -n work   # Yesterday's note in 'work' notebook
+    """
+    from nb.core.notebooks import ensure_notebook_note, is_notebook_date_based
+
     dt = date.today() - timedelta(days=1)
-    path = ensure_daily_note(dt)
+
+    if notebook:
+        # Create yesterday's note in specified notebook
+        if is_notebook_date_based(notebook):
+            path = ensure_notebook_note(notebook, dt=dt)
+        else:
+            path = ensure_notebook_note(notebook, name=dt.isoformat())
+    else:
+        path = ensure_daily_note(dt)
 
     show = ctx.obj and ctx.obj.get("show")
     open_or_show_note(path, show=show)
@@ -145,9 +169,7 @@ def last_note(show: bool, notebook: str | None, viewed: bool) -> None:
 @click.option(
     "--notebook", "-n", help="Filter by notebook", shell_complete=complete_notebook
 )
-@click.option(
-    "--full-path", "-f", is_flag=True, help="Show full paths instead of filenames"
-)
+@click.option("--full", "-F", is_flag=True, help="Show full paths instead of filenames")
 @click.option("--group", "-g", is_flag=True, help="Group entries by notebook")
 @click.option(
     "--open", "open_index", type=int, help="Open note at index N from history"
@@ -156,7 +178,7 @@ def history_cmd(
     limit: int,
     offset: int,
     notebook: str | None,
-    full_path: bool,
+    full: bool,
     group: bool,
     open_index: int | None,
 ) -> None:
@@ -173,7 +195,7 @@ def history_cmd(
       nb history -l 50       # Show last 50 viewed notes
       nb history -o 10       # Skip first 10, show next 10
       nb history -n work     # Show recently viewed notes in 'work' notebook
-      nb history -f          # Show full paths instead of filenames
+      nb history -F          # Show full paths instead of filenames
       nb history -g          # Group entries by notebook
     """
     from collections import defaultdict
@@ -335,7 +357,7 @@ def history_cmd(
                 )
 
                 # Determine display path
-                if full_path:
+                if full:
                     display_path = str(rel_path)
                 else:
                     display_path = rel_path.name
@@ -374,7 +396,7 @@ def history_cmd(
             )
 
             # Determine display path
-            if full_path:
+            if full:
                 display_path = str(rel_path)
             else:
                 display_path = rel_path.name
@@ -911,7 +933,7 @@ def log_to_note(
 )
 @click.option("--week", is_flag=True, help="Show this week's notes")
 @click.option("--month", is_flag=True, help="Show this month's notes")
-@click.option("--full", "-f", is_flag=True, help="Show full path to notes")
+@click.option("--full", "-F", is_flag=True, help="Show full path to notes")
 @click.option(
     "--details", "-d", is_flag=True, help="Show extra details (todo count, mtime, etc.)"
 )
@@ -929,7 +951,7 @@ def log_to_note(
 )
 @click.option(
     "--tree",
-    "-t",
+    "-T",
     is_flag=True,
     help="Display notes as a tree grouped by subdirectory sections",
 )

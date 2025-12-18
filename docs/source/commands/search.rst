@@ -141,7 +141,7 @@ Search notes with regex pattern matching.
      - Description
    * - ``-n, --notebook NAME``
      - Filter by notebook
-   * - ``--note NAME``
+   * - ``--note, -N NAME``
      - Filter by specific note
    * - ``-C N``
      - Show N lines of context (before and after)

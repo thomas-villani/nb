@@ -20,7 +20,7 @@ List all open todos grouped by status and due date.
      - Description
    * - ``-n, --notebook NAME``
      - Filter by notebook (repeatable)
-   * - ``--note PATH``
+   * - ``--note, -N PATH``
      - Filter by note path or alias (repeatable)
    * - ``-t, --tag TAG``
      - Filter by tag
@@ -523,9 +523,9 @@ Interactively review and triage todos with a TUI interface.
      - Filter by tag
    * - ``-n, --notebook NAME``
      - Filter by notebook (repeatable)
-   * - ``--note PATH``
+   * - ``--note, -N PATH``
      - Filter by note path (repeatable)
-   * - ``-N, --exclude-notebook NAME``
+   * - ``-xn, --exclude-notebook NAME``
      - Exclude notebook (repeatable)
 
 **Scopes:**

@@ -45,7 +45,6 @@ def register_tags_commands(cli: click.Group) -> None:
 )
 @click.option(
     "--todos",
-    "-t",
     "todos_only",
     is_flag=True,
     help="Only show tags from todos",

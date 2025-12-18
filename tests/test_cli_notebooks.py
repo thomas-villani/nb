@@ -108,14 +108,14 @@ class TestNotebooksCreate:
 class TestNotebooksRemove:
     """Tests for 'nb notebooks remove' command."""
 
-    def test_remove_notebook_with_yes(
+    def test_remove_notebook_with_force(
         self, cli_runner: CliRunner, mock_cli_config: Config
     ):
-        """Test removing a notebook with -y flag."""
+        """Test removing a notebook with -f flag."""
         # Create a notebook first
         cli_runner.invoke(cli, ["notebooks", "create", "removeme"])
 
-        result = cli_runner.invoke(cli, ["notebooks", "remove", "removeme", "-y"])
+        result = cli_runner.invoke(cli, ["notebooks", "remove", "removeme", "-f"])
         assert result.exit_code == 0
         assert "Removed" in result.output
 
@@ -133,7 +133,7 @@ class TestNotebooksRemove:
         self, cli_runner: CliRunner, mock_cli_config: Config
     ):
         """Test removing a notebook that doesn't exist."""
-        result = cli_runner.invoke(cli, ["notebooks", "remove", "nonexistent", "-y"])
+        result = cli_runner.invoke(cli, ["notebooks", "remove", "nonexistent", "-f"])
         assert result.exit_code == 1
         assert "not found" in result.output.lower()
 

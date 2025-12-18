@@ -252,7 +252,7 @@ def search_cmd(
 @click.option(
     "--notebook", "-n", help="Filter by notebook", shell_complete=complete_notebook
 )
-@click.option("--note", help="Filter by specific note (path or alias)")
+@click.option("--note", "-N", help="Filter by specific note (path or alias)")
 def grep_cmd(
     pattern: str,
     context_lines: int,

@@ -147,8 +147,8 @@ def notebooks_create(
 
 @notebooks_cmd.command("remove")
 @click.argument("name")
-@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
-def notebooks_remove(name: str, yes: bool) -> None:
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation")
+def notebooks_remove(name: str, force: bool) -> None:
     """Remove a notebook from configuration.
 
     Note: This only removes the notebook from nb's configuration.
@@ -163,7 +163,7 @@ def notebooks_remove(name: str, yes: bool) -> None:
         console.print(f"[red]Notebook not found:[/red] {name}")
         raise SystemExit(1)
 
-    if not yes:
+    if not force:
         if nb.is_external:
             console.print(f"Remove external notebook '{name}' from configuration?")
             console.print(f"[dim]Path: {nb.path}[/dim]")

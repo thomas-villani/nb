@@ -91,16 +91,16 @@ class TestTemplateNew:
 class TestTemplateRemove:
     """Tests for 'nb template remove' command."""
 
-    def test_template_remove_with_yes(
+    def test_template_remove_with_force(
         self, cli_runner: CliRunner, mock_cli_config: Config
     ):
-        """Test removing a template with -y flag."""
+        """Test removing a template with -f flag."""
         template_dir = mock_cli_config.notes_root / ".nb" / "templates"
         template_dir.mkdir(parents=True, exist_ok=True)
         template_path = template_dir / "toremove.md"
         template_path.write_text("# To Remove\n")
 
-        result = cli_runner.invoke(cli, ["template", "remove", "toremove", "-y"])
+        result = cli_runner.invoke(cli, ["template", "remove", "toremove", "-f"])
         assert result.exit_code == 0
         assert "Removed" in result.output
         assert not template_path.exists()
@@ -122,6 +122,6 @@ class TestTemplateRemove:
         self, cli_runner: CliRunner, mock_cli_config: Config
     ):
         """Test removing non-existent template."""
-        result = cli_runner.invoke(cli, ["template", "remove", "nonexistent", "-y"])
+        result = cli_runner.invoke(cli, ["template", "remove", "nonexistent", "-f"])
         assert result.exit_code == 1
         assert "not found" in result.output.lower()

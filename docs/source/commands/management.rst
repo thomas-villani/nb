@@ -762,7 +762,7 @@ List attachments in a note or across all notes.
      - Description
    * - ``--all, -a``
      - List all attachments from database
-   * - ``--type, -t TYPE``
+   * - ``--type TYPE``
      - Filter by type (``file`` or ``url``)
    * - ``--notebook, -n NAME``
      - Filter by notebook
@@ -792,7 +792,7 @@ Open an attachment with the system default handler.
 
    * - Option
      - Description
-   * - ``--line, -l N``
+   * - ``--line, -L N``
      - Open attachment at specific line
 
 **Example:**
@@ -875,7 +875,7 @@ Export a note or notebook to PDF, DOCX, or HTML.
 
    * - Option
      - Description
-   * - ``-f, --format``
+   * - ``--format``
      - Output format: ``pdf``, ``docx``, or ``html`` (inferred from extension if not provided)
    * - ``-n, --notebook NAME``
      - Notebook containing the note

@@ -22,7 +22,6 @@ def register_export_commands(cli: click.Group) -> None:
 @click.argument("output")
 @click.option(
     "--format",
-    "-f",
     "fmt",
     type=click.Choice(["pdf", "docx", "html"], case_sensitive=False),
     help="Output format (inferred from extension if not provided)",

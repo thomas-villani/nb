@@ -136,6 +136,7 @@ todo_exclude: true
 - [ ] Need to improve the `nb list` command - should have a way to list recently modified. Should allow combining `nb list --week` and --details, etc.
 - [ ] Need to allow `nb history` to show recently modified as well
 - [ ] Allow pinned notes with `nb pin <NOTE>` and `nb pinned`
+- [ ] Need to add options to grep and search to output source only (no content)
 - [x] `nb mv`, `nb cp` to move and copy notes
 - [x] `nb export` to export notes/notebooks
 
@@ -150,11 +151,10 @@ todo_exclude: true
 - [x] Browser plugin to add notes from webpages
 
 
-
 ### Phase 6: Future Enhancements
 - [ ] Recurring todos (`@recur(weekly)`) #feature
 - [ ] Contextual views - e.g. set time windows when `nbt` shows certain notebooks (e.g. work notebooks from 9-5p)
-- [ ] Auto TL;DR generation and stash in frontmatter
+- [ ] Auto TL;DR generation and stash in frontmatter, especially for `inbox` feature
 - [x] Export to various formats (HTML, PDF) #feature
 - [ ] Calendar view for due dates #feature
 - [ ] Due date reminders (optional notifications) #feature
@@ -167,8 +167,8 @@ todo_exclude: true
 - [ ] Summarize notes, generate TL;DR
 - [ ] Weekly/daily planner
 - [ ] Extract from meeting transcripts and other notes
-- [ ] 
-
+- [ ] Auto-schedule todos and calendar
+- [ ] Auto-research
 
 ## Technical Debt
 - [x] Add comprehensive test suite #testing

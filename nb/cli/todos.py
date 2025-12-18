@@ -68,6 +68,7 @@ def register_todo_commands(cli: click.Group) -> None:
 )
 @click.option(
     "--note",
+    "-N",
     multiple=True,
     help="Filter by note path or linked alias (repeatable)",
 )
@@ -2503,12 +2504,13 @@ def todo_delete(todo_id: tuple[str, ...], force: bool) -> None:
 )
 @click.option(
     "--note",
+    "-N",
     multiple=True,
     help="Filter by note path (repeatable)",
 )
 @click.option(
     "--exclude-notebook",
-    "-N",
+    "-xn",
     multiple=True,
     help="Exclude todos from this notebook (repeatable)",
     shell_complete=complete_notebook,
