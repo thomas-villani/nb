@@ -18,13 +18,7 @@ from nb.cli.completion import complete_notebook
 console = Console()
 
 
-@click.group(name="ai")
-def ai_group() -> None:
-    """AI-powered commands for notes."""
-    pass
-
-
-@ai_group.command(name="ask")
+@click.command(name="ask")
 @click.argument("question")
 @click.option(
     "--notebook",
@@ -91,13 +85,13 @@ def ask_command(
 
     Examples:
 
-        nb ai ask "what did we decide about the API design?"
+        nb ask "what did we decide about the API design?"
 
-        nb ai ask "summarize project X" --notebook work
+        nb ask "summarize project X" --notebook work
 
-        nb ai ask "what server version?" -n work/deploy-notes
+        nb ask "what server version?" -n work/deploy-notes
 
-        nb ai ask "who owns deployment?" --tag infrastructure
+        nb ask "who owns deployment?" --tag infrastructure
     """
     from nb.core.llm import LLMConfigError, LLMError
 
@@ -267,58 +261,6 @@ def _display_sources(sources: list) -> None:
         )
 
 
-# Shortcut command at top level
-@click.command(name="ask")
-@click.argument("question")
-@click.option(
-    "--notebook",
-    "-b",
-    "notebook",
-    help="Filter to specific notebook",
-    shell_complete=complete_notebook,
-)
-@click.option("-n", "--note", "note_path", help="Ask about a specific note.")
-@click.option("-t", "--tag", help="Filter to notes with this tag.")
-@click.option("--stream/--no-stream", default=True, help="Stream the response.")
-@click.option("--show-sources/--no-sources", default=True, help="Show source notes.")
-@click.option("--smart/--fast", "use_smart", default=True, help="Model selection.")
-@click.option("-k", "--max-results", default=5, type=int, help="Max documents.")
-@click.pass_context
-def ask_shortcut(
-    ctx: click.Context,
-    question: str,
-    notebook: str | None,
-    note_path: str | None,
-    tag: str | None,
-    stream: bool,
-    show_sources: bool,
-    use_smart: bool,
-    max_results: int,
-) -> None:
-    """Ask a question about your notes using AI.
-
-    This is a shortcut for 'nb ai ask'. See 'nb ai ask --help' for details.
-    """
-    ctx.invoke(
-        ask_command,
-        question=question,
-        notebook=notebook,
-        note_path=note_path,
-        tag=tag,
-        stream=stream,
-        show_sources=show_sources,
-        use_smart=use_smart,
-        max_results=max_results,
-        context_window=3,
-    )
-
-
 def register_ai_commands(cli: click.Group) -> None:
-    """Register AI commands with the main CLI.
-
-    Adds:
-    - 'nb ai' command group with subcommands
-    - 'nb ask' as a top-level shortcut
-    """
-    cli.add_command(ai_group)
-    cli.add_command(ask_shortcut)
+    """Register AI commands with the main CLI."""
+    cli.add_command(ask_command)

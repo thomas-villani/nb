@@ -55,11 +55,40 @@ class LLMRateLimitError(LLMAPIError):
 
 
 @dataclass
+class ToolDefinition:
+    """Definition of a tool the LLM can call."""
+
+    name: str
+    description: str
+    parameters: dict[str, Any]  # JSON Schema for parameters
+
+
+@dataclass
+class ToolCall:
+    """A tool call requested by the LLM."""
+
+    id: str
+    name: str
+    arguments: dict[str, Any]
+
+
+@dataclass
+class ToolResult:
+    """Result of a tool call to send back to the LLM."""
+
+    tool_call_id: str
+    content: str
+    is_error: bool = False
+
+
+@dataclass
 class Message:
     """A message in a conversation."""
 
-    role: str  # "user", "assistant", or "system"
+    role: str  # "user", "assistant", "system", or "tool"
     content: str
+    tool_calls: list[ToolCall] | None = None  # For assistant messages with tool calls
+    tool_result: ToolResult | None = None  # For tool result messages
 
 
 @dataclass
@@ -71,6 +100,7 @@ class LLMResponse:
     input_tokens: int
     output_tokens: int
     stop_reason: str | None = None
+    tool_calls: list[ToolCall] | None = None  # Tools the LLM wants to call
 
 
 @dataclass
@@ -131,6 +161,7 @@ class LLMClient:
         max_tokens: int | None = None,
         temperature: float | None = None,
         stream: bool = False,
+        tools: list[ToolDefinition] | None = None,
     ) -> tuple[dict[str, str], dict[str, Any]]:
         """Build Anthropic API request headers and body."""
         headers = {
@@ -140,11 +171,42 @@ class LLMClient:
         }
 
         # Convert messages to Anthropic format
-        anthropic_messages = [
-            {"role": m.role, "content": m.content}
-            for m in messages
-            if m.role != "system"
-        ]
+        anthropic_messages = []
+        for m in messages:
+            if m.role == "system":
+                continue
+            if m.role == "tool" and m.tool_result:
+                # Tool result message
+                anthropic_messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": m.tool_result.tool_call_id,
+                                "content": m.tool_result.content,
+                                "is_error": m.tool_result.is_error,
+                            }
+                        ],
+                    }
+                )
+            elif m.tool_calls:
+                # Assistant message with tool calls
+                content = []
+                if m.content:
+                    content.append({"type": "text", "text": m.content})
+                for tc in m.tool_calls:
+                    content.append(
+                        {
+                            "type": "tool_use",
+                            "id": tc.id,
+                            "name": tc.name,
+                            "input": tc.arguments,
+                        }
+                    )
+                anthropic_messages.append({"role": "assistant", "content": content})
+            else:
+                anthropic_messages.append({"role": m.role, "content": m.content})
 
         body: dict[str, Any] = {
             "model": model,
@@ -166,6 +228,17 @@ class LLMClient:
         if stream:
             body["stream"] = True
 
+        # Add tools if provided
+        if tools:
+            body["tools"] = [
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "input_schema": t.parameters,
+                }
+                for t in tools
+            ]
+
         return headers, body
 
     def _build_openai_request(
@@ -176,6 +249,7 @@ class LLMClient:
         max_tokens: int | None = None,
         temperature: float | None = None,
         stream: bool = False,
+        tools: list[ToolDefinition] | None = None,
     ) -> tuple[dict[str, str], dict[str, Any]]:
         """Build OpenAI API request headers and body."""
         headers = {
@@ -192,7 +266,36 @@ class LLMClient:
             openai_messages.append({"role": "system", "content": system_content})
 
         for m in messages:
-            if m.role != "system":  # Skip system messages (handled above)
+            if m.role == "system":
+                continue
+            if m.role == "tool" and m.tool_result:
+                # Tool result message
+                openai_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": m.tool_result.tool_call_id,
+                        "content": m.tool_result.content,
+                    }
+                )
+            elif m.tool_calls:
+                # Assistant message with tool calls
+                msg: dict[str, Any] = {
+                    "role": "assistant",
+                    "content": m.content or None,
+                }
+                msg["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.name,
+                            "arguments": json.dumps(tc.arguments),
+                        },
+                    }
+                    for tc in m.tool_calls
+                ]
+                openai_messages.append(msg)
+            else:
                 openai_messages.append({"role": m.role, "content": m.content})
 
         body: dict[str, Any] = {
@@ -209,14 +312,38 @@ class LLMClient:
         if stream:
             body["stream"] = True
 
+        # Add tools if provided
+        if tools:
+            body["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters,
+                    },
+                }
+                for t in tools
+            ]
+
         return headers, body
 
     def _parse_anthropic_response(self, data: dict[str, Any]) -> LLMResponse:
         """Parse Anthropic API response."""
         content = ""
+        tool_calls = []
+
         for block in data.get("content", []):
             if block.get("type") == "text":
                 content += block.get("text", "")
+            elif block.get("type") == "tool_use":
+                tool_calls.append(
+                    ToolCall(
+                        id=block.get("id", ""),
+                        name=block.get("name", ""),
+                        arguments=block.get("input", {}),
+                    )
+                )
 
         usage = data.get("usage", {})
         return LLMResponse(
@@ -225,6 +352,7 @@ class LLMClient:
             input_tokens=usage.get("input_tokens", 0),
             output_tokens=usage.get("output_tokens", 0),
             stop_reason=data.get("stop_reason"),
+            tool_calls=tool_calls if tool_calls else None,
         )
 
     def _parse_openai_response(self, data: dict[str, Any]) -> LLMResponse:
@@ -232,11 +360,28 @@ class LLMClient:
         choices = data.get("choices", [])
         content = ""
         stop_reason = None
+        tool_calls = []
 
         if choices:
             message = choices[0].get("message", {})
-            content = message.get("content", "")
+            content = message.get("content", "") or ""
             stop_reason = choices[0].get("finish_reason")
+
+            # Parse tool calls
+            for tc in message.get("tool_calls", []):
+                if tc.get("type") == "function":
+                    func = tc.get("function", {})
+                    try:
+                        args = json.loads(func.get("arguments", "{}"))
+                    except json.JSONDecodeError:
+                        args = {}
+                    tool_calls.append(
+                        ToolCall(
+                            id=tc.get("id", ""),
+                            name=func.get("name", ""),
+                            arguments=args,
+                        )
+                    )
 
         usage = data.get("usage", {})
         return LLMResponse(
@@ -245,6 +390,7 @@ class LLMClient:
             input_tokens=usage.get("prompt_tokens", 0),
             output_tokens=usage.get("completion_tokens", 0),
             stop_reason=stop_reason,
+            tool_calls=tool_calls if tool_calls else None,
         )
 
     def _handle_error_response(self, response: httpx.Response) -> None:
@@ -276,6 +422,7 @@ class LLMClient:
         max_tokens: int | None = None,
         temperature: float | None = None,
         use_smart_model: bool = True,
+        tools: list[ToolDefinition] | None = None,
     ) -> LLMResponse:
         """Send a completion request to the LLM.
 
@@ -287,9 +434,11 @@ class LLMClient:
             temperature: Sampling temperature (overrides config).
             use_smart_model: If True and model not specified, use smart model.
                            If False, use fast model.
+            tools: Optional list of tools the LLM can call.
 
         Returns:
             LLMResponse with the generated content and metadata.
+            If tools were called, response.tool_calls will contain them.
 
         Raises:
             LLMAPIError: If the API request fails.
@@ -303,11 +452,11 @@ class LLMClient:
 
         if self.config.provider == "anthropic":
             headers, body = self._build_anthropic_request(
-                messages, model, system, max_tokens, temperature
+                messages, model, system, max_tokens, temperature, tools=tools
             )
         else:
             headers, body = self._build_openai_request(
-                messages, model, system, max_tokens, temperature
+                messages, model, system, max_tokens, temperature, tools=tools
             )
 
         with httpx.Client(timeout=DEFAULT_TIMEOUT) as client:

@@ -29,13 +29,6 @@ class TestAskCommand:
         assert "--note" in result.output
         assert "--tag" in result.output
 
-    def test_ai_ask_help(self, runner):
-        """Test that nb ai ask --help works."""
-        result = runner.invoke(cli, ["ai", "ask", "--help"])
-
-        assert result.exit_code == 0
-        assert "Ask a question about your notes" in result.output
-
     def test_ask_without_api_key(self, runner, mock_cli_config):
         """Test that ask fails gracefully without API key."""
         from nb.core.llm import LLMConfigError
@@ -195,22 +188,3 @@ class TestAskCommand:
             mock_ask.assert_called_once()
             call_kwargs = mock_ask.call_args.kwargs
             assert call_kwargs.get("use_smart_model") is False
-
-
-class TestAIGroup:
-    """Tests for the nb ai command group."""
-
-    def test_ai_help(self, runner):
-        """Test that nb ai --help works."""
-        result = runner.invoke(cli, ["ai", "--help"])
-
-        assert result.exit_code == 0
-        assert "AI-powered commands" in result.output
-        assert "ask" in result.output
-
-    def test_ai_no_subcommand(self, runner):
-        """Test that nb ai without subcommand shows help."""
-        result = runner.invoke(cli, ["ai"])
-
-        # Should show help or usage
-        assert result.exit_code == 0 or "Usage" in result.output

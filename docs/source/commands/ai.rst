@@ -79,15 +79,6 @@ Ask questions about your notes using AI-powered retrieval augmented generation (
    # Retrieve more context for complex questions
    nb ask "comprehensive overview of the project" -k 10
 
-nb ai ask
----------
-
-Full form of the ask command with the same options.
-
-**Usage:** ``nb ai ask [OPTIONS] QUESTION``
-
-This is the full command path. ``nb ask`` is a convenient shortcut.
-
 Configuration
 -------------
 
@@ -145,14 +136,3 @@ Model selection
 
 - Use ``--smart`` (default) for complex questions, analysis, and summaries
 - Use ``--fast`` for simple lookups and quick answers to save cost
-
-Command aliases
----------------
-
-.. list-table::
-   :header-rows: 1
-
-   * - Alias
-     - Command
-   * - ``ask``
-     - ``ai ask``
