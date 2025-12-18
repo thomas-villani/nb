@@ -127,18 +127,19 @@ todo_exclude: true
 - [x] Allow `tb todo due` to allow multiple todo items, and allow "next week" or "+7" as options too
 - [x] Add a way to create a log-style command `nb log` which is like `nb add` but will insert a date/time as well.
 - [x] Add "overdue-by-notebook" to stats and "what's behind"
-- [ ] give notes a unique ID as well so they can be quick loaded and included on listings like the todos
 - [x] Streaming command improvements
   - [x] Need a way to have the stream output go straight to stdout if piped
   - [x] Should show recently modified (most recent first) by default
   - [x] Add a way to search within TUI
 - [x] Add an interactive search TUI
+- [x] `nb mv`, `nb cp` to move and copy notes
+- [x] `nb export` to export notes/notebooks
+- [ ] give notes a unique ID as well so they can be quick loaded and included on listings like the todos
 - [ ] Need to improve the `nb list` command - should have a way to list recently modified. Should allow combining `nb list --week` and --details, etc.
 - [ ] Need to allow `nb history` to show recently modified as well
 - [ ] Allow pinned notes with `nb pin <NOTE>` and `nb pinned`
 - [ ] Need to add options to grep and search to output source only (no content)
-- [x] `nb mv`, `nb cp` to move and copy notes
-- [x] `nb export` to export notes/notebooks
+- [ ] Is it possible to link a whole directory and have the notes/todos get pulled in as they are created (on reindex)
 
 ### Phase 5: Wijjit TUI
 - [x] Full Wijjit-based todo list view with richer interactions #feature
@@ -164,8 +165,9 @@ todo_exclude: true
 
 ### AI Ideas:
 - [ ] Generate narrative of what was completed in the week
-- [ ] Summarize notes, generate TL;DR
-- [ ] Weekly/daily planner
+- [x] Summarize notes, generate TL;DR
+- [x] Weekly/daily planner
+  - [ ] Need to allow filtering by notebook to make a plan for specific notebook(s)
 - [ ] Extract from meeting transcripts and other notes
 - [ ] Auto-schedule todos and calendar
 - [ ] Auto-research

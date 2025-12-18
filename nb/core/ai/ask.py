@@ -30,7 +30,7 @@ MODEL_CONTEXT_LIMITS = {
     "claude-haiku-3-5-20241022": 180000,
     "claude-3-5-sonnet": 180000,
     "claude-3-haiku": 180000,
-    # OpenAI models
+    # OpenAI models - MUST UPDATE WITH GPT5
     "gpt-4o": 120000,
     "gpt-4o-mini": 120000,
     "gpt-4-turbo": 120000,

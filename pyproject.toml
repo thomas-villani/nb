@@ -31,11 +31,7 @@ dependencies = [
     "wijjit",
     "gitpython>=3.1.0",  # Git integration for version control
 ]
-[project.scripts]
-nb = "nb.cli:main"
-nbt = "nb.cli:main_todo"
-
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=7.0",
     "pytest-cov",
@@ -45,16 +41,28 @@ dev = [
     "types-pyyaml>=6.0.12.20250915",
     "types-python-dateutil>=2.9.0.20251115",
     "isort>=7.0.0",
-    "sphinx>=7.0",
-    "sphinx-rtd-theme>=2.0",
-    "types-pyperclip>=1.9.0.20250801",
+    "types-pyperclip>=1.9.0.20250801"
 ]
+docs = [
+    "sphinx>=7.0",
+    "sphinx-rtd-theme>=2.0"
+]
+[project.scripts]
+nb = "nb.cli:main"
+nbt = "nb.cli:main_todo"
+
+[project.optional-dependencies]
 recorder = [
     "sounddevice>=0.4.6",
     "soundfile>=0.12.0",
     "numpy>=1.24.0",
     "deepgram-sdk>=3.0.0",
 ]
+calendar = [
+    "pywin32>=306; sys_platform == 'win32'",
+]
+
+
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -117,6 +125,9 @@ module = [
     "soundfile",
     "git",
     "git.*",
+    "win32com",
+    "win32com.*",
+    "pywintypes",
 ]
 ignore_missing_imports = true
 

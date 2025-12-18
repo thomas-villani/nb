@@ -188,3 +188,77 @@ class TestAskCommand:
             mock_ask.assert_called_once()
             call_kwargs = mock_ask.call_args.kwargs
             assert call_kwargs.get("use_smart_model") is False
+
+
+class TestPlanCommand:
+    """Tests for the nb plan command."""
+
+    def test_plan_help(self, runner):
+        """Test that plan --help works."""
+        result = runner.invoke(cli, ["plan", "--help"])
+
+        assert result.exit_code == 0
+        assert "AI-assisted planning" in result.output
+        assert "week" in result.output
+        assert "today" in result.output
+
+    def test_plan_week_help(self, runner):
+        """Test that plan week --help works."""
+        result = runner.invoke(cli, ["plan", "week", "--help"])
+
+        assert result.exit_code == 0
+        assert "Plan the upcoming week" in result.output
+        assert "--notebook" in result.output
+        assert "--tag" in result.output
+        assert "--interactive" in result.output
+
+    def test_plan_today_help(self, runner):
+        """Test that plan today --help works."""
+        result = runner.invoke(cli, ["plan", "today", "--help"])
+
+        assert result.exit_code == 0
+        assert "Plan or replan today" in result.output
+        assert "--no-calendar" in result.output
+        assert "--prompt" in result.output
+
+    def test_plan_week_without_api_key(self, runner, mock_cli_config):
+        """Test that plan week fails gracefully without API key."""
+        from nb.core.llm import LLMConfigError
+
+        with (
+            patch(
+                "nb.core.ai.planning.get_llm_client",
+                side_effect=LLMConfigError("No API key configured"),
+            ),
+            patch("nb.core.ai.planning.get_config", return_value=mock_cli_config),
+        ):
+            result = runner.invoke(cli, ["plan", "week", "--no-stream"])
+
+            assert result.exit_code == 1
+            assert "Configuration error" in result.output or "API key" in result.output
+
+    def test_plan_week_option_parsing(self, runner):
+        """Test that plan week parses options correctly."""
+        # Just verify that options are accepted without error
+        result = runner.invoke(
+            cli,
+            ["plan", "week", "--notebook", "work", "--help"],
+        )
+        assert result.exit_code == 0
+        assert "--notebook" in result.output
+
+    def test_plan_today_option_parsing(self, runner):
+        """Test that plan today parses options correctly."""
+        result = runner.invoke(
+            cli,
+            ["plan", "today", "--prompt", "Focus on urgent items", "--help"],
+        )
+        assert result.exit_code == 0
+        assert "--prompt" in result.output
+
+    def test_plan_week_smart_fast_options(self, runner):
+        """Test that --smart and --fast options are mutually exclusive flags."""
+        # Verify --smart is in help
+        result = runner.invoke(cli, ["plan", "week", "--help"])
+        assert "--smart" in result.output
+        assert "--fast" in result.output

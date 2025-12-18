@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -219,11 +220,15 @@ class LLMClient:
         elif self.config.temperature is not None:
             body["temperature"] = self.config.temperature
 
+        date_part = f"The current date and time is {datetime.now().strftime("%c")}"
+
         # Add system prompt
         if system:
-            body["system"] = system
+            body["system"] = system + "\n" + date_part
         elif self.config.system_prompt:
-            body["system"] = self.config.system_prompt
+            body["system"] = self.config.system_prompt + "\n" + date_part
+        else:
+            body["system"] = "You are a helpful assistant\n" + date_part
 
         if stream:
             body["stream"] = True

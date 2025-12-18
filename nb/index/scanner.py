@@ -750,17 +750,21 @@ def rebuild_search_index(
     count = 0
     batch: list[tuple[Note, str]] = []
     pending_progress = 0  # Track notes added to batch but not yet reported
+    first_error: Exception | None = None  # Track first error for reporting
 
     def flush_batch() -> int:
         """Flush the current batch to the search index."""
-        nonlocal batch
+        nonlocal batch, first_error
         if not batch:
             return 0
         try:
             indexed = search.index_notes_batch(batch)
             batch = []
             return indexed
-        except Exception:
+        except Exception as e:
+            # Capture first error for reporting
+            if first_error is None:
+                first_error = e
             # Fall back to one-by-one indexing on batch failure
             indexed = 0
             for note, content in batch:
@@ -822,6 +826,10 @@ def rebuild_search_index(
         count += indexed
         if on_progress:
             on_progress(pending_progress)  # Advance by remaining count
+
+    # If no notes were indexed but we had notes to index, raise the first error
+    if count == 0 and first_error is not None:
+        raise first_error
 
     return count
 
@@ -907,17 +915,21 @@ def sync_search_index(
     count = 0
     batch: list[tuple[Note, str]] = []
     pending_progress = 0  # Track notes added to batch but not yet reported
+    first_error: Exception | None = None  # Track first error for reporting
 
     def flush_batch() -> int:
         """Flush the current batch to the search index."""
-        nonlocal batch
+        nonlocal batch, first_error
         if not batch:
             return 0
         try:
             indexed = search.index_notes_batch(batch)
             batch = []
             return indexed
-        except Exception:
+        except Exception as e:
+            # Capture first error for reporting
+            if first_error is None:
+                first_error = e
             # Fall back to one-by-one indexing on batch failure
             indexed = 0
             for note, content in batch:
@@ -983,6 +995,10 @@ def sync_search_index(
         count += indexed
         if on_progress:
             on_progress(pending_progress)  # Advance by remaining count
+
+    # If no notes were synced but we had notes to sync, raise the first error
+    if count == 0 and first_error is not None:
+        raise first_error
 
     return count
 

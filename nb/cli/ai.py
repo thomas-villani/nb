@@ -7,15 +7,460 @@ question answering (RAG), summarization, and planning.
 from __future__ import annotations
 
 import sys
+from typing import Literal
 
 import click
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.table import Table
 
 from nb.cli.completion import complete_notebook
 
 console = Console()
+
+
+# ============================================================================
+# Plan Command Group
+# ============================================================================
+
+
+@click.group(name="plan")
+def plan_group():
+    """AI-assisted planning commands.
+
+    Generate daily or weekly plans based on your todos, calendar,
+    and recent notes. Plans can be refined interactively and saved
+    to notes.
+
+    Examples:
+
+        nb plan week                     # Plan the upcoming week
+
+        nb plan today                    # Plan or replan today
+
+        nb plan week --notebook work     # Scope to work notebook
+
+        nb plan week --interactive       # Refine plan interactively
+    """
+    pass
+
+
+@plan_group.command(name="week")
+@click.option(
+    "--notebook",
+    "-b",
+    "notebook",
+    help="Scope to specific notebook.",
+    shell_complete=complete_notebook,
+)
+@click.option(
+    "--tag",
+    "-t",
+    "tag",
+    help="Scope to todos with this tag.",
+)
+@click.option(
+    "--note",
+    "-n",
+    "note_path",
+    is_flag=False,
+    flag_value="today",
+    default=None,
+    help="Write plan to note. Use without value for today's note, or specify path.",
+)
+@click.option(
+    "--prompt",
+    "-p",
+    "custom_prompt",
+    help="Custom instructions for the plan.",
+)
+@click.option(
+    "--no-calendar",
+    is_flag=True,
+    help="Skip calendar integration.",
+)
+@click.option(
+    "--interactive",
+    "-i",
+    is_flag=True,
+    help="Interactive mode to refine plan through conversation.",
+)
+@click.option(
+    "--stream/--no-stream",
+    default=True,
+    help="Stream the response (default: stream).",
+)
+@click.option(
+    "--smart/--fast",
+    "use_smart",
+    default=True,
+    help="Use smart model (better) or fast model (cheaper). Default: smart.",
+)
+def plan_week_command(
+    notebook: str | None,
+    tag: str | None,
+    note_path: str | None,
+    custom_prompt: str | None,
+    no_calendar: bool,
+    interactive: bool,
+    stream: bool,
+    use_smart: bool,
+) -> None:
+    """Plan the upcoming week.
+
+    Gathers incomplete todos, calendar events, and recent notes to
+    generate a weekly plan with day-by-day breakdown.
+
+    Examples:
+
+        nb plan week
+
+        nb plan week --notebook work --no-calendar
+
+        nb plan week --interactive --note
+
+        nb plan week --prompt "Focus on urgent items only"
+    """
+    _run_planning(
+        horizon="week",
+        notebook=notebook,
+        tag=tag,
+        note_path=note_path,
+        custom_prompt=custom_prompt,
+        include_calendar=not no_calendar,
+        interactive=interactive,
+        stream=stream,
+        use_smart=use_smart,
+    )
+
+
+@plan_group.command(name="today")
+@click.option(
+    "--notebook",
+    "-b",
+    "notebook",
+    help="Scope to specific notebook.",
+    shell_complete=complete_notebook,
+)
+@click.option(
+    "--tag",
+    "-t",
+    "tag",
+    help="Scope to todos with this tag.",
+)
+@click.option(
+    "--note",
+    "-n",
+    "note_path",
+    is_flag=False,
+    flag_value="today",
+    default=None,
+    help="Write plan to note. Use without value for today's note, or specify path.",
+)
+@click.option(
+    "--prompt",
+    "-p",
+    "custom_prompt",
+    help="Custom instructions for the plan.",
+)
+@click.option(
+    "--no-calendar",
+    is_flag=True,
+    help="Skip calendar integration.",
+)
+@click.option(
+    "--interactive",
+    "-i",
+    is_flag=True,
+    help="Interactive mode to refine plan through conversation.",
+)
+@click.option(
+    "--stream/--no-stream",
+    default=True,
+    help="Stream the response (default: stream).",
+)
+@click.option(
+    "--smart/--fast",
+    "use_smart",
+    default=True,
+    help="Use smart model (better) or fast model (cheaper). Default: smart.",
+)
+def plan_today_command(
+    notebook: str | None,
+    tag: str | None,
+    note_path: str | None,
+    custom_prompt: str | None,
+    no_calendar: bool,
+    interactive: bool,
+    stream: bool,
+    use_smart: bool,
+) -> None:
+    """Plan or replan today.
+
+    Focuses on what can realistically be accomplished today based on
+    your todos, calendar, and availability.
+
+    Examples:
+
+        nb plan today
+
+        nb plan today --interactive
+
+        nb plan today --note --prompt "I have a meeting at 2pm"
+    """
+    _run_planning(
+        horizon="day",
+        notebook=notebook,
+        tag=tag,
+        note_path=note_path,
+        custom_prompt=custom_prompt,
+        include_calendar=not no_calendar,
+        interactive=interactive,
+        stream=stream,
+        use_smart=use_smart,
+    )
+
+
+def _run_planning(
+    horizon: Literal["day", "week"],
+    notebook: str | None,
+    tag: str | None,
+    note_path: str | None,
+    custom_prompt: str | None,
+    include_calendar: bool,
+    interactive: bool,
+    stream: bool,
+    use_smart: bool,
+) -> None:
+    """Shared implementation for plan commands."""
+    from nb.core.ai.planning import (
+        PlanScope,
+        gather_planning_context,
+    )
+    from nb.core.llm import LLMConfigError, LLMError
+
+    try:
+        # Build scope
+        scope = PlanScope(
+            notebooks=[notebook] if notebook else None,
+            tags=[tag] if tag else None,
+        )
+
+        # Gather context
+        with console.status("[bold blue]Gathering planning context...[/bold blue]"):
+            context = gather_planning_context(
+                scope=scope,
+                horizon=horizon,
+                include_calendar=include_calendar,
+            )
+
+        # Display context summary
+        _display_context_summary(context)
+
+        if interactive:
+            # Run interactive planning session
+            _run_interactive_planning(context, use_smart, stream)
+        else:
+            # Generate plan directly
+            if stream:
+                _run_streaming_plan(context, custom_prompt, use_smart)
+            else:
+                _run_non_streaming_plan(context, custom_prompt, use_smart)
+
+    except LLMConfigError as e:
+        console.print(f"[red]Configuration error:[/red] {e}")
+        console.print(
+            "\n[dim]Hint: Set ANTHROPIC_API_KEY environment variable or configure "
+            "with 'nb config set llm.api_key <key>'[/dim]"
+        )
+        sys.exit(1)
+    except LLMError as e:
+        console.print(f"[red]LLM error:[/red] {e}")
+        sys.exit(1)
+    except ValueError as e:
+        console.print(f"[yellow]{e}[/yellow]")
+        sys.exit(1)
+
+
+def _display_context_summary(context) -> None:
+    """Display a summary of the planning context."""
+    from nb.core.ai.planning import PlanningContext
+
+    ctx: PlanningContext = context
+
+    # Build summary table
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column("Label", style="dim")
+    table.add_column("Value")
+
+    table.add_row("Horizon", ctx.horizon)
+    table.add_row("Total todos", str(len(ctx.todos)))
+
+    if ctx.overdue_todos:
+        table.add_row("Overdue", f"[red]{len(ctx.overdue_todos)}[/red]")
+    if ctx.in_progress_todos:
+        table.add_row("In progress", f"[yellow]{len(ctx.in_progress_todos)}[/yellow]")
+    if ctx.calendar_events:
+        table.add_row("Calendar events", str(len(ctx.calendar_events)))
+    if ctx.availability_blocks:
+        total_mins = sum(b.duration_minutes for b in ctx.availability_blocks)
+        table.add_row("Available time", f"~{total_mins // 60}h {total_mins % 60}m")
+
+    console.print(
+        Panel(table, title="[bold]Planning Context[/bold]", border_style="blue")
+    )
+    console.print()
+
+
+def _run_streaming_plan(context, custom_prompt: str | None, use_smart: bool) -> None:
+    """Run streaming plan generation."""
+    from nb.core.ai.planning import generate_plan_stream
+
+    console.print("[bold]Generating plan...[/bold]")
+    console.print()
+
+    full_response = ""
+    for chunk in generate_plan_stream(
+        context,
+        use_smart_model=use_smart,
+        custom_prompt=custom_prompt,
+    ):
+        if chunk.content:
+            console.print(chunk.content, end="")
+            full_response += chunk.content
+
+        if chunk.is_final and (chunk.input_tokens or chunk.output_tokens):
+            console.print()
+            console.print(
+                f"\n[dim]Tokens: {chunk.input_tokens} in, {chunk.output_tokens} out[/dim]"
+            )
+
+
+def _run_non_streaming_plan(
+    context, custom_prompt: str | None, use_smart: bool
+) -> None:
+    """Run non-streaming plan generation."""
+    from nb.core.ai.planning import generate_plan
+
+    with console.status("[bold blue]Generating plan...[/bold blue]"):
+        result = generate_plan(
+            context,
+            use_smart_model=use_smart,
+            custom_prompt=custom_prompt,
+        )
+
+    console.print(Markdown(result.raw_response))
+
+    if result.input_tokens or result.output_tokens:
+        console.print(
+            f"\n[dim]Tokens: {result.input_tokens} in, {result.output_tokens} out[/dim]"
+        )
+
+
+def _run_interactive_planning(context, use_smart: bool, stream: bool) -> None:
+    """Run interactive planning session."""
+    from nb.core.ai.planning import (
+        append_plan_to_note,
+        continue_planning_session,
+        continue_planning_session_stream,
+        create_planning_session,
+    )
+
+    session = create_planning_session(context)
+
+    console.print("[bold]Interactive Planning Mode[/bold]")
+    console.print("[dim]Type your requests to refine the plan. Commands:[/dim]")
+    console.print("[dim]  save - Save current plan to today's note[/dim]")
+    console.print("[dim]  done/quit/exit - Finish and exit[/dim]")
+    console.print()
+
+    # Generate initial plan
+    initial_prompt = "Please create an initial plan based on the context provided."
+
+    if stream:
+        console.print("[bold cyan]Assistant:[/bold cyan] ", end="")
+        for chunk_content, _result in continue_planning_session_stream(
+            session, initial_prompt, use_smart_model=use_smart
+        ):
+            if chunk_content:
+                console.print(chunk_content, end="")
+        console.print()
+    else:
+        with console.status("[bold blue]Generating initial plan...[/bold blue]"):
+            response, _result = continue_planning_session(
+                session, initial_prompt, use_smart_model=use_smart
+            )
+        console.print("[bold cyan]Assistant:[/bold cyan]")
+        console.print(Markdown(response))
+
+    # Interactive loop
+    while True:
+        console.print()
+        try:
+            user_input = console.input("[bold green]You:[/bold green] ")
+        except (EOFError, KeyboardInterrupt):
+            console.print()
+            break
+
+        user_input = user_input.strip()
+        if not user_input:
+            continue
+
+        # Check for commands
+        lower_input = user_input.lower()
+        if lower_input in ("done", "quit", "exit", "q"):
+            break
+
+        if lower_input == "save":
+            if session.current_plan:
+                from nb.core.ai.planning import PlanResult
+
+                plan = PlanResult(
+                    horizon=context.horizon,
+                    raw_response=session.current_plan,
+                )
+                note_path = append_plan_to_note(plan)
+                console.print(f"[green]Plan saved to {note_path}[/green]")
+            else:
+                console.print("[yellow]No plan to save yet.[/yellow]")
+            continue
+
+        # Continue conversation
+        if stream:
+            console.print("[bold cyan]Assistant:[/bold cyan] ", end="")
+            for chunk_content, _result in continue_planning_session_stream(
+                session, user_input, use_smart_model=use_smart
+            ):
+                if chunk_content:
+                    console.print(chunk_content, end="")
+            console.print()
+        else:
+            with console.status("[bold blue]Thinking...[/bold blue]"):
+                response, _result = continue_planning_session(
+                    session, user_input, use_smart_model=use_smart
+                )
+            console.print("[bold cyan]Assistant:[/bold cyan]")
+            console.print(Markdown(response))
+
+    # Offer to save on exit
+    if session.current_plan:
+        console.print()
+        save = console.input("[dim]Save plan to today's note? [y/N]:[/dim] ")
+        if save.lower() in ("y", "yes"):
+            from nb.core.ai.planning import PlanResult
+
+            plan = PlanResult(
+                horizon=context.horizon,
+                raw_response=session.current_plan,
+            )
+            note_path = append_plan_to_note(plan)
+            console.print(f"[green]Plan saved to {note_path}[/green]")
+
+
+# ============================================================================
+# Ask Command
+# ============================================================================
 
 
 @click.command(name="ask")
@@ -261,6 +706,377 @@ def _display_sources(sources: list) -> None:
         )
 
 
+# ============================================================================
+# Summarize Command
+# ============================================================================
+
+
+def summarize_options(f):
+    """Shared options for summarize and tldr commands."""
+    # Apply options in reverse order (Click decorator stacking)
+    f = click.option(
+        "--smart/--fast",
+        "use_smart",
+        default=True,
+        help="Use smart model (better) or fast model (cheaper). Default: smart.",
+    )(f)
+    f = click.option(
+        "--stream/--no-stream",
+        default=True,
+        help="Stream the response (default: stream).",
+    )(f)
+    f = click.option(
+        "--prompt",
+        "-p",
+        "custom_prompt",
+        help="Custom instructions for the summary.",
+    )(f)
+    f = click.option(
+        "--front-matter",
+        "-fm",
+        is_flag=True,
+        help="Store summary in source note's YAML frontmatter.",
+    )(f)
+    f = click.option(
+        "--note",
+        "-n",
+        "output_note",
+        is_flag=False,
+        flag_value="today",
+        default=None,
+        help="Save summary to note. Use without value for today's note, or specify path.",
+    )(f)
+    f = click.option(
+        "--days",
+        "-d",
+        type=int,
+        help="Limit to last N days (for notebook/tag summaries).",
+    )(f)
+    f = click.option(
+        "--tag",
+        "-t",
+        help="Summarize notes with this tag.",
+    )(f)
+    f = click.option(
+        "--notebook",
+        "-b",
+        "notebook",
+        help="Summarize notes from this notebook.",
+        shell_complete=complete_notebook,
+    )(f)
+    f = click.argument("target", required=False)(f)
+    return f
+
+
+@click.command(name="summarize")
+@summarize_options
+def summarize_command(
+    target: str | None,
+    notebook: str | None,
+    tag: str | None,
+    days: int | None,
+    output_note: str | None,
+    front_matter: bool,
+    custom_prompt: str | None,
+    stream: bool,
+    use_smart: bool,
+) -> None:
+    """Summarize notes with AI.
+
+    Generates a comprehensive summary of one or more notes.
+
+    Examples:
+
+        nb summarize                      # Summarize today's note
+
+        nb summarize yesterday            # Summarize yesterday's note
+
+        nb summarize work                 # Summarize all notes in work notebook
+
+        nb summarize work/meeting-notes   # Summarize specific note
+
+        nb summarize --tag project-x      # Summarize notes with tag
+
+        nb summarize work --days 7        # Week summary for notebook
+
+        nb summarize --note               # Save to today's note
+
+        nb summarize --front-matter       # Store in source's frontmatter
+    """
+    _run_summarize(
+        target=target,
+        notebook=notebook,
+        tag=tag,
+        days=days,
+        output_note=output_note,
+        front_matter=front_matter,
+        custom_prompt=custom_prompt,
+        stream=stream,
+        use_smart=use_smart,
+        mode="summarize",
+    )
+
+
+@click.command(name="tldr")
+@summarize_options
+def tldr_command(
+    target: str | None,
+    notebook: str | None,
+    tag: str | None,
+    days: int | None,
+    output_note: str | None,
+    front_matter: bool,
+    custom_prompt: str | None,
+    stream: bool,
+    use_smart: bool,
+) -> None:
+    """Quick 1-2 sentence summary of notes.
+
+    Like 'summarize' but produces ultra-brief summaries.
+
+    Examples:
+
+        nb tldr                           # TLDR today's note
+
+        nb tldr work --days 7             # Week TLDR for work
+
+        nb tldr --tag meeting             # TLDR meeting notes
+    """
+    _run_summarize(
+        target=target,
+        notebook=notebook,
+        tag=tag,
+        days=days,
+        output_note=output_note,
+        front_matter=front_matter,
+        custom_prompt=custom_prompt,
+        stream=stream,
+        use_smart=use_smart,
+        mode="tldr",
+    )
+
+
+def _run_summarize(
+    target: str | None,
+    notebook: str | None,
+    tag: str | None,
+    days: int | None,
+    output_note: str | None,
+    front_matter: bool,
+    custom_prompt: str | None,
+    stream: bool,
+    use_smart: bool,
+    mode: Literal["summarize", "tldr"],
+) -> None:
+    """Shared implementation for summarize and tldr commands."""
+    from pathlib import Path
+
+    from nb.core.ai.summarize import (
+        append_summary_to_note,
+        resolve_target,
+        update_note_frontmatter_summary,
+    )
+    from nb.core.llm import LLMConfigError, LLMError
+
+    try:
+        # Resolve target to notes
+        with console.status("[bold blue]Finding notes to summarize...[/bold blue]"):
+            resolved = resolve_target(
+                target=target,
+                notebook=notebook,
+                tag=tag,
+                days=days,
+            )
+
+        if not resolved.notes:
+            console.print("[yellow]No notes found to summarize.[/yellow]")
+            sys.exit(1)
+
+        # Display what we're summarizing
+        console.print(
+            f"[dim]Summarizing: {resolved.description} ({len(resolved.notes)} note(s))[/dim]"
+        )
+        console.print()
+
+        # Single note vs multi-note handling
+        if len(resolved.notes) == 1:
+            # Single note - direct summarization
+            result = _summarize_single_note(
+                resolved.notes[0],
+                mode=mode,
+                custom_prompt=custom_prompt,
+                stream=stream,
+                use_smart=use_smart,
+            )
+        else:
+            # Multi-note - map-reduce
+            result = _summarize_multiple_notes(
+                resolved,
+                mode=mode,
+                custom_prompt=custom_prompt,
+                use_smart=use_smart,
+            )
+
+        # Handle --front-matter: update source note(s)
+        if front_matter:
+            for note in resolved.notes:
+                # Find individual summary for this note
+                individual = next(
+                    (s for s in result.individual_summaries if s.path == note.path),
+                    None,
+                )
+                summary_text = individual.summary if individual else result.summary
+                update_note_frontmatter_summary(note.path, summary_text)
+            console.print(
+                f"\n[green]Updated frontmatter in {len(resolved.notes)} note(s)[/green]"
+            )
+
+        # Handle --note: save to output note
+        if output_note:
+            note_path = None if output_note == "today" else Path(output_note)
+            saved_path = append_summary_to_note(
+                result.summary,
+                resolved.description,
+                note_path=note_path,
+            )
+            console.print(f"\n[green]Summary saved to {saved_path}[/green]")
+
+        # Token usage
+        if result.input_tokens or result.output_tokens:
+            console.print(
+                f"\n[dim]Tokens: {result.input_tokens} in, {result.output_tokens} out[/dim]"
+            )
+
+    except LLMConfigError as e:
+        console.print(f"[red]Configuration error:[/red] {e}")
+        console.print(
+            "\n[dim]Hint: Set ANTHROPIC_API_KEY environment variable or configure "
+            "with 'nb config set llm.api_key <key>'[/dim]"
+        )
+        sys.exit(1)
+    except LLMError as e:
+        console.print(f"[red]LLM error:[/red] {e}")
+        sys.exit(1)
+    except ValueError as e:
+        console.print(f"[yellow]{e}[/yellow]")
+        sys.exit(1)
+
+
+def _summarize_single_note(
+    note,
+    mode: Literal["summarize", "tldr"],
+    custom_prompt: str | None,
+    stream: bool,
+    use_smart: bool,
+):
+    """Summarize a single note, handling streaming vs non-streaming."""
+    from nb.core.ai.summarize import (
+        NoteSummary,
+        SummarizeResult,
+        summarize_note,
+        summarize_note_stream,
+    )
+
+    if stream:
+        console.print(f"[bold]{'TLDR' if mode == 'tldr' else 'Summary'}:[/bold]")
+        full_response = ""
+        final_chunk = None
+
+        for chunk in summarize_note_stream(
+            note,
+            mode=mode,
+            custom_prompt=custom_prompt,
+            use_smart_model=use_smart,
+        ):
+            if chunk.content:
+                console.print(chunk.content, end="")
+                full_response += chunk.content
+            if chunk.is_final:
+                final_chunk = chunk
+
+        console.print()  # Final newline
+
+        return SummarizeResult(
+            summary=full_response,
+            sources=[note],
+            individual_summaries=[
+                NoteSummary(
+                    path=note.path,
+                    title=note.title,
+                    summary=full_response,
+                    notebook=note.notebook,
+                )
+            ],
+            input_tokens=final_chunk.input_tokens if final_chunk else 0,
+            output_tokens=final_chunk.output_tokens if final_chunk else 0,
+        )
+    else:
+        with console.status(
+            f"[bold blue]Generating {'TLDR' if mode == 'tldr' else 'summary'}...[/bold blue]"
+        ):
+            summary = summarize_note(
+                note,
+                mode=mode,
+                custom_prompt=custom_prompt,
+                use_smart_model=use_smart,
+            )
+
+        console.print(f"[bold]{'TLDR' if mode == 'tldr' else 'Summary'}:[/bold]")
+        console.print(Markdown(summary.summary))
+
+        # We don't have token info from non-streaming single note
+        return SummarizeResult(
+            summary=summary.summary,
+            sources=[note],
+            individual_summaries=[summary],
+        )
+
+
+def _summarize_multiple_notes(
+    target,
+    mode: Literal["summarize", "tldr"],
+    custom_prompt: str | None,
+    use_smart: bool,
+):
+    """Summarize multiple notes using map-reduce."""
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+
+    from nb.core.ai.summarize import summarize_notes_map_reduce
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task(
+            f"[bold blue]Summarizing {len(target.notes)} notes...[/bold blue]",
+            total=len(target.notes),
+        )
+
+        def update_progress(current, total, title):
+            progress.update(
+                task,
+                description=f"[bold blue]Summarizing ({current}/{total}): {title}[/bold blue]",
+                completed=current,
+            )
+
+        result = summarize_notes_map_reduce(
+            target,
+            mode=mode,
+            custom_prompt=custom_prompt,
+            use_smart_model=use_smart,
+            progress_callback=update_progress,
+        )
+
+    console.print(f"\n[bold]{'TLDR' if mode == 'tldr' else 'Summary'}:[/bold]")
+    console.print(Markdown(result.summary))
+
+    return result
+
+
 def register_ai_commands(cli: click.Group) -> None:
     """Register AI commands with the main CLI."""
     cli.add_command(ask_command)
+    cli.add_command(plan_group)
+    cli.add_command(summarize_command)
+    cli.add_command(tldr_command)

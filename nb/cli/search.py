@@ -436,12 +436,18 @@ def index_cmd(
         if search_total > 0:
             from nb.index.scanner import rebuild_search_index
 
-            with progress_bar("Rebuilding vectors", total=search_total) as advance:
-                search_count = rebuild_search_index(
-                    notebook=notebook,
-                    on_progress=advance,
+            try:
+                with progress_bar("Rebuilding vectors", total=search_total) as advance:
+                    search_count = rebuild_search_index(
+                        notebook=notebook,
+                        on_progress=advance,
+                    )
+                console.print(
+                    f"[green]Rebuilt vectors for {search_count} notes.[/green]"
                 )
-            console.print(f"[green]Rebuilt vectors for {search_count} notes.[/green]")
+            except Exception as e:
+                console.print(f"[red]Error rebuilding vectors:[/red] {e}")
+                raise SystemExit(1) from None
         else:
             console.print("[dim]No notes to rebuild vectors for.[/dim]")
             console.print(
@@ -497,17 +503,25 @@ def index_cmd(
         if search_total > 0:
             from nb.index.scanner import rebuild_search_index
 
-            with progress_bar("Building embeddings", total=search_total) as advance:
-                search_synced = rebuild_search_index(
-                    notebook=notebook,
-                    on_progress=advance,
-                )
+            try:
+                with progress_bar("Building embeddings", total=search_total) as advance:
+                    search_synced = rebuild_search_index(
+                        notebook=notebook,
+                        on_progress=advance,
+                    )
+            except Exception as e:
+                console.print(f"[red]Error building embeddings:[/red] {e}")
+                raise SystemExit(1) from None
     else:
         # Sync any notes missing from VectorDB (lightweight operation)
         from nb.index.scanner import sync_search_index
 
-        with spinner("Syncing search index"):
-            search_synced = sync_search_index(notebook=notebook)
+        try:
+            with spinner("Syncing search index"):
+                search_synced = sync_search_index(notebook=notebook)
+        except Exception as e:
+            console.print(f"[red]Error syncing search index:[/red] {e}")
+            raise SystemExit(1) from None
 
     # Clean up notes and todos for files that no longer exist
     removed_count = remove_deleted_notes(notebook=notebook)

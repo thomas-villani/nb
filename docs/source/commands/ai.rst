@@ -1,7 +1,100 @@
 AI Commands
 ===========
 
-AI-powered commands for intelligent note analysis and question answering.
+AI-powered commands for intelligent note analysis, question answering, and planning.
+
+nb plan
+-------
+
+Generate AI-assisted daily or weekly plans based on your todos, calendar, and recent notes.
+
+**Usage:** ``nb plan [week|today] [OPTIONS]``
+
+**Subcommands:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Subcommand
+     - Description
+   * - ``week``
+     - Plan the upcoming week with day-by-day breakdown
+   * - ``today``
+     - Plan or replan today, focusing on what's achievable
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-b, --notebook TEXT``
+     - Scope planning to a specific notebook
+   * - ``-t, --tag TEXT``
+     - Scope to todos with this tag
+   * - ``-n, --note [PATH]``
+     - Write plan to note (default: today's daily note if no path given)
+   * - ``-p, --prompt TEXT``
+     - Add custom instructions for the plan
+   * - ``--no-calendar``
+     - Skip Outlook calendar integration
+   * - ``-i, --interactive``
+     - Interactive mode to refine plan through conversation
+   * - ``--stream / --no-stream``
+     - Stream the response in real-time (default: stream)
+   * - ``--smart / --fast``
+     - Use smart model (better) or fast model (cheaper)
+
+**How it works:**
+
+1. Gathers incomplete todos from your notes
+2. Fetches calendar events from Outlook (on Windows)
+3. Reviews recent daily notes for context
+4. Sends this context to the LLM with planning instructions
+5. Generates a prioritized plan with warnings about overdue items
+
+**Examples:**
+
+.. code-block:: bash
+
+   # Plan the upcoming week
+   nb plan week
+
+   # Plan today with focus on work notebook
+   nb plan today --notebook work
+
+   # Interactive planning session (refine through conversation)
+   nb plan week --interactive
+
+   # Add custom instructions
+   nb plan week --prompt "Focus on urgent items, skip meetings"
+
+   # Save plan to today's daily note
+   nb plan week --note
+
+   # Skip calendar integration (faster, or for non-Windows)
+   nb plan today --no-calendar
+
+**Interactive Mode:**
+
+In interactive mode, you can refine the plan through conversation:
+
+- Type natural requests like "move task X to Tuesday" or "add buffer time"
+- Type ``save`` to save the current plan to your daily note
+- Type ``done``, ``quit``, or ``exit`` to finish
+
+**Calendar Integration:**
+
+On Windows, the plan command can read your Outlook calendar to:
+
+- Show scheduled meetings and events
+- Calculate available time blocks
+- Avoid scheduling conflicts
+
+Install the optional dependency: ``pip install nb-cli[outlook]``
 
 nb ask
 ------

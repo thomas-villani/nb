@@ -135,10 +135,8 @@ class GitConfig:
 class LLMModelConfig:
     """Configuration for LLM model selection per use case."""
 
-    smart: str = "claude-sonnet-4-20250514"  # For complex tasks (planning, analysis)
-    fast: str = (
-        "claude-haiku-3-5-20241022"  # For simple tasks (extraction, quick queries)
-    )
+    smart: str = "claude-sonnet-4-5"  # For complex tasks (planning, analysis)
+    fast: str = "claude-haiku-4-5"  # For simple tasks (extraction, quick queries)
 
 
 @dataclass
