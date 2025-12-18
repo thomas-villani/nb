@@ -101,6 +101,15 @@ Full example:
      auto_commit: true
      commit_message_template: "Update {path}"
 
+   llm:
+     provider: anthropic
+     models:
+       smart: claude-sonnet-4-20250514
+       fast: claude-haiku-3-5-20241022
+     api_key: null            # Uses ANTHROPIC_API_KEY env var if not set
+     max_tokens: 4096
+     temperature: 0.7
+
 Notebook options
 ----------------
 
@@ -264,6 +273,64 @@ Git options
 
 Template variables: ``{path}``, ``{notebook}``, ``{title}``, ``{date}``
 
+LLM options
+-----------
+
+Configure AI features for ``nb ask`` and other AI-powered commands.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``provider``
+     - LLM provider: ``anthropic`` or ``openai``
+   * - ``models.smart``
+     - Model for quality answers (default: ``claude-sonnet-4-20250514``)
+   * - ``models.fast``
+     - Model for quick answers (default: ``claude-haiku-3-5-20241022``)
+   * - ``api_key``
+     - API key (or use environment variable)
+   * - ``base_url``
+     - Custom API endpoint URL
+   * - ``max_tokens``
+     - Maximum tokens in response (default: 4096)
+   * - ``temperature``
+     - Response randomness 0-1 (default: 0.7)
+   * - ``system_prompt``
+     - Custom system prompt for all AI commands
+
+**Environment variables:**
+
+If ``api_key`` is not set, these environment variables are used:
+
+- ``ANTHROPIC_API_KEY`` - for Anthropic Claude models
+- ``OPENAI_API_KEY`` - for OpenAI GPT models
+
+**Example configuration:**
+
+.. code-block:: yaml
+
+   llm:
+     provider: anthropic
+     models:
+       smart: claude-sonnet-4-20250514
+       fast: claude-haiku-3-5-20241022
+     max_tokens: 4096
+     temperature: 0.7
+     system_prompt: |
+       You are a helpful assistant for managing notes and productivity.
+
+**Configure via CLI:**
+
+.. code-block:: bash
+
+   nb config set llm.provider anthropic
+   nb config set llm.models.smart claude-sonnet-4-20250514
+   nb config set llm.models.fast claude-haiku-3-5-20241022
+   nb config set llm.max_tokens 4096
+   nb config set llm.temperature 0.7
+
 Kanban board options
 --------------------
 
@@ -403,3 +470,7 @@ Environment variables
      - Override notes root directory
    * - ``EDITOR``
      - Default editor
+   * - ``ANTHROPIC_API_KEY``
+     - API key for Anthropic Claude models
+   * - ``OPENAI_API_KEY``
+     - API key for OpenAI GPT models

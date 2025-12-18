@@ -1,3 +1,61 @@
+# v0.3.2 - 2025-12-16
+
+Patch release adding Git integration for notes, recorder device testing/auto-config, combined tag views, and a handful of usability bug fixes. No breaking changes.
+
+## New Features
+
+- Add Git integration for notes
+  - New nb.core.git module: init, status, commit, commit_all, push, pull, sync, log, remote, get_status plus helper types for conflicts/errors
+  - CLI commands under `nb git ...`: init, status, commit, push, pull, sync, log, remote; commands registered in `nb.cli`
+  - New GitConfig in `nb.config` with parse/save logic and CLI bindings (list/get/set)
+  - Optional auto-commit hooks integrated into notes operations (create, edit, delete, move); configurable and non-blocking on errors
+  - Defaults: `git.enabled = false` (off by default)
+  - Adds gitpython dependency (pyproject.toml / lockfile entries)
+
+- Add recorder device testing and auto-configuration
+  - New `nb record test` CLI command to scan, test and recommend microphone / loopback devices and optionally persist working config
+  - Helpers to detect device roles (`_is_microphone_device`, `_is_loopback_device`), `test_device()` to verify device openability, and `find_best_devices()` selection logic
+
+- Combined tags view and tag filtering
+  - Show tags aggregated from both notes and todos by default, with source breakdown (e.g., "18t/2n")
+  - New CLI flags `--todos` (`-t`) and `--notes` to filter tag sources (mutually exclusive)
+  - Enforce stricter tag format rules (start with a letter, allow letters/numbers/hyphens/underscores, stored lowercase) and exclude hex color codes from tags
+
+## Improvements
+
+- Tag handling and CLI presentation
+  - Update tag parsing / cleaning to use `is_valid_tag` and avoid treating color codes as tags
+  - `get_tag_stats` now aggregates todo and note tag counts and returns per-source breakdown when requested
+  - CLI shows aggregated counts per notebook/note and top-3 notes per notebook; source breakdown shown only when both sources are displayed
+
+- Recorder and device selection
+  - `find_best_devices()` and improved `find_default_devices()` with API-priority logic (WASAPI / DirectSound / WDM-KS)
+  - Persist device recommendations to YAML and surface user tips (e.g., enable Stereo Mix on Windows)
+  - Validate devices in `start_recording()` and raise clear errors when a chosen device has no input channels to avoid silent failures
+
+- Usability and behavior
+  - Auto-commit behavior is configurable and non-blocking to avoid blocking note operations on VCS errors
+  - Create `.gitignore` template generation when initializing git-aware notebooks
+
+## Bug Fixes
+
+- Fix review selection and navigation
+  - Use highlighted index for current todo selection so arrow-key navigation reflects the highlighted item without requiring Enter
+  - Replace id-based selection fallback with highlighted-index lookup and first-item fallback
+  - Implement `remove_current` to delete the highlighted todo and update highlight (or quit when list becomes empty)
+  - Ensure mark-started and skip actions remove the todo and update stats/messages
+  - Simplify quit behavior and ensure the session exits when all todos are processed
+  - Remove in-app summary view/navigation; print concise summary to stdout after the app quits
+
+## Tests
+
+- Add comprehensive tests for core git functions and CLI behavior (tests/test_git.py)
+- Add device detection and recommendation tests for recorder helpers
+
+## Chores
+
+- Bumped package version to v0.3.2 and updated lockfile entries as needed
+
 # v0.3.1 - 2025-12-15
 
 Patch release with an interactive TUI search, attachment indexing and management, note/todo move & copy plus export capabilities, safer vector reinitialization for embedding provider changes, and config serialization improvements. Includes one breaking CLI change (todo aliases / flags).

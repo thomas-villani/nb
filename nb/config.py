@@ -132,6 +132,33 @@ class GitConfig:
 
 
 @dataclass
+class LLMModelConfig:
+    """Configuration for LLM model selection per use case."""
+
+    smart: str = "claude-sonnet-4-20250514"  # For complex tasks (planning, analysis)
+    fast: str = (
+        "claude-haiku-3-5-20241022"  # For simple tasks (extraction, quick queries)
+    )
+
+
+@dataclass
+class LLMConfig:
+    """Configuration for LLM integration.
+
+    Supports Anthropic (Claude) and OpenAI APIs via direct REST calls.
+    API keys are loaded from environment variables if not set in config.
+    """
+
+    provider: str = "anthropic"  # anthropic, openai
+    models: LLMModelConfig = field(default_factory=LLMModelConfig)
+    api_key: str | None = None  # Uses ANTHROPIC_API_KEY or OPENAI_API_KEY env var
+    base_url: str | None = None  # Custom API endpoint (e.g., for proxies)
+    max_tokens: int = 4096  # Max tokens in response
+    temperature: float = 0.7  # Sampling temperature
+    system_prompt: str | None = None  # Global system prompt for all AI commands
+
+
+@dataclass
 class TodoViewConfig:
     """Configuration for a saved todo view.
 
@@ -230,6 +257,7 @@ class Config:
     clip: ClipConfig = field(default_factory=ClipConfig)
     inbox: InboxConfig = field(default_factory=InboxConfig)
     git: GitConfig = field(default_factory=GitConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
     date_format: str = "%Y-%m-%d"
     time_format: str = "%H:%M"
     daily_title_format: str = "%A, %B %d, %Y"  # e.g., "Friday, November 28, 2025"
@@ -578,6 +606,47 @@ def _parse_git_config(data: dict[str, Any] | None) -> GitConfig:
     )
 
 
+def _parse_llm_models_config(data: dict[str, Any] | None) -> LLMModelConfig:
+    """Parse LLM models configuration."""
+    if data is None:
+        return LLMModelConfig()
+    return LLMModelConfig(
+        smart=data.get("smart", "claude-sonnet-4-20250514"),
+        fast=data.get("fast", "claude-haiku-3-5-20241022"),
+    )
+
+
+def _parse_llm_config(data: dict[str, Any] | None) -> LLMConfig:
+    """Parse LLM configuration.
+
+    API key is loaded from environment variables if not set:
+    - ANTHROPIC_API_KEY for Anthropic provider
+    - OPENAI_API_KEY for OpenAI provider
+    """
+    if data is None:
+        data = {}
+
+    provider = data.get("provider", "anthropic")
+
+    # Get API key from config or environment variable
+    api_key = data.get("api_key")
+    if not api_key:
+        if provider == "anthropic":
+            api_key = os.environ.get("ANTHROPIC_API_KEY")
+        elif provider == "openai":
+            api_key = os.environ.get("OPENAI_API_KEY")
+
+    return LLMConfig(
+        provider=provider,
+        models=_parse_llm_models_config(data.get("models")),
+        api_key=api_key,
+        base_url=data.get("base_url"),
+        max_tokens=data.get("max_tokens", 4096),
+        temperature=data.get("temperature", 0.7),
+        system_prompt=data.get("system_prompt"),
+    )
+
+
 def load_config(config_path: Path | None = None) -> Config:
     """Load configuration from YAML file.
 
@@ -622,6 +691,7 @@ def load_config(config_path: Path | None = None) -> Config:
     clip_config = _parse_clip_config(data.get("clip"))
     inbox_config = _parse_inbox_config(data.get("inbox"))
     git_config = _parse_git_config(data.get("git"))
+    llm_config = _parse_llm_config(data.get("llm"))
     date_format = data.get("date_format", "%Y-%m-%d")
     time_format = data.get("time_format", "%H:%M")
     daily_title_format = data.get("daily_title_format", "%A, %B %d, %Y")
@@ -640,6 +710,7 @@ def load_config(config_path: Path | None = None) -> Config:
         clip=clip_config,
         inbox=inbox_config,
         git=git_config,
+        llm=llm_config,
         date_format=date_format,
         time_format=time_format,
         daily_title_format=daily_title_format,
@@ -779,6 +850,29 @@ def save_config(config: Config) -> None:
     git_defaults = GitConfig()
     git_data = _serialize_dataclass_fields(config.git, defaults=git_defaults)
 
+    # LLM: only non-default values, exclude api_key (use env var)
+    llm_data: dict[str, Any] = {}
+    llm_defaults = LLMConfig()
+    if config.llm.provider != llm_defaults.provider:
+        llm_data["provider"] = config.llm.provider
+    if config.llm.base_url:
+        llm_data["base_url"] = config.llm.base_url
+    if config.llm.max_tokens != llm_defaults.max_tokens:
+        llm_data["max_tokens"] = config.llm.max_tokens
+    if config.llm.temperature != llm_defaults.temperature:
+        llm_data["temperature"] = config.llm.temperature
+    if config.llm.system_prompt:
+        llm_data["system_prompt"] = config.llm.system_prompt
+    # Serialize models config (only non-default values)
+    models_defaults = LLMModelConfig()
+    models_data: dict[str, Any] = {}
+    if config.llm.models.smart != models_defaults.smart:
+        models_data["smart"] = config.llm.models.smart
+    if config.llm.models.fast != models_defaults.fast:
+        models_data["fast"] = config.llm.models.fast
+    if models_data:
+        llm_data["models"] = models_data
+
     # Build main config dict
     # Note: linked_todos and linked_notes are stored in the database, not config
     data: dict[str, Any] = {
@@ -816,6 +910,8 @@ def save_config(config: Config) -> None:
         data["inbox"] = inbox_data
     if git_data:
         data["git"] = git_data
+    if llm_data:
+        data["llm"] = llm_data
 
     config.config_path.parent.mkdir(parents=True, exist_ok=True)
     with config.config_path.open("w", encoding="utf-8") as f:
@@ -995,6 +1091,13 @@ CONFIGURABLE_SETTINGS = {
     "git.enabled": "Enable git integration (true/false)",
     "git.auto_commit": "Auto-commit after note changes (true/false)",
     "git.commit_message_template": "Commit message template (supports {path}, {notebook}, {title}, {date})",
+    "llm.provider": "LLM provider (anthropic or openai)",
+    "llm.models.smart": "Model for complex tasks (e.g., claude-sonnet-4-20250514)",
+    "llm.models.fast": "Model for simple tasks (e.g., claude-haiku-3-5-20241022)",
+    "llm.base_url": "Custom API endpoint URL (for proxies)",
+    "llm.max_tokens": "Max tokens in LLM response (default 4096)",
+    "llm.temperature": "Sampling temperature (0.0-1.0, default 0.7)",
+    "llm.system_prompt": "Global system prompt for AI commands",
 }
 
 # Notebook-specific settings (accessed via notebook.<name>.<setting>)
@@ -1220,6 +1323,16 @@ def get_config_value(key: str) -> Any:
         attr = parts[1]
         if hasattr(config.git, attr):
             return getattr(config.git, attr)
+    elif parts[0] == "llm" and len(parts) == 2:
+        # LLM setting
+        attr = parts[1]
+        if hasattr(config.llm, attr):
+            return getattr(config.llm, attr)
+    elif parts[0] == "llm" and len(parts) == 3 and parts[1] == "models":
+        # LLM models setting: llm.models.<attr>
+        attr = parts[2]
+        if hasattr(config.llm.models, attr):
+            return getattr(config.llm.models, attr)
     elif parts[0] == "notebook" and len(parts) == 3:
         # Notebook-specific setting: notebook.<name>.<setting>
         nb_name, setting = parts[1], parts[2]
@@ -1409,6 +1522,55 @@ def set_config_value(key: str, value: str) -> bool:
             config.git.auto_commit = parse_bool_strict(value, "git.auto_commit")
         elif attr == "commit_message_template":
             config.git.commit_message_template = value if value else "Update {path}"
+        else:
+            return False
+    elif parts[0] == "llm" and len(parts) == 2:
+        # LLM setting
+        attr = parts[1]
+        if attr == "provider":
+            valid_providers = ("anthropic", "openai")
+            if value not in valid_providers:
+                raise ValueError(
+                    f"llm.provider must be one of: {', '.join(valid_providers)}"
+                )
+            config.llm.provider = value
+        elif attr == "base_url":
+            config.llm.base_url = value if value else None
+        elif attr == "max_tokens":
+            try:
+                tokens = int(value)
+                if tokens < 1:
+                    raise ValueError("max_tokens must be at least 1")
+                config.llm.max_tokens = tokens
+            except ValueError as e:
+                if "invalid literal" in str(e).lower():
+                    raise ValueError(
+                        f"max_tokens must be an integer, got '{value}'"
+                    ) from None
+                raise
+        elif attr == "temperature":
+            try:
+                temp = float(value)
+                if not 0 <= temp <= 2:
+                    raise ValueError("temperature must be between 0 and 2")
+                config.llm.temperature = temp
+            except ValueError as e:
+                if "could not convert" in str(e).lower():
+                    raise ValueError(
+                        f"temperature must be a number, got '{value}'"
+                    ) from None
+                raise
+        elif attr == "system_prompt":
+            config.llm.system_prompt = value if value else None
+        else:
+            return False
+    elif parts[0] == "llm" and len(parts) == 3 and parts[1] == "models":
+        # LLM models setting: llm.models.<attr>
+        attr = parts[2]
+        if attr == "smart":
+            config.llm.models.smart = value
+        elif attr == "fast":
+            config.llm.models.fast = value
         else:
             return False
     elif parts[0] == "notebook" and len(parts) == 3:

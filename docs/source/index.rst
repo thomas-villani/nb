@@ -26,6 +26,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
    commands/notes
    commands/todos
    commands/search
+   commands/ai
    commands/inbox
    commands/recording
    commands/git

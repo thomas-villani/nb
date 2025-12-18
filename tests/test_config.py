@@ -13,8 +13,11 @@ from nb.config import (
     EmbeddingsConfig,
     LinkedNoteConfig,
     LinkedTodoConfig,
+    LLMConfig,
+    LLMModelConfig,
     NotebookConfig,
     _parse_embeddings,
+    _parse_llm_config,
     _parse_notebooks,
     add_notebook,
     ensure_directories,
@@ -109,6 +112,99 @@ class TestEmbeddingsConfig:
 
         assert cfg.provider == "openai"
         assert cfg.api_key == "sk-xxx"
+
+
+class TestLLMModelConfig:
+    """Tests for LLMModelConfig dataclass."""
+
+    def test_defaults(self):
+        cfg = LLMModelConfig()
+
+        assert cfg.smart == "claude-sonnet-4-20250514"
+        assert cfg.fast == "claude-haiku-3-5-20241022"
+
+    def test_custom(self):
+        cfg = LLMModelConfig(smart="gpt-4o", fast="gpt-4o-mini")
+
+        assert cfg.smart == "gpt-4o"
+        assert cfg.fast == "gpt-4o-mini"
+
+
+class TestLLMConfig:
+    """Tests for LLMConfig dataclass."""
+
+    def test_defaults(self):
+        cfg = LLMConfig()
+
+        assert cfg.provider == "anthropic"
+        assert cfg.api_key is None
+        assert cfg.base_url is None
+        assert cfg.max_tokens == 4096
+        assert cfg.temperature == 0.7
+        assert cfg.system_prompt is None
+        assert isinstance(cfg.models, LLMModelConfig)
+
+    def test_custom(self):
+        cfg = LLMConfig(
+            provider="openai",
+            api_key="sk-xxx",
+            base_url="https://api.example.com",
+            max_tokens=8192,
+            temperature=0.5,
+            system_prompt="You are a helpful assistant.",
+            models=LLMModelConfig(smart="gpt-4o", fast="gpt-4o-mini"),
+        )
+
+        assert cfg.provider == "openai"
+        assert cfg.api_key == "sk-xxx"
+        assert cfg.base_url == "https://api.example.com"
+        assert cfg.max_tokens == 8192
+        assert cfg.temperature == 0.5
+        assert cfg.system_prompt == "You are a helpful assistant."
+        assert cfg.models.smart == "gpt-4o"
+
+
+class TestParseLLMConfig:
+    """Tests for _parse_llm_config function."""
+
+    def test_none_input(self):
+        result = _parse_llm_config(None)
+
+        assert result.provider == "anthropic"
+        assert result.max_tokens == 4096
+
+    def test_custom_config(self):
+        data = {
+            "provider": "openai",
+            "max_tokens": 8192,
+            "temperature": 0.3,
+            "models": {"smart": "gpt-4o", "fast": "gpt-4o-mini"},
+        }
+        result = _parse_llm_config(data)
+
+        assert result.provider == "openai"
+        assert result.max_tokens == 8192
+        assert result.temperature == 0.3
+        assert result.models.smart == "gpt-4o"
+        assert result.models.fast == "gpt-4o-mini"
+
+    def test_api_key_from_env(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-from-env")
+        result = _parse_llm_config({"provider": "anthropic"})
+
+        assert result.api_key == "test-key-from-env"
+
+    def test_api_key_from_env_openai(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "openai-test-key")
+        result = _parse_llm_config({"provider": "openai"})
+
+        assert result.api_key == "openai-test-key"
+
+    def test_config_api_key_overrides_env(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "env-key")
+        result = _parse_llm_config({"api_key": "config-key"})
+
+        assert result.api_key == "config-key"
 
 
 class TestConfig:
@@ -576,3 +672,129 @@ class TestSerializeDataclassFields:
 
         with pytest.raises(TypeError, match="is not a dataclass instance"):
             _serialize_dataclass_fields({"not": "a dataclass"})
+
+
+class TestLLMConfigGetSet:
+    """Tests for get_config_value and set_config_value with LLM settings."""
+
+    def test_get_llm_provider(self, mock_config: Config):
+        from nb.config import get_config_value
+
+        result = get_config_value("llm.provider")
+        assert result == "anthropic"
+
+    def test_get_llm_models_smart(self, mock_config: Config):
+        from nb.config import get_config_value
+
+        result = get_config_value("llm.models.smart")
+        assert result == "claude-sonnet-4-20250514"
+
+    def test_get_llm_models_fast(self, mock_config: Config):
+        from nb.config import get_config_value
+
+        result = get_config_value("llm.models.fast")
+        assert result == "claude-haiku-3-5-20241022"
+
+    def test_set_llm_provider(self, temp_config: Config, temp_notes_root: Path):
+        from nb.config import load_config, set_config_value
+
+        assert set_config_value("llm.provider", "openai") is True
+        cfg = load_config(temp_notes_root / ".nb" / "config.yaml")
+        assert cfg.llm.provider == "openai"
+
+    def test_set_llm_provider_invalid(self, mock_config: Config):
+        from nb.config import set_config_value
+
+        with pytest.raises(ValueError, match="must be one of"):
+            set_config_value("llm.provider", "invalid")
+
+    def test_set_llm_max_tokens(self, temp_config: Config, temp_notes_root: Path):
+        from nb.config import load_config, set_config_value
+
+        assert set_config_value("llm.max_tokens", "8192") is True
+        cfg = load_config(temp_notes_root / ".nb" / "config.yaml")
+        assert cfg.llm.max_tokens == 8192
+
+    def test_set_llm_max_tokens_invalid(self, mock_config: Config):
+        from nb.config import set_config_value
+
+        with pytest.raises(ValueError, match="must be an integer"):
+            set_config_value("llm.max_tokens", "not-a-number")
+
+    def test_set_llm_temperature(self, temp_config: Config, temp_notes_root: Path):
+        from nb.config import load_config, set_config_value
+
+        assert set_config_value("llm.temperature", "0.5") is True
+        cfg = load_config(temp_notes_root / ".nb" / "config.yaml")
+        assert cfg.llm.temperature == 0.5
+
+    def test_set_llm_temperature_invalid_range(self, mock_config: Config):
+        from nb.config import set_config_value
+
+        with pytest.raises(ValueError, match="must be between 0 and 2"):
+            set_config_value("llm.temperature", "3.0")
+
+    def test_set_llm_models_smart(self, temp_config: Config, temp_notes_root: Path):
+        from nb.config import load_config, set_config_value
+
+        assert set_config_value("llm.models.smart", "gpt-4o") is True
+        cfg = load_config(temp_notes_root / ".nb" / "config.yaml")
+        assert cfg.llm.models.smart == "gpt-4o"
+
+    def test_set_llm_models_fast(self, temp_config: Config, temp_notes_root: Path):
+        from nb.config import load_config, set_config_value
+
+        assert set_config_value("llm.models.fast", "gpt-4o-mini") is True
+        cfg = load_config(temp_notes_root / ".nb" / "config.yaml")
+        assert cfg.llm.models.fast == "gpt-4o-mini"
+
+    def test_set_llm_system_prompt(self, temp_config: Config, temp_notes_root: Path):
+        from nb.config import load_config, set_config_value
+
+        prompt = "You are a productivity assistant."
+        assert set_config_value("llm.system_prompt", prompt) is True
+        cfg = load_config(temp_notes_root / ".nb" / "config.yaml")
+        assert cfg.llm.system_prompt == prompt
+
+    def test_set_llm_base_url(self, temp_config: Config, temp_notes_root: Path):
+        from nb.config import load_config, set_config_value
+
+        url = "https://api.example.com"
+        assert set_config_value("llm.base_url", url) is True
+        cfg = load_config(temp_notes_root / ".nb" / "config.yaml")
+        assert cfg.llm.base_url == url
+
+
+class TestLLMConfigSaveLoad:
+    """Tests for saving and loading LLM config."""
+
+    def test_save_and_reload_llm_config(self, temp_notes_root: Path, monkeypatch):
+        from nb.config import LLMConfig, LLMModelConfig
+
+        # Clear EDITOR env var so config file value is used on reload
+        monkeypatch.delenv("EDITOR", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+        cfg = Config(
+            notes_root=temp_notes_root,
+            editor="code",
+            notebooks=[NotebookConfig(name="daily", date_based=True)],
+            llm=LLMConfig(
+                provider="openai",
+                max_tokens=8192,
+                temperature=0.5,
+                models=LLMModelConfig(smart="gpt-4o", fast="gpt-4o-mini"),
+            ),
+        )
+
+        save_config(cfg)
+
+        # Reload and verify
+        loaded = load_config(cfg.config_path)
+
+        assert loaded.llm.provider == "openai"
+        assert loaded.llm.max_tokens == 8192
+        assert loaded.llm.temperature == 0.5
+        assert loaded.llm.models.smart == "gpt-4o"
+        assert loaded.llm.models.fast == "gpt-4o-mini"

@@ -13,6 +13,7 @@ if hasattr(sys.stdout, "reconfigure"):
 import click
 
 from nb import __version__
+from nb.cli.ai import register_ai_commands
 from nb.cli.attachments import register_attachment_commands
 from nb.cli.clip import register_clip_commands
 from nb.cli.completion import (
@@ -223,6 +224,7 @@ register_clip_commands(cli)
 register_export_commands(cli)
 register_inbox_commands(cli)
 register_git_commands(cli)
+register_ai_commands(cli)
 
 
 def main() -> None:
