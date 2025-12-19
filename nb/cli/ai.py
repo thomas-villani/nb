@@ -1074,9 +1074,299 @@ def _summarize_multiple_notes(
     return result
 
 
+# ============================================================================
+# Research Command
+# ============================================================================
+
+
+@click.command(name="research")
+@click.argument("query")
+@click.option(
+    "--note",
+    "-n",
+    "note_path",
+    is_flag=False,
+    flag_value="today",
+    default=None,
+    help="Save report to note. Use without value for today's note, or specify path.",
+)
+@click.option(
+    "--notebook",
+    "-b",
+    "notebook",
+    help="Create note in this notebook (for new notes).",
+    shell_complete=complete_notebook,
+)
+@click.option(
+    "--search",
+    "-s",
+    "search_types",
+    multiple=True,
+    type=click.Choice(["web", "news", "scholar", "patents"]),
+    help="Restrict to specific search types. Can be repeated.",
+)
+@click.option(
+    "--max-sources",
+    "-k",
+    default=10,
+    type=int,
+    help="Maximum sources to include in result (default: 10).",
+)
+@click.option(
+    "--strategy",
+    type=click.Choice(["breadth", "depth", "auto"]),
+    default="auto",
+    help="Research strategy (default: auto).",
+)
+@click.option(
+    "--token-budget",
+    default=100000,
+    type=int,
+    help="Maximum tokens to consume (default: 100000).",
+)
+@click.option(
+    "--use-vectordb/--no-vectordb",
+    default=False,
+    help="Use vector DB for context management (default: no).",
+)
+@click.option(
+    "--stream/--no-stream",
+    default=True,
+    help="Stream progress (default: stream).",
+)
+@click.option(
+    "--smart/--fast",
+    "use_smart",
+    default=True,
+    help="Use smart model (better) or fast model (cheaper). Default: smart.",
+)
+def research_command(
+    query: str,
+    note_path: str | None,
+    notebook: str | None,
+    search_types: tuple[str, ...],
+    max_sources: int,
+    strategy: Literal["breadth", "depth", "auto"],
+    token_budget: int,
+    use_vectordb: bool,
+    stream: bool,
+    use_smart: bool,
+) -> None:
+    """Research a topic using web search and AI analysis.
+
+    Uses an AI agent to search the web, fetch content, and generate
+    a comprehensive research report.
+
+    Requires SERPER_API_KEY environment variable for web search.
+
+    Examples:
+
+        nb research "CoolCo 2025 Q4 financial results"
+
+        nb research "AI trends 2025" --note today
+
+        nb research "climate change policies" --search news
+
+        nb research "machine learning" --search scholar --use-vectordb
+
+        nb research "market analysis" --strategy depth --token-budget 200000
+    """
+    from nb.core.llm import LLMConfigError, LLMError
+    from nb.core.search import SearchAPIError
+
+    # Convert tuple to list, or None if empty
+    search_list = list(search_types) if search_types else None
+
+    try:
+        if stream:
+            _research_streaming(
+                query=query,
+                strategy=strategy,
+                max_sources=max_sources,
+                search_types=search_list,
+                use_smart=use_smart,
+                use_vectordb=use_vectordb,
+                token_budget=token_budget,
+                note_path=note_path,
+                notebook=notebook,
+            )
+        else:
+            _research_non_streaming(
+                query=query,
+                strategy=strategy,
+                max_sources=max_sources,
+                search_types=search_list,
+                use_smart=use_smart,
+                use_vectordb=use_vectordb,
+                token_budget=token_budget,
+                note_path=note_path,
+                notebook=notebook,
+            )
+    except LLMConfigError as e:
+        console.print(f"[red]Configuration error:[/red] {e}")
+        console.print(
+            "\n[dim]Hint: Set ANTHROPIC_API_KEY environment variable or configure "
+            "with 'nb config set llm.api_key <key>'[/dim]"
+        )
+        sys.exit(1)
+    except SearchAPIError as e:
+        console.print(f"[red]Search API error:[/red] {e}")
+        console.print(
+            "\n[dim]Hint: Set SERPER_API_KEY environment variable. "
+            "Get a key at https://serper.dev[/dim]"
+        )
+        sys.exit(1)
+    except LLMError as e:
+        console.print(f"[red]LLM error:[/red] {e}")
+        sys.exit(1)
+    except ValueError as e:
+        console.print(f"[yellow]{e}[/yellow]")
+        sys.exit(1)
+
+
+def _research_streaming(
+    query: str,
+    strategy: Literal["breadth", "depth", "auto"],
+    max_sources: int,
+    search_types: list[str] | None,
+    use_smart: bool,
+    use_vectordb: bool,
+    token_budget: int,
+    note_path: str | None,
+    notebook: str | None,
+) -> None:
+    """Handle streaming research with progress updates."""
+    from nb.core.ai.research import append_research_to_note, research_stream
+
+    console.print(f"[bold]Researching:[/bold] {query}")
+    console.print(f"[dim]Strategy: {strategy}, Token budget: {token_budget:,}[/dim]")
+    console.print()
+
+    result = None
+    for message, res in research_stream(
+        query=query,
+        strategy=strategy,
+        max_sources=max_sources,
+        search_types=search_types,
+        use_smart_model=use_smart,
+        use_vectordb=use_vectordb,
+        token_budget=token_budget,
+    ):
+        console.print(f"[dim]{message}[/dim]")
+        if res is not None:
+            result = res
+
+    if result is None:
+        console.print("[red]Research failed - no result returned[/red]")
+        sys.exit(1)
+
+    # Display results
+    _display_research_result(result)
+
+    # Save to note if requested
+    if note_path is not None:
+        # Determine target path
+        target = note_path if note_path != "today" else None
+        if notebook and target is None:
+            # Create new note in notebook
+            from pathlib import Path
+
+            from nb.core.clip import slugify
+
+            slug = slugify(query)
+            target = str(Path(notebook) / f"research-{slug}.md")
+
+        saved_path = append_research_to_note(result, target)
+        console.print(f"\n[green]Report saved to:[/green] {saved_path}")
+
+
+def _research_non_streaming(
+    query: str,
+    strategy: Literal["breadth", "depth", "auto"],
+    max_sources: int,
+    search_types: list[str] | None,
+    use_smart: bool,
+    use_vectordb: bool,
+    token_budget: int,
+    note_path: str | None,
+    notebook: str | None,
+) -> None:
+    """Handle non-streaming research."""
+    from nb.core.ai.research import append_research_to_note, research
+
+    def progress_cb(msg: str) -> None:
+        console.print(f"[dim]{msg}[/dim]")
+
+    console.print(f"[bold]Researching:[/bold] {query}")
+    console.print(f"[dim]Strategy: {strategy}, Token budget: {token_budget:,}[/dim]")
+    console.print()
+
+    with console.status("[bold blue]Researching...[/bold blue]"):
+        result = research(
+            query=query,
+            strategy=strategy,
+            max_sources=max_sources,
+            search_types=search_types,
+            use_smart_model=use_smart,
+            use_vectordb=use_vectordb,
+            token_budget=token_budget,
+            progress_callback=progress_cb,
+        )
+
+    # Display results
+    _display_research_result(result)
+
+    # Save to note if requested
+    if note_path is not None:
+        target = note_path if note_path != "today" else None
+        if notebook and target is None:
+            from pathlib import Path
+
+            from nb.core.clip import slugify
+
+            slug = slugify(query)
+            target = str(Path(notebook) / f"research-{slug}.md")
+
+        saved_path = append_research_to_note(result, target)
+        console.print(f"\n[green]Report saved to:[/green] {saved_path}")
+
+
+def _display_research_result(result) -> None:
+    """Display research result with sources and report."""
+    # Display sources
+    if result.sources:
+        source_lines = []
+        for i, src in enumerate(result.sources[:10], 1):
+            line = f"[bold]{i}.[/bold] {src.title}"
+            if src.fetched:
+                line += " [green]✓[/green]"
+            line += f"\n   [dim]{src.url}[/dim]"
+            source_lines.append(line)
+
+        console.print(
+            Panel(
+                "\n".join(source_lines),
+                title="[bold]Sources[/bold]",
+                border_style="blue",
+                padding=(0, 1),
+            )
+        )
+        console.print()
+
+    # Display report
+    console.print("[bold]Research Report:[/bold]")
+    console.print(Markdown(result.report))
+
+    # Show token usage
+    console.print(
+        f"\n[dim]Tokens: {result.input_tokens:,} in, {result.output_tokens:,} out[/dim]"
+    )
+
+
 def register_ai_commands(cli: click.Group) -> None:
     """Register AI commands with the main CLI."""
     cli.add_command(ask_command)
     cli.add_command(plan_group)
     cli.add_command(summarize_command)
     cli.add_command(tldr_command)
+    cli.add_command(research_command)

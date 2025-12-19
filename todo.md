@@ -172,7 +172,7 @@ todo_exclude: true
   - [ ] Need to allow filtering by notebook to make a plan for specific notebook(s)
 - [ ] Extract from meeting transcripts and other notes
 - [ ] Auto-schedule todos and calendar
-- [ ] Auto-research
+- [x] Auto-research
 
 ## Technical Debt
 - [x] Add comprehensive test suite #testing
