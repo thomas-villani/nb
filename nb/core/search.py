@@ -5,7 +5,6 @@ Provides web, news, and scholar search capabilities for the research agent.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Literal
 
@@ -34,11 +33,23 @@ class SearchResult:
 
 
 def _get_api_key() -> str:
-    """Get the Serper API key from environment."""
-    key = os.getenv("SERPER_API_KEY")
+    """Get the Serper API key from config or environment.
+
+    The API key is loaded from:
+    1. config.yaml (search.serper_api_key)
+    2. SERPER_API_KEY environment variable
+    3. .nb/.env file (loaded automatically by config)
+
+    Raises:
+        SearchAPIError: If no API key is configured.
+    """
+    from nb.config import get_config
+
+    key = get_config().search.serper_api_key
     if not key:
         raise SearchAPIError(
-            "SERPER_API_KEY environment variable not set. "
+            "Serper API key not configured. "
+            "Set SERPER_API_KEY in .nb/.env or environment. "
             "Get an API key from https://serper.dev"
         )
     return key

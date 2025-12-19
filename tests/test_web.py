@@ -58,11 +58,16 @@ def web_config(tmp_path: Path):
 
 @pytest.fixture
 def mock_web_config(web_config: Config, monkeypatch: pytest.MonkeyPatch):
-    """Mock get_config() for web tests."""
+    """Mock get_config() for web tests.
+
+    This patches the get_config function itself (not just _config variable)
+    so that even if reset_config() is called during the test, subsequent
+    calls to get_config() will still return the web config.
+    """
     # Reset any cached singletons before test
     config_module.reset_config()
     reset_db()
-    monkeypatch.setattr(config_module, "_config", web_config)
+    monkeypatch.setattr(config_module, "get_config", lambda: web_config)
     return web_config
 
 

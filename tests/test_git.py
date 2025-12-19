@@ -49,9 +49,14 @@ def git_config(tmp_path: Path):
 
 @pytest.fixture
 def mock_git_config(git_config: Config, monkeypatch: pytest.MonkeyPatch) -> Config:
-    """Mock get_config() to return git_config."""
+    """Mock get_config() to return git_config.
+
+    This patches the get_config function itself (not just _config variable)
+    so that even if reset_config() is called during the test, subsequent
+    calls to get_config() will still return the git config.
+    """
     config_module.reset_config()
-    monkeypatch.setattr(config_module, "_config", git_config)
+    monkeypatch.setattr(config_module, "get_config", lambda: git_config)
     return git_config
 
 
@@ -83,9 +88,14 @@ def git_disabled_config(tmp_path: Path):
 def mock_git_disabled_config(
     git_disabled_config: Config, monkeypatch: pytest.MonkeyPatch
 ) -> Config:
-    """Mock get_config() with git disabled."""
+    """Mock get_config() with git disabled.
+
+    This patches the get_config function itself (not just _config variable)
+    so that even if reset_config() is called during the test, subsequent
+    calls to get_config() will still return the git disabled config.
+    """
     config_module.reset_config()
-    monkeypatch.setattr(config_module, "_config", git_disabled_config)
+    monkeypatch.setattr(config_module, "get_config", lambda: git_disabled_config)
     return git_disabled_config
 
 

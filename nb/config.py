@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 
 
 @dataclass
@@ -70,6 +71,9 @@ class SearchConfig:
     vector_weight: float = 0.7  # Hybrid search: 0=keyword only, 1=vector only
     score_threshold: float = 0.4  # Minimum score to show results
     recency_decay_days: int = 30  # Half-life for recency boost
+    serper_api_key: str | None = (
+        None  # API key (uses SERPER_API_KEY env var if not set)
+    )
 
 
 @dataclass
@@ -91,6 +95,9 @@ class RecorderConfig:
     auto_delete_audio: bool = False  # Delete WAV file after successful transcription
     transcribe_timeout: int = 600  # Deepgram API timeout in seconds (default 10 min)
     mic_speaker_label: str = "You"  # Label for microphone speaker in transcripts
+    deepgram_api_key: str | None = (
+        None  # API key (uses DEEPGRAM_API_KEY env var if not set)
+    )
 
 
 @dataclass
@@ -523,13 +530,23 @@ def _parse_kanban_boards(data: list[dict[str, Any]]) -> list[KanbanBoardConfig]:
 
 
 def _parse_search(data: dict[str, Any] | None) -> SearchConfig:
-    """Parse search configuration."""
+    """Parse search configuration.
+
+    API key is loaded from config or SERPER_API_KEY environment variable.
+    """
     if data is None:
-        return SearchConfig()
+        data = {}
+
+    # Get API key from config or environment variable
+    serper_api_key = data.get("serper_api_key")
+    if not serper_api_key:
+        serper_api_key = os.environ.get("SERPER_API_KEY")
+
     return SearchConfig(
         vector_weight=data.get("vector_weight", 0.7),
         score_threshold=data.get("score_threshold", 0.4),
         recency_decay_days=data.get("recency_decay_days", 30),
+        serper_api_key=serper_api_key,
     )
 
 
@@ -545,9 +562,18 @@ def _parse_todo_config(data: dict[str, Any] | None) -> TodoConfig:
 
 
 def _parse_recorder_config(data: dict[str, Any] | None) -> RecorderConfig:
-    """Parse recorder configuration."""
+    """Parse recorder configuration.
+
+    API key is loaded from config or DEEPGRAM_API_KEY environment variable.
+    """
     if data is None:
-        return RecorderConfig()
+        data = {}
+
+    # Get API key from config or environment variable
+    deepgram_api_key = data.get("deepgram_api_key")
+    if not deepgram_api_key:
+        deepgram_api_key = os.environ.get("DEEPGRAM_API_KEY")
+
     return RecorderConfig(
         mic_device=data.get("mic_device"),
         loopback_device=data.get("loopback_device"),
@@ -555,6 +581,7 @@ def _parse_recorder_config(data: dict[str, Any] | None) -> RecorderConfig:
         auto_delete_audio=data.get("auto_delete_audio", False),
         transcribe_timeout=data.get("transcribe_timeout", 600),
         mic_speaker_label=data.get("mic_speaker_label", "You"),
+        deepgram_api_key=deepgram_api_key,
     )
 
 
@@ -649,6 +676,7 @@ def load_config(config_path: Path | None = None) -> Config:
     """Load configuration from YAML file.
 
     If config file doesn't exist, creates default configuration.
+    Also loads environment variables from .nb/.env if it exists.
     """
     if config_path is None:
         config_path = get_config_path()
@@ -671,6 +699,12 @@ def load_config(config_path: Path | None = None) -> Config:
         notes_root = expand_path(data["notes_root"])
     else:
         notes_root = get_default_notes_root()
+
+    # Load environment variables from .nb/.env (for API keys etc.)
+    # This allows users to store secrets in a gitignored .env file
+    env_file = notes_root / ".nb" / ".env"
+    if env_file.exists():
+        load_dotenv(env_file, override=False)  # Don't override existing env vars
 
     # Get editor: prefer $EDITOR environment variable
     editor = os.environ.get("EDITOR") or data.get("editor", DEFAULT_EDITOR)
@@ -799,11 +833,13 @@ def save_config(config: Config) -> None:
     to Config or its nested dataclasses, ensure they are handled here.
 
     Serialization strategies:
-    - embeddings, search, todo: All fields serialized (use _serialize_dataclass_fields)
-    - recorder, clip: Only non-default values (compare with defaults instance)
+    - embeddings, todo: All fields serialized (use _serialize_dataclass_fields)
+    - search: All fields except serper_api_key (use env var for security)
+    - recorder: Only non-default values, excluding deepgram_api_key (security)
+    - clip: Only non-default values (compare with defaults instance)
     - inbox: Only non-default values, with nested raindrop config
     - notebooks: Custom serialization via _serialize_notebook
-    - Security: api_token fields are NOT saved (use environment variables)
+    - Security: API key fields are NOT saved (use environment variables)
 
     """
     # Notebooks: custom serialization with conditional fields
@@ -812,16 +848,16 @@ def save_config(config: Config) -> None:
     # Embeddings: all fields except None, with special handling for api_key
     embeddings_data = _serialize_dataclass_fields(config.embeddings)
 
-    # Search: all fields
-    search_data = _serialize_dataclass_fields(config.search)
+    # Search: all fields except api_key (use env var for security)
+    search_data = _serialize_dataclass_fields(config.search, exclude={"serper_api_key"})
 
     # Todo: all fields
     todo_data = _serialize_dataclass_fields(config.todo)
 
-    # Recorder: only non-default values
+    # Recorder: only non-default values, exclude api_key (use env var for security)
     recorder_defaults = RecorderConfig()
     recorder_data = _serialize_dataclass_fields(
-        config.recorder, defaults=recorder_defaults
+        config.recorder, defaults=recorder_defaults, exclude={"deepgram_api_key"}
     )
 
     # Clip: only non-default values
@@ -1075,10 +1111,12 @@ CONFIGURABLE_SETTINGS = {
     "search.vector_weight": "Hybrid search balance: 0=keyword, 1=vector (default 0.7)",
     "search.score_threshold": "Minimum score to show search results (default 0.4)",
     "search.recency_decay_days": "Half-life in days for recency boost (default 30)",
+    "search.serper_api_key": "Serper API key for web search (uses SERPER_API_KEY env var if not set)",
     "todo.default_sort": "Default sort order (source, tag, priority, created)",
     "todo.inbox_file": "Name of inbox file in notes_root (default todo.md)",
     "todo.auto_complete_children": "Complete subtasks when parent done (true/false)",
     "recorder.mic_speaker_label": "Label for microphone speaker in transcripts (default: You)",
+    "recorder.deepgram_api_key": "Deepgram API key for transcription (uses DEEPGRAM_API_KEY env var if not set)",
     "clip.user_agent": "User-Agent header for web clipping requests",
     "clip.timeout": "Request timeout in seconds (default 30)",
     "clip.auto_tag_domain": "Auto-tag clipped content with source domain (true/false)",
@@ -1438,6 +1476,8 @@ def set_config_value(key: str, value: str) -> bool:
                         f"recency_decay_days must be an integer, got '{value}'"
                     ) from None
                 raise
+        elif attr == "serper_api_key":
+            config.search.serper_api_key = value if value else None
         else:
             return False
     elif parts[0] == "todo" and len(parts) == 2:
@@ -1463,6 +1503,8 @@ def set_config_value(key: str, value: str) -> bool:
         attr = parts[1]
         if attr == "mic_speaker_label":
             config.recorder.mic_speaker_label = value if value else "You"
+        elif attr == "deepgram_api_key":
+            config.recorder.deepgram_api_key = value if value else None
         else:
             return False
     elif parts[0] == "clip" and len(parts) == 2:

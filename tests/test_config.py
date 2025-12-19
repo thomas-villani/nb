@@ -542,7 +542,10 @@ class TestRemoveNotebook:
         result = remove_notebook("projects")
         assert result is True
 
-        cfg = get_config()
+        # Use config_module.get_config() because the test file imports get_config
+        # at the top, so the local reference points to the original function,
+        # not the monkeypatched version
+        cfg = config_module.get_config()
         assert cfg.get_notebook("projects") is None
 
     def test_remove_nonexistent(self, mock_config: Config):
@@ -578,7 +581,11 @@ class TestParseBoolStrict:
 class TestSetConfigValueBooleans:
     """Tests for set_config_value with boolean settings."""
 
-    def test_valid_boolean_values(self, temp_config: Config, temp_notes_root: Path):
+    def test_valid_boolean_values(self, mock_config: Config, temp_notes_root: Path):
+        """Test valid boolean values for config settings.
+
+        Uses mock_config to prevent writing to the real config file.
+        """
         from nb.config import load_config, set_config_value
 
         # Test todo.auto_complete_children
@@ -675,7 +682,11 @@ class TestSerializeDataclassFields:
 
 
 class TestLLMConfigGetSet:
-    """Tests for get_config_value and set_config_value with LLM settings."""
+    """Tests for get_config_value and set_config_value with LLM settings.
+
+    All tests that call set_config_value must use mock_config to prevent
+    writing to the real user's config file.
+    """
 
     def test_get_llm_provider(self, mock_config: Config):
         from nb.config import get_config_value
@@ -695,7 +706,7 @@ class TestLLMConfigGetSet:
         result = get_config_value("llm.models.fast")
         assert result == "claude-haiku-3-5-20241022"
 
-    def test_set_llm_provider(self, temp_config: Config, temp_notes_root: Path):
+    def test_set_llm_provider(self, mock_config: Config, temp_notes_root: Path):
         from nb.config import load_config, set_config_value
 
         assert set_config_value("llm.provider", "openai") is True
@@ -708,7 +719,7 @@ class TestLLMConfigGetSet:
         with pytest.raises(ValueError, match="must be one of"):
             set_config_value("llm.provider", "invalid")
 
-    def test_set_llm_max_tokens(self, temp_config: Config, temp_notes_root: Path):
+    def test_set_llm_max_tokens(self, mock_config: Config, temp_notes_root: Path):
         from nb.config import load_config, set_config_value
 
         assert set_config_value("llm.max_tokens", "8192") is True
@@ -721,7 +732,7 @@ class TestLLMConfigGetSet:
         with pytest.raises(ValueError, match="must be an integer"):
             set_config_value("llm.max_tokens", "not-a-number")
 
-    def test_set_llm_temperature(self, temp_config: Config, temp_notes_root: Path):
+    def test_set_llm_temperature(self, mock_config: Config, temp_notes_root: Path):
         from nb.config import load_config, set_config_value
 
         assert set_config_value("llm.temperature", "0.5") is True
@@ -734,21 +745,21 @@ class TestLLMConfigGetSet:
         with pytest.raises(ValueError, match="must be between 0 and 2"):
             set_config_value("llm.temperature", "3.0")
 
-    def test_set_llm_models_smart(self, temp_config: Config, temp_notes_root: Path):
+    def test_set_llm_models_smart(self, mock_config: Config, temp_notes_root: Path):
         from nb.config import load_config, set_config_value
 
         assert set_config_value("llm.models.smart", "gpt-4o") is True
         cfg = load_config(temp_notes_root / ".nb" / "config.yaml")
         assert cfg.llm.models.smart == "gpt-4o"
 
-    def test_set_llm_models_fast(self, temp_config: Config, temp_notes_root: Path):
+    def test_set_llm_models_fast(self, mock_config: Config, temp_notes_root: Path):
         from nb.config import load_config, set_config_value
 
         assert set_config_value("llm.models.fast", "gpt-4o-mini") is True
         cfg = load_config(temp_notes_root / ".nb" / "config.yaml")
         assert cfg.llm.models.fast == "gpt-4o-mini"
 
-    def test_set_llm_system_prompt(self, temp_config: Config, temp_notes_root: Path):
+    def test_set_llm_system_prompt(self, mock_config: Config, temp_notes_root: Path):
         from nb.config import load_config, set_config_value
 
         prompt = "You are a productivity assistant."
@@ -756,7 +767,7 @@ class TestLLMConfigGetSet:
         cfg = load_config(temp_notes_root / ".nb" / "config.yaml")
         assert cfg.llm.system_prompt == prompt
 
-    def test_set_llm_base_url(self, temp_config: Config, temp_notes_root: Path):
+    def test_set_llm_base_url(self, mock_config: Config, temp_notes_root: Path):
         from nb.config import load_config, set_config_value
 
         url = "https://api.example.com"

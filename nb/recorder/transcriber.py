@@ -6,7 +6,6 @@ and parsing of results.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -45,16 +44,19 @@ class TranscriptResult:
 
 
 def get_api_key() -> str | None:
-    """Get Deepgram API key from environment or config.
+    """Get Deepgram API key from config or environment.
 
-    Checks in order:
-    1. DEEPGRAM_API_KEY environment variable
-    2. nb recorder config (future)
+    The API key is loaded from:
+    1. config.yaml (recorder.deepgram_api_key)
+    2. DEEPGRAM_API_KEY environment variable
+    3. .nb/.env file (loaded automatically by config)
 
     Returns:
         API key or None if not found
     """
-    return os.environ.get("DEEPGRAM_API_KEY")
+    from nb.config import get_config
+
+    return get_config().recorder.deepgram_api_key
 
 
 def _parse_deepgram_response(

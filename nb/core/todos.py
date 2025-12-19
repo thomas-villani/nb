@@ -317,18 +317,19 @@ def find_todo_line(
     lines: list[str],
     expected_line: int,
     expected_content: str,
-    search_radius: int = 10,
+    search_radius: int = 15,
 ) -> int | None:
     """Find the actual line number of a todo by content, searching near expected line.
 
     When files are modified, stored line numbers can become stale. This function
     verifies the content at the expected line and searches nearby if it doesn't match.
+    Falls back to searching the entire file if not found within the search radius.
 
     Args:
         lines: List of file lines (from splitlines())
         expected_line: 1-based line number where the todo was expected
         expected_content: The cleaned todo content to match
-        search_radius: How many lines above/below to search (default 10)
+        search_radius: How many lines above/below to search first (default 15)
 
     Returns:
         1-based line number where the todo was found, or None if not found.
@@ -341,9 +342,12 @@ def find_todo_line(
             return expected_line
 
     # Search nearby lines, alternating above and below
+    # Track which lines we've already checked to avoid redundant work in fallback
+    checked_lines: set[int] = {expected_line}
     for offset in range(1, search_radius + 1):
         for candidate_line in [expected_line - offset, expected_line + offset]:
             if 1 <= candidate_line <= len(lines):
+                checked_lines.add(candidate_line)
                 line = lines[candidate_line - 1]
                 match = TODO_PATTERN.match(line)
                 if (
@@ -351,6 +355,16 @@ def find_todo_line(
                     and clean_todo_content(match.group("content")) == expected_content
                 ):
                     return candidate_line
+
+    # Fallback: search entire file for lines not yet checked
+    # This handles cases where the file was heavily modified externally
+    for line_num in range(1, len(lines) + 1):
+        if line_num in checked_lines:
+            continue
+        line = lines[line_num - 1]
+        match = TODO_PATTERN.match(line)
+        if match and clean_todo_content(match.group("content")) == expected_content:
+            return line_num
 
     return None
 

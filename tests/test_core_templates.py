@@ -265,7 +265,8 @@ class TestNotebookDefaultTemplate:
             ],
             embeddings=EmbeddingsConfig(),
         )
-        monkeypatch.setattr(config_module, "_config", cfg)
+        # Patch get_config function to survive reset_config() calls
+        monkeypatch.setattr(config_module, "get_config", lambda: cfg)
 
         # Create daily directory
         (temp_notes_root / "daily").mkdir(exist_ok=True)
@@ -296,7 +297,8 @@ class TestNotebookDefaultTemplate:
             ],
             embeddings=EmbeddingsConfig(),
         )
-        monkeypatch.setattr(config_module, "_config", cfg)
+        # Patch get_config function to survive reset_config() calls
+        monkeypatch.setattr(config_module, "get_config", lambda: cfg)
 
         (temp_notes_root / "daily").mkdir(exist_ok=True)
 

@@ -14,6 +14,7 @@ from nb.cli import cli
 from nb.config import Config, EmbeddingsConfig, NotebookConfig
 from nb.index import scanner as scanner_module
 from nb.index.db import reset_db
+from nb.index.search import reset_search
 
 
 @pytest.fixture
@@ -50,17 +51,24 @@ def temp_config(temp_notes_root: Path) -> Generator[Config]:
     yield cfg
 
     # Reset global singletons after test to avoid interference
+    reset_search()  # Must reset before config to avoid stale references
     config_module.reset_config()
     reset_db()
 
 
 @pytest.fixture
 def mock_config(temp_config: Config, monkeypatch: pytest.MonkeyPatch) -> Config:
-    """Mock get_config() to return temp_config."""
+    """Mock get_config() to return temp_config.
+
+    This patches the get_config function itself (not just _config variable)
+    so that even if reset_config() is called during the test, subsequent
+    calls to get_config() will still return the temp config.
+    """
     # Reset any cached singletons before test
     config_module.reset_config()
     reset_db()
-    monkeypatch.setattr(config_module, "_config", temp_config)
+    # Patch get_config to always return temp_config
+    monkeypatch.setattr(config_module, "get_config", lambda: temp_config)
     return temp_config
 
 
@@ -195,7 +203,9 @@ def cli_config(tmp_path: Path) -> Generator[Config]:
 
     yield cfg
 
-    # Cleanup
+    # Cleanup - IMPORTANT: restore ENABLE_VECTOR_INDEXING to avoid affecting other tests/processes
+    scanner_module.ENABLE_VECTOR_INDEXING = True
+    reset_search()  # Must reset before config to avoid stale references
     config_module.reset_config()
     reset_db()
 
@@ -204,11 +214,14 @@ def cli_config(tmp_path: Path) -> Generator[Config]:
 def mock_cli_config(cli_config: Config, monkeypatch: pytest.MonkeyPatch) -> Config:
     """Mock get_config() to return cli_config for CLI tests.
 
-    This patches the global config singleton so CLI commands use the test config.
+    This patches the get_config function itself (not just _config variable)
+    so that even if reset_config() is called during the test, subsequent
+    calls to get_config() will still return the cli config.
     """
     # Reset any cached config first
     config_module.reset_config()
-    monkeypatch.setattr(config_module, "_config", cli_config)
+    # Patch get_config to always return cli_config
+    monkeypatch.setattr(config_module, "get_config", lambda: cli_config)
     return cli_config
 
 

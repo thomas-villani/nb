@@ -30,6 +30,7 @@ dependencies = [
     "pyperclip>=1.11.0",
     "wijjit",
     "gitpython>=3.1.0",  # Git integration for version control
+    "python-dotenv>=1.0.0",  # Load API keys from .env file
 ]
 [dependency-groups]
 dev = [

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from nb import config as config_module
+from nb.config import Config, EmbeddingsConfig, NotebookConfig
 from nb.index.db import (
     SCHEMA_VERSION,
     Database,
@@ -15,6 +17,35 @@ from nb.index.db import (
     rebuild_db,
     set_schema_version,
 )
+
+
+@pytest.fixture
+def mock_config_for_rebuild(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Mock config to prevent rebuild_db from deleting real vector index.
+
+    The rebuild_db function calls get_config() to find the vectors_path
+    and delete it. Without this mock, tests would delete the user's
+    real vector index!
+
+    This patches the get_config function itself (not just _config variable)
+    so that even if reset_config() is called during the test, subsequent
+    calls to get_config() will still return the test config.
+    """
+    notes_root = tmp_path / "notes"
+    notes_root.mkdir()
+    nb_dir = notes_root / ".nb"
+    nb_dir.mkdir()
+
+    cfg = Config(
+        notes_root=notes_root,
+        editor="echo",
+        notebooks=[NotebookConfig(name="daily", date_based=True)],
+        embeddings=EmbeddingsConfig(),
+    )
+
+    config_module.reset_config()
+    monkeypatch.setattr(config_module, "get_config", lambda: cfg)
+    return cfg
 
 
 class TestDatabase:
@@ -251,7 +282,11 @@ class TestInitDb:
 class TestRebuildDb:
     """Tests for rebuild_db function."""
 
-    def test_clears_and_recreates(self, tmp_path: Path):
+    def test_clears_and_recreates(self, tmp_path: Path, mock_config_for_rebuild):
+        """Test that rebuild_db clears data and recreates tables.
+
+        Uses mock_config_for_rebuild to prevent deleting real vector index.
+        """
         db = Database(tmp_path / "test.db")
 
         try:
@@ -279,7 +314,11 @@ class TestRebuildDb:
         finally:
             db.close()
 
-    def test_schema_version_reset(self, tmp_path: Path):
+    def test_schema_version_reset(self, tmp_path: Path, mock_config_for_rebuild):
+        """Test that rebuild_db resets schema version.
+
+        Uses mock_config_for_rebuild to prevent deleting real vector index.
+        """
         db = Database(tmp_path / "test.db")
 
         try:

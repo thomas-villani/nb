@@ -15,6 +15,7 @@ from nb.index.scanner import (
     remove_deleted_notes,
     scan_notes,
 )
+from nb.index.search import reset_search
 from nb.utils.hashing import normalize_path
 
 
@@ -27,7 +28,9 @@ def db_fixture(mock_config):
 
     yield mock_config
 
-    # Cleanup
+    # Cleanup - IMPORTANT: restore ENABLE_VECTOR_INDEXING to avoid affecting other tests/processes
+    scanner_module.ENABLE_VECTOR_INDEXING = True
+    reset_search()  # Must reset before config to avoid stale references
     reset_db()
 
 

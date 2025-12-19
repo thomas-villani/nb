@@ -18,6 +18,7 @@ from nb.cli.completion import (
 from nb.config import Config, EmbeddingsConfig, NotebookConfig, TodoViewConfig
 from nb.index import scanner as scanner_module
 from nb.index.db import reset_db
+from nb.index.search import reset_search
 
 
 @pytest.fixture
@@ -62,15 +63,23 @@ def completion_config(tmp_path: Path):
 
     yield cfg
 
-    # Cleanup
+    # Cleanup - IMPORTANT: restore ENABLE_VECTOR_INDEXING to avoid affecting other tests/processes
+    scanner_module.ENABLE_VECTOR_INDEXING = True
+    reset_search()  # Must reset before config to avoid stale references
     config_module.reset_config()
     reset_db()
 
 
 @pytest.fixture
 def mock_completion_config(completion_config: Config, monkeypatch: pytest.MonkeyPatch):
-    """Mock get_config() to return completion_config."""
-    monkeypatch.setattr(config_module, "_config", completion_config)
+    """Mock get_config() to return completion_config.
+
+    This patches the get_config function itself (not just _config variable)
+    so that even if reset_config() is called during the test, subsequent
+    calls to get_config() will still return the completion config.
+    """
+    config_module.reset_config()
+    monkeypatch.setattr(config_module, "get_config", lambda: completion_config)
     return completion_config
 
 
