@@ -13,9 +13,12 @@ from click.testing import CliRunner
 
 from nb import config as config_module
 from nb.cli import cli
+from nb.cli import utils as cli_utils_module
 from nb.config import Config, EmbeddingsConfig, NotebookConfig
 from nb.index.db import reset_db
-from nb.web import TEMPLATE, NBHandler
+from nb.index.search import reset_search
+from nb.web import get_template
+from nb.webserver import NBHandler
 
 
 @pytest.fixture
@@ -60,14 +63,22 @@ def web_config(tmp_path: Path):
 def mock_web_config(web_config: Config, monkeypatch: pytest.MonkeyPatch):
     """Mock get_config() for web tests.
 
-    This patches the get_config function itself (not just _config variable)
-    so that even if reset_config() is called during the test, subsequent
-    calls to get_config() will still return the web config.
+    This patches get_config in BOTH nb.config AND nb.cli.utils to ensure proper
+    isolation. CLI modules import get_config at module level, so we must patch
+    the local reference in each module that uses it.
     """
     # Reset any cached singletons before test
+    reset_search()
     config_module.reset_config()
     reset_db()
+
+    # Patch get_config in all modules that import it directly
+    from nb import webserver
+
+    monkeypatch.setattr(config_module, "_config", web_config)
     monkeypatch.setattr(config_module, "get_config", lambda: web_config)
+    monkeypatch.setattr(cli_utils_module, "get_config", lambda: web_config)
+    monkeypatch.setattr(webserver, "get_config", lambda: web_config)
     return web_config
 
 
@@ -470,24 +481,28 @@ class TestTemplate:
 
     def test_template_contains_key_elements(self):
         """Test template has required HTML structure."""
-        assert "<!DOCTYPE html>" in TEMPLATE
-        assert "<title>nb</title>" in TEMPLATE
-        assert "marked.min.js" in TEMPLATE
-        assert "highlight.js" in TEMPLATE
+        template = get_template()
+        assert "<!DOCTYPE html>" in template
+        assert "<title>nb</title>" in template
+        assert "marked.min.js" in template
+        assert "highlight.js" in template
 
     def test_template_has_navigation(self):
         """Test template has navigation elements."""
-        assert 'class="sidebar"' in TEMPLATE
-        assert 'id="notebooks"' in TEMPLATE
-        assert 'id="notes"' in TEMPLATE
-        assert 'id="content"' in TEMPLATE
+        template = get_template()
+        assert 'class="sidebar"' in template
+        assert 'id="notebooks"' in template
+        assert 'id="notes"' in template
+        assert 'id="content"' in template
 
     def test_template_has_search(self):
         """Test template has search functionality."""
-        assert 'id="searchInput"' in TEMPLATE
-        assert "doSearch" in TEMPLATE
+        template = get_template()
+        assert 'id="searchInput"' in template
+        assert "doSearch" in template
 
     def test_template_has_todos_link(self):
         """Test template has todos link."""
-        assert "loadTodos()" in TEMPLATE
-        assert "Todos" in TEMPLATE
+        template = get_template()
+        assert "loadTodos()" in template
+        assert "Todos" in template

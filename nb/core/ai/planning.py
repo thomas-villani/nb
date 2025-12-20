@@ -213,12 +213,14 @@ def gather_planning_context(
     today = date.today()
 
     # Fetch incomplete todos
+    # Only exclude todo_excluded notes when no specific notebook is requested
+    # (matches nb todo behavior where -n work shows all todos from that notebook)
     todos_raw = get_sorted_todos(
         completed=False,
         notebooks=scope.notebooks,
         exclude_notebooks=scope.exclude_notebooks,
         tag=scope.tags[0] if scope.tags else None,
-        exclude_note_excluded=True,
+        exclude_note_excluded=scope.notebooks is None,
     )
 
     # Convert to TodoContext

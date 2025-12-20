@@ -11,7 +11,12 @@ from click.testing import CliRunner
 
 from nb import config as config_module
 from nb.cli import cli
+from nb.cli import utils as cli_utils_module
 from nb.config import Config, EmbeddingsConfig, NotebookConfig
+from nb.core import note_links as note_links_module
+from nb.core import notebooks as notebooks_module
+from nb.core import templates as templates_module
+from nb.core.ai import summarize as summarize_module
 from nb.index import scanner as scanner_module
 from nb.index.db import reset_db
 from nb.index.search import reset_search
@@ -60,15 +65,22 @@ def temp_config(temp_notes_root: Path) -> Generator[Config]:
 def mock_config(temp_config: Config, monkeypatch: pytest.MonkeyPatch) -> Config:
     """Mock get_config() to return temp_config.
 
-    This patches the get_config function itself (not just _config variable)
-    so that even if reset_config() is called during the test, subsequent
-    calls to get_config() will still return the temp config.
+    This patches get_config in BOTH nb.config AND all modules that import it
+    at module level. We must patch the local reference in each module that uses it.
     """
-    # Reset any cached singletons before test
+    # Reset all cached singletons before test to avoid stale data
+    reset_search()
     config_module.reset_config()
     reset_db()
-    # Patch get_config to always return temp_config
+    # Patch in nb.config module
+    monkeypatch.setattr(config_module, "_config", temp_config)
     monkeypatch.setattr(config_module, "get_config", lambda: temp_config)
+    # Patch in all modules that import get_config at module level
+    monkeypatch.setattr(cli_utils_module, "get_config", lambda: temp_config)
+    monkeypatch.setattr(templates_module, "get_config", lambda: temp_config)
+    monkeypatch.setattr(notebooks_module, "get_config", lambda: temp_config)
+    monkeypatch.setattr(note_links_module, "get_config", lambda: temp_config)
+    monkeypatch.setattr(summarize_module, "get_config", lambda: temp_config)
     return temp_config
 
 
@@ -214,14 +226,22 @@ def cli_config(tmp_path: Path) -> Generator[Config]:
 def mock_cli_config(cli_config: Config, monkeypatch: pytest.MonkeyPatch) -> Config:
     """Mock get_config() to return cli_config for CLI tests.
 
-    This patches the get_config function itself (not just _config variable)
-    so that even if reset_config() is called during the test, subsequent
-    calls to get_config() will still return the cli config.
+    This patches get_config in BOTH nb.config AND all modules that import it
+    at module level. We must patch the local reference in each module that uses it.
     """
-    # Reset any cached config first
+    # Reset all cached singletons before test to avoid stale data
+    reset_search()
     config_module.reset_config()
-    # Patch get_config to always return cli_config
+    reset_db()
+    # Patch in nb.config module
+    monkeypatch.setattr(config_module, "_config", cli_config)
     monkeypatch.setattr(config_module, "get_config", lambda: cli_config)
+    # Patch in all modules that import get_config at module level
+    monkeypatch.setattr(cli_utils_module, "get_config", lambda: cli_config)
+    monkeypatch.setattr(templates_module, "get_config", lambda: cli_config)
+    monkeypatch.setattr(notebooks_module, "get_config", lambda: cli_config)
+    monkeypatch.setattr(note_links_module, "get_config", lambda: cli_config)
+    monkeypatch.setattr(summarize_module, "get_config", lambda: cli_config)
     return cli_config
 
 

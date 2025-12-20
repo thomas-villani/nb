@@ -141,7 +141,9 @@ todo_exclude: true
 - [ ] Need to add options to grep and search to output source only (no content)
 - [ ] Is it possible to link a whole directory and have the notes/todos get pulled in as they are created (on reindex)
 - [ ] Allow notebooks to have a special readme.md note that the AI will reference and can define fancy stuff, i.e. prompt for ask?
-- [ ] Add .env file config and move the env vars to a .env file (openai, anthropic, deepgram, raindrop)
+- [x] Add .env file config and move the env vars to a .env file (openai, anthropic, deepgram, raindrop)
+- [x] Make ai function flags consistent (e.g. -b is for notebook for some reason)
+- [ ] Need to improve the `nb ask` function to handle queries like `nb ask "What still remains to be done for the wijjit project?"`
 
 ### Phase 5: Wijjit TUI
 - [x] Full Wijjit-based todo list view with richer interactions #feature

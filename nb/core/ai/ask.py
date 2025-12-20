@@ -25,8 +25,10 @@ CHARS_PER_TOKEN = 3
 # Model context limits (input tokens)
 # These are conservative limits leaving room for the response
 MODEL_CONTEXT_LIMITS = {
-    # Anthropic models
-    "claude-sonnet-4-20250514": 180000,  # 200k context, leave room for output
+    # Anthropic models (new short names and legacy full names)
+    "claude-sonnet-4-5": 180000,  # 200k context, leave room for output
+    "claude-haiku-4-5": 180000,
+    "claude-sonnet-4-20250514": 180000,  # Legacy names
     "claude-haiku-3-5-20241022": 180000,
     "claude-3-5-sonnet": 180000,
     "claude-3-haiku": 180000,

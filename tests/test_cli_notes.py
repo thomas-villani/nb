@@ -309,6 +309,8 @@ class TestNewCommand:
         note_path = mock_cli_config.notes_root / "projects" / "exists.md"
         note_path.write_text("# Exists\n")
 
-        result = cli_runner.invoke(cli, ["new", "exists", "-n", "projects"])
+        result = cli_runner.invoke(
+            cli, ["new", "exists", "-n", "projects"], input="n\n"
+        )
         assert result.exit_code == 1
         assert "already exists" in result.output.lower()

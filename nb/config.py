@@ -636,8 +636,8 @@ def _parse_llm_models_config(data: dict[str, Any] | None) -> LLMModelConfig:
     if data is None:
         return LLMModelConfig()
     return LLMModelConfig(
-        smart=data.get("smart", "claude-sonnet-4-20250514"),
-        fast=data.get("fast", "claude-haiku-3-5-20241022"),
+        smart=data.get("smart", "claude-sonnet-4-5"),
+        fast=data.get("fast", "claude-haiku-4-5"),
     )
 
 
@@ -1128,8 +1128,8 @@ CONFIGURABLE_SETTINGS = {
     "git.auto_commit": "Auto-commit after note changes (true/false)",
     "git.commit_message_template": "Commit message template (supports {path}, {notebook}, {title}, {date})",
     "llm.provider": "LLM provider (anthropic or openai)",
-    "llm.models.smart": "Model for complex tasks (e.g., claude-sonnet-4-20250514)",
-    "llm.models.fast": "Model for simple tasks (e.g., claude-haiku-3-5-20241022)",
+    "llm.models.smart": "Model for complex tasks (e.g., claude-sonnet-4-5)",
+    "llm.models.fast": "Model for simple tasks (e.g., claude-haiku-4-5)",
     "llm.base_url": "Custom API endpoint URL (for proxies)",
     "llm.max_tokens": "Max tokens in LLM response (default 4096)",
     "llm.temperature": "Sampling temperature (0.0-1.0, default 0.7)",

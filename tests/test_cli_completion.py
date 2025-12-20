@@ -9,6 +9,7 @@ from click.testing import CliRunner
 
 from nb import config as config_module
 from nb.cli import cli
+from nb.cli import utils as cli_utils_module
 from nb.cli.completion import (
     _get_powershell_source,
     complete_notebook,
@@ -74,12 +75,16 @@ def completion_config(tmp_path: Path):
 def mock_completion_config(completion_config: Config, monkeypatch: pytest.MonkeyPatch):
     """Mock get_config() to return completion_config.
 
-    This patches the get_config function itself (not just _config variable)
-    so that even if reset_config() is called during the test, subsequent
-    calls to get_config() will still return the completion config.
+    This patches get_config in BOTH nb.config AND nb.cli.utils to ensure proper
+    isolation. CLI modules import get_config at module level, so we must patch
+    the local reference in each module that uses it.
     """
+    reset_search()
     config_module.reset_config()
+    reset_db()
+    monkeypatch.setattr(config_module, "_config", completion_config)
     monkeypatch.setattr(config_module, "get_config", lambda: completion_config)
+    monkeypatch.setattr(cli_utils_module, "get_config", lambda: completion_config)
     return completion_config
 
 

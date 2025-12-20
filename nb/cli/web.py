@@ -17,7 +17,7 @@ def web_cmd(port: int, no_open: bool, completed: bool) -> None:
     Starts a local web server and opens your notes in the browser.
     Press Ctrl+C to stop.
     """
-    from nb.web import run_server
+    from nb.webserver import run_server
 
     console.print(f"[dim]Starting web server at http://localhost:{port}[/dim]")
     console.print("[dim]Press Ctrl+C to stop[/dim]")

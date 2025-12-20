@@ -120,8 +120,8 @@ class TestLLMModelConfig:
     def test_defaults(self):
         cfg = LLMModelConfig()
 
-        assert cfg.smart == "claude-sonnet-4-20250514"
-        assert cfg.fast == "claude-haiku-3-5-20241022"
+        assert cfg.smart == "claude-sonnet-4-5"
+        assert cfg.fast == "claude-haiku-4-5"
 
     def test_custom(self):
         cfg = LLMModelConfig(smart="gpt-4o", fast="gpt-4o-mini")
@@ -698,13 +698,13 @@ class TestLLMConfigGetSet:
         from nb.config import get_config_value
 
         result = get_config_value("llm.models.smart")
-        assert result == "claude-sonnet-4-20250514"
+        assert result == "claude-sonnet-4-5"
 
     def test_get_llm_models_fast(self, mock_config: Config):
         from nb.config import get_config_value
 
         result = get_config_value("llm.models.fast")
-        assert result == "claude-haiku-3-5-20241022"
+        assert result == "claude-haiku-4-5"
 
     def test_set_llm_provider(self, mock_config: Config, temp_notes_root: Path):
         from nb.config import load_config, set_config_value

@@ -9,8 +9,10 @@ from click.testing import CliRunner
 
 from nb import config as config_module
 from nb.cli import cli
+from nb.cli import utils as cli_utils_module
 from nb.config import Config, EmbeddingsConfig, GitConfig, NotebookConfig
 from nb.index.db import reset_db
+from nb.index.search import reset_search
 
 # =============================================================================
 # Fixtures
@@ -51,12 +53,16 @@ def git_config(tmp_path: Path):
 def mock_git_config(git_config: Config, monkeypatch: pytest.MonkeyPatch) -> Config:
     """Mock get_config() to return git_config.
 
-    This patches the get_config function itself (not just _config variable)
-    so that even if reset_config() is called during the test, subsequent
-    calls to get_config() will still return the git config.
+    This patches get_config in BOTH nb.config AND nb.cli.utils to ensure proper
+    isolation. CLI modules import get_config at module level, so we must patch
+    the local reference in each module that uses it.
     """
+    reset_search()
     config_module.reset_config()
+    reset_db()
+    monkeypatch.setattr(config_module, "_config", git_config)
     monkeypatch.setattr(config_module, "get_config", lambda: git_config)
+    monkeypatch.setattr(cli_utils_module, "get_config", lambda: git_config)
     return git_config
 
 
@@ -90,12 +96,16 @@ def mock_git_disabled_config(
 ) -> Config:
     """Mock get_config() with git disabled.
 
-    This patches the get_config function itself (not just _config variable)
-    so that even if reset_config() is called during the test, subsequent
-    calls to get_config() will still return the git disabled config.
+    This patches get_config in BOTH nb.config AND nb.cli.utils to ensure proper
+    isolation. CLI modules import get_config at module level, so we must patch
+    the local reference in each module that uses it.
     """
+    reset_search()
     config_module.reset_config()
+    reset_db()
+    monkeypatch.setattr(config_module, "_config", git_disabled_config)
     monkeypatch.setattr(config_module, "get_config", lambda: git_disabled_config)
+    monkeypatch.setattr(cli_utils_module, "get_config", lambda: git_disabled_config)
     return git_disabled_config
 
 

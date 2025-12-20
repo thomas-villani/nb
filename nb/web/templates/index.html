@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nb</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/python.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/javascript.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/bash.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/sql.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/yaml.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark.min.css">
+    <style>/* STYLES_PLACEHOLDER */</style>
+</head>
+<body>
+    <div class="app">
+        <nav class="sidebar">
+            <div class="brand">nb</div>
+            <input type="text" class="search-box" placeholder="Search notes..." id="searchInput">
+            <div class="nav-section">
+                <h3>Navigation</h3>
+                <a class="nav-link" onclick="loadHome()">Home</a>
+                <a class="nav-link" onclick="loadHistory()">History</a>
+                <a class="nav-link" onclick="loadTodos()">Todos</a>
+                <a class="nav-link" onclick="loadKanban()">Kanban</a>
+                <a class="nav-link" onclick="loadGraph()">Graph</a>
+            </div>
+            <div class="nav-section">
+                <h3>Notebooks</h3>
+                <div id="notebooks"></div>
+            </div>
+            <div class="nav-section" id="notes-section" style="display:none">
+                <h3>Notes</h3>
+                <div id="notes" class="note-list"></div>
+            </div>
+        </nav>
+        <main class="main">
+            <div id="content"><p class="loading">Loading...</p></div>
+        </main>
+    </div>
+
+    <script>/* SCRIPTS_PLACEHOLDER */</script>
+</body>
+</html>

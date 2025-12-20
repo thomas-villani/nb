@@ -38,7 +38,7 @@ class TestGetModelContextLimit:
     """Tests for model context limit lookup."""
 
     def test_known_anthropic_model(self):
-        limit = _get_model_context_limit("claude-sonnet-4-20250514")
+        limit = _get_model_context_limit("claude-sonnet-4-5")
         assert limit == 180000
 
     def test_known_openai_model(self):

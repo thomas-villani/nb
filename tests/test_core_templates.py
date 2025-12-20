@@ -9,6 +9,8 @@ import pytest
 
 from nb import config as config_module
 from nb.config import Config, EmbeddingsConfig, NotebookConfig
+from nb.core import notebooks as notebooks_module
+from nb.core import templates as templates_module
 
 
 class TestTemplateOperations:
@@ -265,8 +267,10 @@ class TestNotebookDefaultTemplate:
             ],
             embeddings=EmbeddingsConfig(),
         )
-        # Patch get_config function to survive reset_config() calls
+        # Patch get_config in all modules that import it at module level
         monkeypatch.setattr(config_module, "get_config", lambda: cfg)
+        monkeypatch.setattr(notebooks_module, "get_config", lambda: cfg)
+        monkeypatch.setattr(templates_module, "get_config", lambda: cfg)
 
         # Create daily directory
         (temp_notes_root / "daily").mkdir(exist_ok=True)
@@ -297,8 +301,10 @@ class TestNotebookDefaultTemplate:
             ],
             embeddings=EmbeddingsConfig(),
         )
-        # Patch get_config function to survive reset_config() calls
+        # Patch get_config in all modules that import it at module level
         monkeypatch.setattr(config_module, "get_config", lambda: cfg)
+        monkeypatch.setattr(notebooks_module, "get_config", lambda: cfg)
+        monkeypatch.setattr(templates_module, "get_config", lambda: cfg)
 
         (temp_notes_root / "daily").mkdir(exist_ok=True)
 

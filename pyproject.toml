@@ -10,6 +10,8 @@ packages = ["nb"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "docs/build/html" = "nb/_docs/"
+"nb/web/static" = "nb/web/static"
+"nb/web/templates" = "nb/web/templates"
 
 [project]
 name = "nb-cli"

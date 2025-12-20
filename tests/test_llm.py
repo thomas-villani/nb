@@ -109,7 +109,9 @@ class TestLLMClientAnthropicRequests:
         assert body["model"] == "claude-3"
         assert body["max_tokens"] == 1000
         assert body["temperature"] == 0.5
-        assert body["system"] == "Be helpful"
+        # System prompt now includes date/time appended
+        assert body["system"].startswith("Be helpful")
+        assert "current date and time" in body["system"]
         assert len(body["messages"]) == 1
         assert body["messages"][0]["content"] == "Hello"
 

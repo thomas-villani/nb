@@ -49,7 +49,7 @@ def plan_group():
 @plan_group.command(name="week")
 @click.option(
     "--notebook",
-    "-b",
+    "-n",
     "notebook",
     help="Scope to specific notebook.",
     shell_complete=complete_notebook,
@@ -62,7 +62,7 @@ def plan_group():
 )
 @click.option(
     "--note",
-    "-n",
+    "-N",
     "note_path",
     is_flag=False,
     flag_value="today",
@@ -138,7 +138,7 @@ def plan_week_command(
 @plan_group.command(name="today")
 @click.option(
     "--notebook",
-    "-b",
+    "-n",
     "notebook",
     help="Scope to specific notebook.",
     shell_complete=complete_notebook,
@@ -151,7 +151,7 @@ def plan_week_command(
 )
 @click.option(
     "--note",
-    "-n",
+    "-N",
     "note_path",
     is_flag=False,
     flag_value="today",
@@ -467,13 +467,13 @@ def _run_interactive_planning(context, use_smart: bool, stream: bool) -> None:
 @click.argument("question")
 @click.option(
     "--notebook",
-    "-b",
+    "-n",
     "notebook",
     help="Filter to specific notebook",
     shell_complete=complete_notebook,
 )
 @click.option(
-    "-n",
+    "-N",
     "--note",
     "note_path",
     help="Ask about a specific note instead of searching.",
@@ -534,7 +534,7 @@ def ask_command(
 
         nb ask "summarize project X" --notebook work
 
-        nb ask "what server version?" -n work/deploy-notes
+        nb ask "what server version?" -N work/deploy-notes
 
         nb ask "who owns deployment?" --tag infrastructure
     """
@@ -739,7 +739,7 @@ def summarize_options(f):
     )(f)
     f = click.option(
         "--note",
-        "-n",
+        "-N",
         "output_note",
         is_flag=False,
         flag_value="today",
@@ -759,7 +759,7 @@ def summarize_options(f):
     )(f)
     f = click.option(
         "--notebook",
-        "-b",
+        "-n",
         "notebook",
         help="Summarize notes from this notebook.",
         shell_complete=complete_notebook,
@@ -1083,7 +1083,7 @@ def _summarize_multiple_notes(
 @click.argument("query")
 @click.option(
     "--note",
-    "-n",
+    "-N",
     "note_path",
     is_flag=False,
     flag_value="today",
@@ -1092,7 +1092,7 @@ def _summarize_multiple_notes(
 )
 @click.option(
     "--notebook",
-    "-b",
+    "-n",
     "notebook",
     help="Create note in this notebook (for new notes).",
     shell_complete=complete_notebook,

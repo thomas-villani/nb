@@ -2,76 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
 from click.testing import CliRunner
 
-from nb import config as config_module
 from nb.cli import cli
-from nb.config import Config, EmbeddingsConfig, NotebookConfig
-from nb.index import scanner as scanner_module
-from nb.index.db import reset_db
-from nb.index.search import reset_search
+from nb.config import Config
 
-
-@pytest.fixture
-def cli_runner():
-    """Create a Click CLI runner."""
-    return CliRunner()
-
-
-@pytest.fixture
-def cli_config(tmp_path: Path):
-    """Set up isolated config for CLI tests."""
-    notes_root = tmp_path / "notes"
-    notes_root.mkdir()
-    nb_dir = notes_root / ".nb"
-    nb_dir.mkdir()
-
-    cfg = Config(
-        notes_root=notes_root,
-        editor="echo",  # Use echo as a no-op editor
-        notebooks=[
-            NotebookConfig(name="daily", date_based=True),
-            NotebookConfig(name="projects", date_based=False),
-            NotebookConfig(name="work", date_based=False),
-        ],
-        embeddings=EmbeddingsConfig(),
-        date_format="%Y-%m-%d",
-        time_format="%H:%M",
-    )
-
-    # Create notebook directories
-    for nb in cfg.notebooks:
-        if not nb.is_external:
-            (notes_root / nb.name).mkdir(exist_ok=True)
-
-    # Disable vector indexing for tests
-    scanner_module.ENABLE_VECTOR_INDEXING = False
-
-    yield cfg
-
-    # Cleanup - IMPORTANT: restore ENABLE_VECTOR_INDEXING to avoid affecting other tests/processes
-    scanner_module.ENABLE_VECTOR_INDEXING = True
-    reset_search()  # Must reset before config to avoid stale references
-    config_module.reset_config()
-    reset_db()
-
-
-@pytest.fixture
-def mock_cli_config(cli_config: Config, monkeypatch: pytest.MonkeyPatch):
-    """Mock get_config() for CLI tests.
-
-    This patches the get_config function itself (not just _config variable)
-    so that even if reset_config() is called during the test, subsequent
-    calls to get_config() will still return the cli config.
-    """
-    # Reset any cached config first
-    config_module.reset_config()
-    # Patch get_config to always return cli_config
-    monkeypatch.setattr(config_module, "get_config", lambda: cli_config)
-    return cli_config
+# Note: cli_runner, cli_config, and mock_cli_config fixtures are defined in conftest.py
 
 
 class TestMainCommand:

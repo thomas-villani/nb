@@ -13,6 +13,7 @@ from click.testing import CliRunner
 
 from nb import config as config_module
 from nb.cli import cli
+from nb.cli import utils as cli_utils_module
 from nb.config import Config, EmbeddingsConfig, NotebookConfig
 from nb.index import scanner as scanner_module
 from nb.index.db import reset_db
@@ -70,12 +71,16 @@ def cli_config(tmp_path: Path):
 def mock_cli_config(cli_config: Config, monkeypatch: pytest.MonkeyPatch):
     """Mock get_config() for CLI tests.
 
-    This patches the get_config function itself (not just _config variable)
-    so that even if reset_config() is called during the test, subsequent
-    calls to get_config() will still return the cli config.
+    This patches get_config in BOTH nb.config AND nb.cli.utils to ensure proper
+    isolation. CLI modules import get_config at module level, so we must patch
+    the local reference in each module that uses it.
     """
+    reset_search()
     config_module.reset_config()
+    reset_db()
+    monkeypatch.setattr(config_module, "_config", cli_config)
     monkeypatch.setattr(config_module, "get_config", lambda: cli_config)
+    monkeypatch.setattr(cli_utils_module, "get_config", lambda: cli_config)
     return cli_config
 
 
@@ -291,16 +296,22 @@ class TestTranscriber:
         assert result.speaker_ids == {0, 1}
         assert result.full_text == "Hello Hi Bye"
 
-    def test_get_api_key_from_env(self, monkeypatch):
+    def test_get_api_key_from_config(self, mock_cli_config, monkeypatch):
+        """Test that get_api_key returns config value."""
+        from nb.config import RecorderConfig
         from nb.recorder.transcriber import get_api_key
 
-        monkeypatch.setenv("DEEPGRAM_API_KEY", "test_key_123")
+        # Set the API key in the mock config
+        mock_cli_config.recorder = RecorderConfig(deepgram_api_key="test_key_123")
         assert get_api_key() == "test_key_123"
 
-    def test_get_api_key_missing(self, monkeypatch):
+    def test_get_api_key_missing(self, mock_cli_config, monkeypatch):
+        """Test that get_api_key returns None when not configured."""
+        from nb.config import RecorderConfig
         from nb.recorder.transcriber import get_api_key
 
-        monkeypatch.delenv("DEEPGRAM_API_KEY", raising=False)
+        # Ensure no API key is set in the mock config
+        mock_cli_config.recorder = RecorderConfig(deepgram_api_key=None)
         assert get_api_key() is None
 
 
