@@ -49,6 +49,13 @@ recorder = [
 calendar = [
     "pywin32>=306; sys_platform == 'win32'",
 ]
+all = [
+    "sounddevice>=0.4.6",
+    "soundfile>=0.12.0",
+    "numpy>=1.24.0",
+    "deepgram-sdk>=3.0.0",
+    "pywin32>=306; sys_platform == 'win32'"
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov",
