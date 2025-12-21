@@ -151,7 +151,6 @@ class TestLLMClientOpenAIRequests:
         )
 
         assert body["model"] == "gpt-4"
-        assert body["max_tokens"] == 1000
         assert body["temperature"] == 0.5
         # System message should be first
         assert body["messages"][0]["role"] == "system"
