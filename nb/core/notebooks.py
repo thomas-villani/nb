@@ -406,7 +406,9 @@ def ensure_notebook_note(
                 return path
 
         # Fall back to built-in templates
-        if is_notebook_date_based(notebook):
+        if is_notebook_date_based(notebook) or dt is not None:
+            # Use date-based template when notebook is date-based OR when dt is explicitly provided
+            # (e.g., from `nb today -n <non-date-based-notebook>`)
             if dt is None:
                 dt = date.today()
             # Create daily note with header

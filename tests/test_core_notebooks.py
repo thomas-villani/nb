@@ -290,6 +290,28 @@ class TestEnsureNotebookNote:
 
         assert path.parent.exists()
 
+    def test_non_date_based_notebook_with_dt_uses_date_format(self, mock_config):
+        """When dt is provided for a non-date-based notebook, use date-based template.
+
+        This is the case when running `nb today -n work` for a non-date-based notebook.
+        The note should have proper date formatting, not "2025 11 26" from filename munging.
+        """
+        dt = date(2025, 11, 26)
+
+        # 'projects' is a non-date-based notebook, but we're passing dt
+        path = ensure_notebook_note("projects", dt=dt, name=dt.isoformat())
+
+        assert path.exists()
+        content = path.read_text()
+
+        # Should use date-based template format
+        assert "date: 2025-11-26" in content
+        assert "Wednesday, November 26, 2025" in content
+
+        # Should NOT have munged date format like "2025 11 26"
+        assert "2025 11 26" not in content
+        assert "title: 2025 11 26" not in content
+
 
 class TestGetDefaultTranscriptNotebook:
     """Tests for get_default_transcript_notebook function."""

@@ -585,3 +585,61 @@ class TestTodoDatePreservation:
                 assert (
                     t["created_date"] == "2025-01-01"
                 ), f"Original todo should preserve its date, got {t['created_date']}"
+
+
+class TestInboxDetection:
+    """Tests for inbox detection based on full path, not just filename."""
+
+    def test_inbox_file_at_root_is_inbox(self, db_fixture, create_note):
+        """The actual inbox file (todo.md at notes_root) should be marked as inbox."""
+        notes_root = db_fixture.notes_root
+        config = db_fixture
+
+        # Create the actual inbox file at notes_root
+        inbox_path = notes_root / config.todo.inbox_file
+        inbox_path.write_text("# Inbox\n\n- [ ] Inbox task\n")
+
+        # Index the note
+        index_note(inbox_path, notes_root, index_vectors=False)
+
+        db = get_db()
+        todos = db.fetchall("SELECT * FROM todos")
+
+        assert len(todos) == 1
+        assert todos[0]["source_type"] == "inbox"
+
+    def test_todo_md_in_subdirectory_is_not_inbox(self, db_fixture, create_note):
+        """A file named todo.md in a subdirectory should NOT be marked as inbox."""
+        notes_root = db_fixture.notes_root
+
+        # Create a todo.md in a subdirectory (projects/todo.md)
+        content = "# Project Todos\n\n- [ ] Project task\n"
+        note_path = create_note("projects", "todo.md", content)
+
+        # Index the note
+        index_note(note_path, notes_root, index_vectors=False)
+
+        db = get_db()
+        todos = db.fetchall("SELECT * FROM todos")
+
+        assert len(todos) == 1
+        # This should be "note", not "inbox"
+        assert todos[0]["source_type"] == "note", (
+            f"Expected source_type='note' for projects/todo.md, "
+            f"but got '{todos[0]['source_type']}'"
+        )
+
+    def test_different_named_todo_files_not_inbox(self, db_fixture, create_note):
+        """Files with different names should not be marked as inbox."""
+        notes_root = db_fixture.notes_root
+
+        content = "# Tasks\n\n- [ ] Regular task\n"
+        note_path = create_note("projects", "tasks.md", content)
+
+        index_note(note_path, notes_root, index_vectors=False)
+
+        db = get_db()
+        todos = db.fetchall("SELECT * FROM todos")
+
+        assert len(todos) == 1
+        assert todos[0]["source_type"] == "note"

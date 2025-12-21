@@ -366,7 +366,8 @@ def index_note(
 
     # Index todos (file was already normalized at the start of this function)
     config = get_config()
-    if full_path.name == config.todo.inbox_file:
+    inbox_path = (notes_root / config.todo.inbox_file).resolve()
+    if full_path.resolve() == inbox_path:
         source_type = "inbox"
     else:
         source_type = "note"
@@ -668,7 +669,8 @@ def index_note_threadsafe(
 
     # Index todos (file was already normalized at the start of this function)
     config = get_config()
-    if full_path.name == config.todo.inbox_file:
+    inbox_path = (notes_root / config.todo.inbox_file).resolve()
+    if full_path.resolve() == inbox_path:
         source_type = "inbox"
     else:
         source_type = "note"
@@ -1016,7 +1018,8 @@ def index_todos_from_file(path: Path, notes_root: Path | None = None) -> int:
         path = notes_root / path
 
     # Determine source type
-    if path.name == config.todo.inbox_file:
+    inbox_path = (notes_root / config.todo.inbox_file).resolve()
+    if path.resolve() == inbox_path:
         source_type = "inbox"
     else:
         source_type = "note"

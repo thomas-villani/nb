@@ -269,7 +269,10 @@
         .todo-item.overdue { border-left-color: var(--red); }
         .todo-item.due-today { border-left-color: var(--orange); }
         .todo-item.in-progress { border-left-color: var(--green); }
-        .todo-item.completed { opacity: 0.6; }
+        .todo-item.completed {
+            opacity: 0.5;
+            border-left-color: var(--green);
+        }
         .todo-item .checkbox {
             width: 18px;
             height: 18px;
@@ -288,7 +291,8 @@
         .todo-item.completed .checkbox svg { display: block; }
         .todo-item .todo-body { flex: 1; }
         .todo-item .content { margin-bottom: 0.25rem; }
-        .todo-item.completed .content { text-decoration: line-through; }
+        .todo-item.completed .content { text-decoration: line-through; color: var(--text-dim); }
+        .todo-item.completed .meta { opacity: 0.7; }
         .todo-item .meta { font-size: 0.8rem; color: var(--text-dim); }
         .priority-1 { color: var(--red); }
         .priority-2 { color: var(--orange); }

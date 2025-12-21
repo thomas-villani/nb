@@ -78,7 +78,8 @@ def today(ctx: click.Context, notebook: str | None) -> None:
         if is_notebook_date_based(notebook):
             path = ensure_notebook_note(notebook, dt=dt)
         else:
-            path = ensure_notebook_note(notebook, name=dt.isoformat())
+            # Pass both dt and name so template can use proper date formatting
+            path = ensure_notebook_note(notebook, dt=dt, name=dt.isoformat())
     else:
         path = ensure_daily_note(dt)
 
