@@ -1,3 +1,30 @@
+# v0.4.1 - 2025-12-21
+
+Patch release with optional AI-generated TL;DRs for inbox clipping, inbox/template detection fixes, tests and docs updates.
+
+## New Features
+
+- [3c8cdf3] Add AI-generated ultra-brief TL;DR summaries to inbox clipping flow
+  - Add --ai / --no-ai flags to `nb inbox pull` (CLI flag overrides inbox.auto_summarize config)
+  - Introduce inbox.auto_summarize config option (default: true) and wire CLI get/set behavior
+  - Add `generate_content_tldr` helper in `nb.core.ai.summarize` to produce ultra-brief summaries with graceful fallback when an LLM or API key is unavailable
+  - Generate and write summaries to note frontmatter during clipping; failures or missing keys do not block clipping
+  - Update README to document AI summary behavior and CLI usage; bump dependency to released all2md package
+
+## Bug Fixes
+
+- [7703b8e] Fix inbox detection and date-based notebook templating
+  - Ensure date-based templates are used when an explicit `dt` is provided (prevents filename-munged dates in templates even for non-date-based notebooks)
+  - Update `nb today` CLI to pass both `dt` and `name` so templates can format dates correctly
+  - Fix inbox detection in the indexer by comparing resolved full paths against `notes_root/todo` (prevents `todo.md` files in subdirectories from being treated as the global inbox)
+  - Tweak completed-todo styles: reduce opacity, add left border color, dim meta text
+
+## Tests & Documentation
+
+- Add tests for inbox config handling and CLI config get/set behavior
+- Add tests for `generate_content_tldr` including mocking and truncation behavior
+- Add tests covering dt-driven templating and inbox detection edge cases to prevent regressions
+
 # v0.4.0 - 2025-12-21
 
 This minor release adds a broad set of AI features (assistant, research, planning/summarization, agentic/tool calling), a refactored web viewer/webserver, improved config/env key loading, and several refactors to note parsing and indexing. It contains 14 commits and introduces 4 breaking changes — see "Breaking Changes" for migration guidance.
