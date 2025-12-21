@@ -1,3 +1,81 @@
+# v0.4.0 - 2025-12-21
+
+This minor release adds a broad set of AI features (assistant, research, planning/summarization, agentic/tool calling), a refactored web viewer/webserver, improved config/env key loading, and several refactors to note parsing and indexing. It contains 14 commits and introduces 4 breaking changes — see "Breaking Changes" for migration guidance.
+
+## New Features
+
+- Interactive AI assistant
+  - New CLI: `nb assistant` with options for notebook focus, calendar integration, model selection (smart/fast), dry-run/token-budget controls, and max tool calls.
+  - Implements assistant session context (todos, calendar, recent notes), an LLM loop with streaming support, tool routing (read/write), and a confirmation-based queue/execute flow for any filesystem writes.
+  - Assistant tools implemented: search_notes, read_note, query_todos, get_project_stats, get_calendar_events, create_todo, update_todo, create_note, append_to_note.
+  - Tests added for context gathering, action queuing, routing, and basic write execution flows.
+
+- Research agent and `nb research`
+  - New `nb research` command with streaming/non-streaming flows, web/news/scholar/patents search (Serper), fetch_url, optional local vector DB indexing, and reporting saved to notes.
+  - Research agent supports max sources/strategy/vectordb/token-budget and will save reports to a specified notebook or daily note when requested.
+
+- Planning, summarization, and TL;DR
+  - New `plan` group (`plan week`, `plan today`) with interactive and streaming modes.
+  - `summarize` and `tldr` commands supporting single- and multi-note (map-reduce) summarization, front-matter updates, and save-to-note options.
+
+- Agentic ask / tool-calling
+  - `nb ask` gains `--agentic` and `--max-tool-calls` to enable an agentic RAG loop that can call tools (search, read, todos, project stats, complete_answer) for complex queries.
+  - Adds ToolDefinition/ToolCall/ToolResult support in the LLM client and exposes agentic helpers for programmatic use.
+
+- LLM / RAG improvements
+  - New LLM client abstraction with Anthropic/OpenAI support, streaming, and tool-call serialization/parsing.
+  - RAG-based ask implementation with enhanced retrieval, context truncation, and token-budget handling.
+
+- Web viewer refactor and webserver
+  - Replaced single-file viewer with `nb.web` package (templates/static) and added `nb.webserver.run_server` to serve the assembled front-end.
+
+- Embedding/indexing improvements
+  - Strip markdown images before embedding to avoid large token usage and make indexing more robust; logs and falls back on failure.
+
+- Config / .env support
+  - Load API keys/config (SERPER_API_KEY, DEEPGRAM_API_KEY) from notes_root/.nb/.env using python-dotenv (config takes precedence over env). Keys are not persisted to config files for security.
+  - Add config-backed key handlers and updated search/transcriber to prefer get_config().
+
+## Breaking Changes (migration guidance)
+
+- Unified output and notebook flags
+  - CLI flags changed: use -n for notebook scope (was -b) and use --output / -o to save AI-generated content to notes (replaces previous --note / -N save behavior).
+  - Migration: update scripts/aliases and automation to use `-n NOTEBOOK` and `--output <today|NOTEBOOK/NOTE|NOTE-PATH>`; `ask` still accepts -N for targeting a specific note in some contexts.
+
+- Web viewer refactor
+  - Removed old `nb/web.py` and `nb.web.TEMPLATE`.
+  - Migration: update imports and server start code to use `nb.web.get_template()` where template access is needed, and use `nb.webserver.run_server()` to run the web server. Ensure packaging includes web static files (pyproject has been updated).
+
+- Ask command exposed at top-level; old ai group removed
+  - The `nb ai ask` group has been removed; use `nb ask` (top-level command) instead.
+  - Migration: replace any `nb ai ask ...` invocations with `nb ask ...` and update documentation/scripts.
+
+- Standardized CLI short flags
+  - Many short flags were changed to avoid conflicts and improve consistency (notably: `-y` -> `-f` (force), `-f` -> `-F` (full paths), `-t` -> `-T` (tree display), `-l` -> `-L`, reassigned `-N` usages).
+  - Migration: audit and update any scripts, shell completions, aliases, or automation that depend on previous single-letter short flags. Consult `nb --help` for the updated mappings.
+
+## Bug Fixes & Tweaks
+
+- Removed test reliance on max_tokens and stop injecting a default max_tokens into LLM request bodies unless explicitly provided.
+- Improve todos.find_todo_line: increased search radius and full-file fallback for moved/edited files.
+- Improved robustness when upserting documents: fallback logging if image-stripping transform fails.
+- Normalize path handling across modules: replace ad-hoc backslash replacements with a centralized normalize_path helper.
+
+## Internal / Refactors
+
+- Extracted note parsing into nb/core/note_parser.py and consolidated regex patterns in nb/utils/patterns.py to break circular imports and centralize parsing helpers.
+- Re-exported parsing helpers from nb/core/notes.py for compatibility.
+- Reorganized model name mappings and updated default model names for Anthropic (legacy → new names).
+- Exposed agentic helpers and types for convenient imports; reorganized CLI registration to reflect top-level commands.
+- pyproject and lockfile updates: introduced dependency groups and optional extras (recorder, calendar, localvectordb), added python-dotenv and all2md extras, and kept uv.lock in sync.
+
+## Tests
+
+- Added/updated tests for assistant, agentic ask, research, planning, summarization, and calendar integration.
+- Updated fixtures/tests to patch get_config() where modules import configuration at module level and added safeguards to avoid accidental deletion of real vector indexes during tests.
+
+If you rely on CLI short flags, the ai command group, the old web template API, or the previous save-to-note flags, update your scripts and tooling as noted in the "Breaking Changes" section.
+
 # v0.3.2 - 2025-12-16
 
 Patch release adding Git integration for notes, recorder device testing/auto-config, combined tag views, and a handful of usability bug fixes. No breaking changes.
