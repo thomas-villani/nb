@@ -12,6 +12,8 @@ import yaml.scanner
 
 from nb.config import get_config
 from nb.utils.dates import parse_date_from_filename
+from nb.utils.patterns import HEX_COLOR_PATTERN
+from nb.utils.patterns import TAG_PATTERN as INLINE_TAG_PATTERN
 
 # Pattern for wiki-style links: [[path|title]] or [[path]]
 WIKI_LINK_PATTERN = re.compile(r"\[\[([^|\]]+)(?:\|([^\]]+))?\]\]")
@@ -21,16 +23,6 @@ MD_LINK_PATTERN = re.compile(r"(?<!!)\[([^\]]+)\]\(([^)]+)\)")
 
 # Protocols that indicate an external link
 EXTERNAL_LINK_PREFIXES = ("http://", "https://", "mailto:", "ftp://", "file://")
-
-# Pattern for inline tags: #tag
-# Must start with a letter, can contain letters, numbers, hyphens, underscores
-# Requires word boundary before # (start of line, whitespace, or parenthesis)
-INLINE_TAG_PATTERN = re.compile(r"(?:^|[\s(])#([a-zA-Z][a-zA-Z0-9_-]*)")
-
-# Hex color patterns to exclude from tags (3, 4, 6, or 8 hex digits)
-HEX_COLOR_PATTERN = re.compile(
-    r"^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{4}$|^[0-9a-fA-F]{6}$|^[0-9a-fA-F]{8}$"
-)
 
 
 def is_valid_tag(tag: str) -> bool:

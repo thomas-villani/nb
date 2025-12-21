@@ -16,6 +16,13 @@ from nb.utils.dates import (
 )
 from nb.utils.hashing import make_attachment_id, make_todo_id
 from nb.utils.markdown import is_valid_tag
+from nb.utils.patterns import (
+    ATTACH_PATTERN_SIMPLE as ATTACH_PATTERN,
+)
+from nb.utils.patterns import (
+    TAG_PATTERN,
+    TAG_REMOVAL_PATTERN,
+)
 
 # Regex patterns for todo parsing
 # Captures: [ ] pending, [x]/[X] completed, [^] in progress
@@ -27,13 +34,6 @@ PRIORITY_PATTERN = re.compile(
 
 # Named priority to integer mapping
 PRIORITY_NAMES: dict[str, int] = {"high": 1, "medium": 2, "low": 3}
-
-# Tag pattern: must start with a letter, can contain letters, numbers, hyphens, underscores
-# Requires word boundary before # (start of string, whitespace, or parenthesis)
-TAG_PATTERN = re.compile(r"(?:^|[\s(])#([a-zA-Z][a-zA-Z0-9_-]*)")
-# Pattern for removing tags from content (doesn't include prefix to preserve spacing)
-TAG_REMOVAL_PATTERN = re.compile(r"#[a-zA-Z][a-zA-Z0-9_-]*")
-ATTACH_PATTERN = re.compile(r"^\s*@attach:\s*(.+)$")
 
 # Pattern to detect fenced code blocks
 CODE_FENCE_PATTERN = re.compile(r"^```")

@@ -306,7 +306,6 @@ class LLMClient:
         body: dict[str, Any] = {
             "model": model,
             "messages": openai_messages,
-            "max_tokens": max_tokens or self.config.max_tokens,
         }
 
         if temperature is not None:

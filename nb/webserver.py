@@ -14,6 +14,7 @@ from nb.config import get_config
 from nb.core.links import list_linked_notes, scan_linked_note_files
 from nb.core.notebooks import get_notebook_notes_with_linked, list_notebooks
 from nb.core.notes import get_note, get_sections_for_path
+from nb.utils.hashing import normalize_path
 from nb.web import get_template
 
 
@@ -310,8 +311,6 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
 
                 # Get lastViewed for all notes
                 # Note: note_views stores paths with OS separators, notes table uses forward slashes
-                from nb.utils.hashing import normalize_path
-
                 view_rows = db.fetchall(
                     """SELECT note_path, MAX(viewed_at) as last_viewed
                        FROM note_views
@@ -326,7 +325,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 if note_rows:
                     for row in note_rows:
                         note_path = Path(row["path"])
-                        path_str = str(note_path).replace("\\", "/")
+                        path_str = normalize_path(note_path)
 
                         # Get tags for this note from database
                         tag_rows = db.fetchall(
@@ -358,7 +357,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                     files = scan_linked_note_files(linked_config)
                     for file_path in sorted(files, reverse=True):
                         note = get_note(file_path, config.notes_root)
-                        path_str = str(file_path).replace("\\", "/")
+                        path_str = normalize_path(file_path)
                         note_alias = get_alias_for_path(file_path)
                         # Get mtime from file stat
                         try:
@@ -399,8 +398,6 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
 
                 # Get lastViewed for all notes in this notebook
                 # Note: note_views stores paths with OS separators, notes table uses forward slashes
-                from nb.utils.hashing import normalize_path
-
                 view_rows = db.fetchall(
                     """SELECT note_path, MAX(viewed_at) as last_viewed
                        FROM note_views
@@ -425,9 +422,9 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                                 if note_path.is_absolute()
                                 else config.notes_root / note_path
                             )
-                            path_str = str(full_path).replace("\\", "/")
+                            path_str = normalize_path(full_path)
                         else:
-                            path_str = str(note_path).replace("\\", "/")
+                            path_str = normalize_path(note_path)
 
                         # Get tags for this note from database
                         tag_rows = db.fetchall(
@@ -475,11 +472,11 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                                 else config.notes_root / note_path
                             )
                             note = get_note(full_path, config.notes_root)
-                            path_str = str(full_path).replace("\\", "/")
+                            path_str = normalize_path(full_path)
                         else:
                             full_path = config.notes_root / note_path
                             note = get_note(note_path, config.notes_root)
-                            path_str = str(note_path).replace("\\", "/")
+                            path_str = normalize_path(note_path)
 
                         check_path = (
                             note_path
@@ -506,7 +503,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                                 ),
                                 "mtime": file_mtime,
                                 "lastViewed": last_viewed_map.get(
-                                    str(note_path).replace("\\", "/")
+                                    normalize_path(note_path)
                                 ),
                                 "tags": note.tags if note else [],
                                 "alias": note_alias,
@@ -609,10 +606,10 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 # Return the path relative to notes_root or absolute for external
                 try:
                     rel_path = resolved.relative_to(config.notes_root)
-                    self.send_json({"path": str(rel_path).replace("\\", "/")})
+                    self.send_json({"path": normalize_path(rel_path)})
                 except ValueError:
                     # External path - return absolute
-                    self.send_json({"path": str(resolved).replace("\\", "/")})
+                    self.send_json({"path": normalize_path(resolved)})
             else:
                 # Not found - try to suggest a similar note
                 suggestion = _find_similar_note(target, config.notes_root)
@@ -635,7 +632,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             )
 
             for row in note_rows:
-                path_str = row["path"].replace("\\", "/")
+                path_str = normalize_path(row["path"])
                 node_ids.add(path_str)
                 nodes.append(
                     {
@@ -686,7 +683,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
 
             # Add note → notebook edges
             for row in note_rows:
-                path_str = row["path"].replace("\\", "/")
+                path_str = normalize_path(row["path"])
                 nb_name = row["notebook"]
                 if nb_name:
                     edges.append(
@@ -700,7 +697,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             # Add note → tag edges
             note_tag_rows = db.fetchall("SELECT note_path, tag FROM note_tags")
             for row in note_tag_rows:
-                path_str = row["note_path"].replace("\\", "/")
+                path_str = normalize_path(row["note_path"])
                 if path_str in node_ids:
                     edges.append(
                         {
@@ -717,8 +714,8 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             )
 
             for row in link_rows:
-                source = row["source_path"].replace("\\", "/")
-                target = row["target_path"].replace("\\", "/")
+                source = normalize_path(row["source_path"])
+                target = normalize_path(row["target_path"])
 
                 # Resolve target to actual path if it's a partial reference
                 if target not in node_ids:
@@ -760,7 +757,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             self.send_json(
                 [
                     {
-                        "source_path": str(b.source_path).replace("\\", "/"),
+                        "source_path": normalize_path(b.source_path),
                         "display_text": b.display_text,
                         "link_type": b.link_type,
                         "line_number": b.line_number,
@@ -785,7 +782,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json(
                     [
                         {
-                            "path": r.path.replace("\\", "/"),
+                            "path": normalize_path(r.path),
                             "title": r.title,
                             "snippet": r.snippet,
                         }
@@ -958,10 +955,10 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 for note_path, mtime in notes:
                     try:
                         rel_path = note_path.relative_to(config.notes_root)
-                        path_str = str(rel_path).replace("\\", "/")
+                        path_str = normalize_path(rel_path)
                     except ValueError:
                         # External path
-                        path_str = str(note_path).replace("\\", "/")
+                        path_str = normalize_path(note_path)
 
                     # Get note metadata from database
                     from nb.index.db import get_db
@@ -987,10 +984,10 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                 for note_path, viewed_at in views:
                     try:
                         rel_path = note_path.relative_to(config.notes_root)
-                        path_str = str(rel_path).replace("\\", "/")
+                        path_str = normalize_path(rel_path)
                     except ValueError:
                         # External path
-                        path_str = str(note_path).replace("\\", "/")
+                        path_str = normalize_path(note_path)
 
                     # Get note metadata from database
                     from nb.index.db import get_db

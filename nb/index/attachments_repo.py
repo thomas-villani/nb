@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -10,13 +9,10 @@ from typing import TYPE_CHECKING
 from nb.index.db import get_db
 from nb.models import Attachment
 from nb.utils.hashing import make_attachment_id, normalize_path
+from nb.utils.patterns import ATTACH_PATTERN_WITH_TITLE as ATTACH_PATTERN
 
 if TYPE_CHECKING:
     from nb.index.db import Database
-
-
-# Pattern to extract @attach: lines from markdown content
-ATTACH_PATTERN = re.compile(r'^\s*@attach:\s*(.+?)(?:\s+"([^"]+)")?\s*$', re.MULTILINE)
 
 
 def _row_to_attachment(row) -> Attachment:

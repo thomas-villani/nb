@@ -9,6 +9,7 @@ import click
 from nb.cli.completion import complete_notebook
 from nb.cli.utils import console, resolve_note_ref
 from nb.config import get_config
+from nb.utils.hashing import normalize_path
 
 
 def register_graph_commands(cli: click.Group) -> None:
@@ -165,7 +166,7 @@ def _show_note_graph(
     if not no_tags and not links_only:
         tag_rows = db.fetchall(
             "SELECT tag FROM note_tags WHERE note_path = ?",
-            (str(display_path).replace("\\", "/"),),
+            (normalize_path(display_path),),
         )
         note_tags = [row["tag"] for row in tag_rows]
 
@@ -231,7 +232,7 @@ def _show_note_graph(
             # Find other notes with this tag
             related = db.fetchall(
                 "SELECT note_path FROM note_tags WHERE tag = ? AND note_path != ?",
-                (tag, str(display_path).replace("\\", "/")),
+                (tag, normalize_path(display_path)),
             )
             count = len(related)
             lines.append(f"  {prefix} #{tag} [dim]({count} other notes)[/dim]")

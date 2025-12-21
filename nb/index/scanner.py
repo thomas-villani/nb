@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from nb.config import get_config
-from nb.core.notes import get_note
+from nb.core.note_parser import get_note
 from nb.core.todos import extract_todos, normalize_due_dates_in_file
 from nb.index.attachments_repo import (
     delete_attachments_for_note,
@@ -337,7 +337,7 @@ def index_note(
         )
 
     # Update sections (path-based subdirectory hierarchy)
-    from nb.core.notes import get_sections_for_path
+    from nb.core.note_parser import get_sections_for_path
 
     sections = get_sections_for_path(note.path)
     db.execute("DELETE FROM note_sections WHERE note_path = ?", (normalized_note_path,))
@@ -640,7 +640,7 @@ def index_note_threadsafe(
         )
 
     # Update sections (path-based subdirectory hierarchy)
-    from nb.core.notes import get_sections_for_path
+    from nb.core.note_parser import get_sections_for_path
 
     sections = get_sections_for_path(note.path)
     db.execute("DELETE FROM note_sections WHERE note_path = ?", (normalized_note_path,))

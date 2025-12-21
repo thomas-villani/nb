@@ -10,6 +10,7 @@ import click
 from nb.cli.completion import complete_notebook
 from nb.cli.utils import console, resolve_note_ref
 from nb.config import get_config
+from nb.utils.hashing import normalize_path
 
 
 def register_related_commands(cli: click.Group) -> None:
@@ -92,7 +93,7 @@ def related_cmd(
     except ValueError:
         rel_path = path
 
-    rel_path_str = str(rel_path).replace("\\", "/")
+    rel_path_str = normalize_path(rel_path)
 
     console.print(f"[bold]Notes related to {rel_path.stem}[/bold]\n")
 
@@ -160,7 +161,7 @@ def _add_link_relations(
                 target_rel = link.resolved_path.relative_to(config.notes_root)
             except ValueError:
                 target_rel = link.resolved_path
-            target_str = str(target_rel).replace("\\", "/")
+            target_str = normalize_path(target_rel)
 
             if target_str == rel_path_str:
                 continue  # Skip self
@@ -183,7 +184,7 @@ def _add_link_relations(
     # Backlinks (weight: 0.9)
     backlinks = get_backlinks(path)
     for bl in backlinks:
-        source_str = str(bl.source_path).replace("\\", "/")
+        source_str = normalize_path(bl.source_path)
 
         if source_str == rel_path_str:
             continue  # Skip self
@@ -287,7 +288,7 @@ def _add_semantic_relations(
             results = search.search(query, k=limit + 5)  # Extra to filter self
 
             for result in results:
-                result_path = result.path.replace("\\", "/")
+                result_path = normalize_path(result.path)
 
                 if result_path == rel_path_str:
                     continue  # Skip self
