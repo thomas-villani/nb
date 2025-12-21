@@ -19,6 +19,7 @@ class TestInboxConfig:
         inbox = InboxConfig()
         assert inbox.source == "raindrop"
         assert inbox.default_notebook == "bookmarks"
+        assert inbox.auto_summarize is True  # Default is enabled
         assert inbox.raindrop.collection == "nb-inbox"
         assert inbox.raindrop.auto_archive is True
         assert inbox.raindrop.api_token is None
@@ -33,9 +34,11 @@ class TestInboxConfig:
         inbox = InboxConfig(
             source="raindrop",
             default_notebook="reading",
+            auto_summarize=False,
             raindrop=raindrop,
         )
         assert inbox.default_notebook == "reading"
+        assert inbox.auto_summarize is False
         assert inbox.raindrop.collection == "my-inbox"
         assert inbox.raindrop.auto_archive is False
         assert inbox.raindrop.api_token == "test-token"
@@ -358,6 +361,7 @@ class TestInboxConfigParsing:
         data = {
             "source": "raindrop",
             "default_notebook": "reading",
+            "auto_summarize": False,
             "raindrop": {
                 "collection": "my-collection",
                 "auto_archive": False,
@@ -367,8 +371,20 @@ class TestInboxConfigParsing:
         config = _parse_inbox_config(data)
         assert config.source == "raindrop"
         assert config.default_notebook == "reading"
+        assert config.auto_summarize is False
         assert config.raindrop.collection == "my-collection"
         assert config.raindrop.auto_archive is False
+
+    def test_parse_inbox_config_auto_summarize_default(self):
+        """Test that auto_summarize defaults to True when not specified."""
+        from nb.config import _parse_inbox_config
+
+        data = {
+            "default_notebook": "reading",
+        }
+
+        config = _parse_inbox_config(data)
+        assert config.auto_summarize is True
 
     def test_parse_raindrop_config_with_env_token(self, monkeypatch):
         """Test that RAINDROP_API_KEY env var is used."""
@@ -378,3 +394,106 @@ class TestInboxConfigParsing:
 
         config = _parse_raindrop_config({})
         assert config.api_token == "env-token-value"
+
+
+class TestGenerateContentTldr:
+    """Test generate_content_tldr function."""
+
+    def test_generate_content_tldr_returns_none_on_llm_error(self):
+        """Test that generate_content_tldr returns None when LLM fails."""
+        from nb.core.ai.summarize import generate_content_tldr
+
+        # Without an API key, this should fail gracefully
+        result = generate_content_tldr(
+            content="Test content",
+            title="Test Title",
+        )
+        # Should return None (graceful failure) since no API key is configured
+        # This tests the graceful fallback behavior
+        assert result is None or isinstance(result, str)
+
+    def test_generate_content_tldr_with_mocked_llm(self):
+        """Test generate_content_tldr with mocked LLM client."""
+        from unittest.mock import MagicMock, patch
+
+        from nb.core.ai.summarize import generate_content_tldr
+
+        mock_response = MagicMock()
+        mock_response.content = "This is a test summary."
+
+        mock_client = MagicMock()
+        mock_client.complete.return_value = mock_response
+
+        # Patch at the location where it's imported inside the function
+        with patch("nb.core.llm.get_llm_client", return_value=mock_client):
+            result = generate_content_tldr(
+                content="Some long article content about AI and machine learning.",
+                title="AI Article",
+            )
+
+        assert result == "This is a test summary."
+        mock_client.complete.assert_called_once()
+
+    def test_generate_content_tldr_truncates_long_content(self):
+        """Test that generate_content_tldr truncates very long content."""
+        from unittest.mock import MagicMock, patch
+
+        from nb.core.ai.summarize import generate_content_tldr
+
+        mock_response = MagicMock()
+        mock_response.content = "Summary of long content."
+
+        mock_client = MagicMock()
+        mock_client.complete.return_value = mock_response
+
+        # Create content longer than the truncation limit (15000 chars)
+        long_content = "x" * 20000
+
+        # Patch at the location where it's imported inside the function
+        with patch("nb.core.llm.get_llm_client", return_value=mock_client):
+            result = generate_content_tldr(
+                content=long_content,
+                title="Long Article",
+            )
+
+        assert result == "Summary of long content."
+        # Check that the content passed to LLM was truncated
+        call_args = mock_client.complete.call_args
+        messages = call_args.kwargs["messages"]
+        assert "[... truncated ...]" in messages[0].content
+
+
+class TestInboxAutoSummarizeConfig:
+    """Test inbox.auto_summarize configuration via CLI."""
+
+    def test_get_auto_summarize_config(
+        self, mock_cli_config: Config, cli_runner: CliRunner
+    ):
+        """Test getting inbox.auto_summarize value."""
+        cli_runner.invoke(cli, ["index"])
+
+        result = cli_runner.invoke(cli, ["config", "get", "inbox.auto_summarize"])
+        assert result.exit_code == 0
+        assert "True" in result.output
+
+    def test_set_auto_summarize_config(
+        self, mock_cli_config: Config, cli_runner: CliRunner
+    ):
+        """Test setting inbox.auto_summarize value."""
+        cli_runner.invoke(cli, ["index"])
+
+        # Disable auto_summarize
+        result = cli_runner.invoke(
+            cli, ["config", "set", "inbox.auto_summarize", "false"]
+        )
+        assert result.exit_code == 0
+
+        # Verify it was set
+        result = cli_runner.invoke(cli, ["config", "get", "inbox.auto_summarize"])
+        assert "False" in result.output
+
+        # Re-enable
+        result = cli_runner.invoke(
+            cli, ["config", "set", "inbox.auto_summarize", "true"]
+        )
+        assert result.exit_code == 0

@@ -124,6 +124,7 @@ class InboxConfig:
 
     source: str = "raindrop"  # Source service (currently only "raindrop")
     default_notebook: str = "bookmarks"  # Where clips go by default
+    auto_summarize: bool = True  # Auto-generate AI summary/tags when clipping
     raindrop: RaindropConfig = field(default_factory=RaindropConfig)
 
 
@@ -616,6 +617,7 @@ def _parse_inbox_config(data: dict[str, Any] | None) -> InboxConfig:
     return InboxConfig(
         source=data.get("source", "raindrop"),
         default_notebook=data.get("default_notebook", "bookmarks"),
+        auto_summarize=data.get("auto_summarize", True),
         raindrop=_parse_raindrop_config(data.get("raindrop")),
     )
 
@@ -871,6 +873,8 @@ def save_config(config: Config) -> None:
         inbox_data["source"] = config.inbox.source
     if config.inbox.default_notebook != inbox_defaults.default_notebook:
         inbox_data["default_notebook"] = config.inbox.default_notebook
+    if config.inbox.auto_summarize != inbox_defaults.auto_summarize:
+        inbox_data["auto_summarize"] = config.inbox.auto_summarize
 
     # Raindrop sub-config (exclude api_token for security - use env var)
     raindrop_defaults = RaindropConfig()
@@ -1122,6 +1126,7 @@ CONFIGURABLE_SETTINGS = {
     "clip.auto_tag_domain": "Auto-tag clipped content with source domain (true/false)",
     "inbox.source": "Inbox source service (currently only 'raindrop')",
     "inbox.default_notebook": "Default notebook for clipped items (default: bookmarks)",
+    "inbox.auto_summarize": "Auto-generate AI summary when clipping (true/false, default: true)",
     "inbox.raindrop.collection": "Raindrop collection to pull from (default: nb-inbox)",
     "inbox.raindrop.auto_archive": "Move items to archive after clipping (true/false)",
     "git.enabled": "Enable git integration (true/false)",
@@ -1345,9 +1350,9 @@ def get_config_value(key: str) -> Any:
         if hasattr(config.clip, attr):
             return getattr(config.clip, attr)
     elif parts[0] == "inbox" and len(parts) == 2:
-        # Inbox setting
+        # Inbox setting (source, default_notebook, auto_summarize)
         attr = parts[1]
-        if hasattr(config.inbox, attr):
+        if attr in ("source", "default_notebook", "auto_summarize"):
             return getattr(config.inbox, attr)
     elif parts[0] == "inbox" and len(parts) == 3 and parts[1] == "raindrop":
         # Inbox raindrop setting: inbox.raindrop.<attr>
@@ -1540,6 +1545,10 @@ def set_config_value(key: str, value: str) -> bool:
             config.inbox.source = value
         elif attr == "default_notebook":
             config.inbox.default_notebook = value if value else "bookmarks"
+        elif attr == "auto_summarize":
+            config.inbox.auto_summarize = parse_bool_strict(
+                value, "inbox.auto_summarize"
+            )
         else:
             return False
     elif parts[0] == "inbox" and len(parts) == 3 and parts[1] == "raindrop":

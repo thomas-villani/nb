@@ -22,7 +22,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Interactive mode** - Keyboard-driven todo management
 - **Web viewer** - Browse notes with clickable links, backlinks panel, and graph view
 - **Meeting recording** - Record audio and transcribe with speaker diarization (optional)
-- **Raindrop inbox** - Pull bookmarks from Raindrop.io and clip them as notes
+- **Raindrop inbox** - Pull bookmarks from Raindrop.io and clip them as notes with AI summaries
 - **Git integration** - Version control notes with auto-commit and GitHub sync
 - **AI assistant** - Interactive AI agent for task management with confirmation flow
 
@@ -933,12 +933,13 @@ nb inbox list -l 50              # Show up to 50 items
 nb inbox list -c reading         # List from 'reading' collection
 nb inbox list --all              # Include already-clipped items
 
-nb inbox pull                    # Interactive: clip each item
+nb inbox pull                    # Interactive: clip each item (with AI summary)
 nb inbox pull --auto             # Clip all to default notebook
 nb inbox pull -n bookmarks       # Clip all to 'bookmarks' notebook
 nb inbox pull -l 5               # Process only 5 items
 nb inbox pull -t research        # Add #research tag to all
 nb inbox pull --all              # Include already-clipped items
+nb inbox pull --no-ai            # Disable AI summary generation
 
 nb inbox clear                   # Archive all without clipping
 nb inbox clear -f                # Skip confirmation
@@ -958,10 +959,23 @@ When running `nb inbox pull` without `--auto`, you can use these commands at eac
 | `d` | Mark as duplicate and skip |
 | `q` | Quit processing |
 
+#### AI Summaries
+
+By default, `nb inbox pull` generates a brief AI summary for each clipped article and stores it in the note's frontmatter. This requires an LLM API key (see AI Assistant section).
+
+If no API key is configured or the LLM is unavailable, clipping continues gracefully without summaries.
+
+```bash
+nb inbox pull                    # Generates AI summary (default)
+nb inbox pull --no-ai            # Skip AI summary generation
+nb inbox pull --ai               # Force AI summary (overrides config)
+```
+
 #### Configuration
 
 ```bash
 nb config set inbox.default_notebook reading
+nb config set inbox.auto_summarize false       # Disable AI summaries globally
 nb config set inbox.raindrop.collection my-inbox
 nb config set inbox.raindrop.auto_archive false
 ```
@@ -971,6 +985,7 @@ Or in `config.yaml`:
 ```yaml
 inbox:
   default_notebook: reading
+  auto_summarize: true            # Generate AI summary when clipping (default: true)
   raindrop:
     collection: nb-inbox
     auto_archive: true
@@ -1481,6 +1496,7 @@ recorder:
 # Raindrop inbox settings (requires RAINDROP_API_KEY env var)
 inbox:
   default_notebook: bookmarks   # Where clipped items go by default
+  auto_summarize: true          # Generate AI summary when clipping (default: true)
   raindrop:
     collection: nb-inbox        # Raindrop collection to pull from
     auto_archive: true          # Move to archive after clipping
@@ -1560,6 +1576,7 @@ todo_exclude: true  # Hide todos from this note in nb todo
 |-------|-------------|
 | `date` | Note date (YYYY-MM-DD format) |
 | `title` | Note title (used in search results) |
+| `summary` | Brief summary of the note (auto-generated for clipped articles) |
 | `tags` | List of tags for filtering |
 | `links` | List of related notes/URLs (see Note Linking section) |
 | `todo_exclude` | Hide todos from `nb todo` (use `-a` or `-n` to view) |

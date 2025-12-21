@@ -645,6 +645,67 @@ def update_note_frontmatter_summary(
 
 
 # ============================================================================
+# Raw Content TLDR (for inbox clipping)
+# ============================================================================
+
+INBOX_TLDR_SYSTEM_PROMPT = """\
+You are a helpful assistant providing ultra-brief summaries of web articles.
+
+Guidelines:
+- Provide 1-2 sentences maximum
+- Focus on the core topic and key takeaway
+- Be direct and informative
+- Skip all formatting
+"""
+
+
+def generate_content_tldr(
+    content: str,
+    title: str | None = None,
+    use_smart_model: bool = False,
+) -> str | None:
+    """Generate a TLDR summary for raw content.
+
+    This is a simplified interface for inbox clipping that handles
+    errors gracefully and returns None on failure.
+
+    Args:
+        content: The markdown content to summarize
+        title: Optional title for context
+        use_smart_model: Use smart (better) or fast (cheaper) model
+
+    Returns:
+        TLDR string, or None if generation failed
+    """
+    from nb.core.llm import LLMConfigError, LLMError, Message, get_llm_client
+
+    # Truncate very long content to avoid token limits
+    max_content_length = 15000
+    if len(content) > max_content_length:
+        content = content[:max_content_length] + "\n\n[... truncated ...]"
+
+    prompt = "Summarize this article in 1-2 sentences:\n\n"
+    if title:
+        prompt += f"Title: {title}\n\n"
+    prompt += content
+
+    try:
+        client = get_llm_client()
+        response = client.complete(
+            messages=[Message(role="user", content=prompt)],
+            system=INBOX_TLDR_SYSTEM_PROMPT,
+            use_smart_model=use_smart_model,
+        )
+        return response.content.strip()
+    except (LLMConfigError, LLMError):
+        # Graceful failure - return None to indicate no summary available
+        return None
+    except Exception:
+        # Catch any other unexpected errors
+        return None
+
+
+# ============================================================================
 # Save to Note
 # ============================================================================
 
