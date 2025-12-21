@@ -337,6 +337,134 @@ Options are the same as ``nb summarize``.
    # Save TLDR to work notebook
    nb tldr -o work
 
+nb assistant
+------------
+
+An interactive AI agent that can analyze your todos and notes, and take action on your behalf.
+All write operations require confirmation before executing.
+
+**Usage:** ``nb assistant [OPTIONS]``
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-n, --notebook TEXT``
+     - Focus context on a specific notebook
+   * - ``--no-calendar``
+     - Skip Outlook calendar integration
+   * - ``--smart / --fast``
+     - Use smart model (better) or fast model (cheaper)
+   * - ``--dry-run``
+     - Show proposed changes without executing them
+   * - ``--token-budget N``
+     - Maximum tokens to consume per session (default: 100000)
+   * - ``--max-tools N``
+     - Maximum tool calls per turn (default: 10)
+
+**How it works:**
+
+1. Gathers context automatically (overdue todos, in-progress tasks, calendar, recent notes)
+2. You interact with the agent conversationally
+3. Read operations execute immediately (search, query todos, etc.)
+4. Write operations are queued for your review and confirmation
+5. You can approve all changes, select specific ones, or discard them
+
+**Available Tools:**
+
+The assistant has access to these tools:
+
+*Read Tools (execute immediately):*
+
+- ``search_notes`` - Semantic search over your notes
+- ``read_note`` - Read full content of a specific note
+- ``query_todos`` - Query todos with filters (status, due date, tags, etc.)
+- ``get_project_stats`` - Get completion rates and statistics for notebooks
+- ``get_calendar_events`` - Read calendar events (requires Outlook on Windows)
+
+*Write Tools (queued for confirmation):*
+
+- ``create_todo`` - Add a new todo to a note (defaults to today's daily note)
+- ``update_todo`` - Change todo status, due date, or delete it
+- ``create_note`` - Create a new note
+- ``append_to_note`` - Append content to an existing note
+
+**Examples:**
+
+.. code-block:: bash
+
+   # Start interactive assistant
+   nb assistant
+
+   # Focus on work notebook
+   nb assistant -n work
+
+   # Preview changes without executing (dry run)
+   nb assistant --dry-run
+
+   # Use faster/cheaper model
+   nb assistant --fast
+
+**Example Interactions:**
+
+.. code-block:: text
+
+   You: reschedule the todos for later this week to monday next week
+
+   Assistant: I'll reschedule those todos for you.
+
+   ===== Proposed Changes =====
+
+   [1] UPDATE TODO abc123
+       Due date: 2025-12-19 -> 2025-12-23
+
+   [2] UPDATE TODO def456
+       Due date: 2025-12-20 -> 2025-12-23
+
+   =============================
+   Apply changes? [y]es / [n]o / [1,2,3] select: y
+
+   2 action(s) completed successfully.
+
+.. code-block:: text
+
+   You: analyze the meeting notes from today and add any action items as todos
+
+   Assistant: I found 3 action items in today's meeting notes.
+
+   ===== Proposed Changes =====
+
+   [1] ADD TODO to daily/2025-12-21.md
+       - [ ] Follow up with client about proposal @due(2025-12-23)
+
+   [2] ADD TODO to daily/2025-12-21.md
+       - [ ] Review API documentation @due(2025-12-24)
+
+   [3] ADD TODO to daily/2025-12-21.md
+       - [ ] Schedule team sync @due(2025-12-22)
+
+   =============================
+   Apply changes? [y]es / [n]o / [1,2,3] select:
+
+**Confirmation Options:**
+
+- Type ``y`` or ``yes`` to apply all proposed changes
+- Type ``n`` or ``no`` to discard all changes
+- Type numbers like ``1,2`` to apply only selected changes
+- Type ``clear`` to discard pending actions without exiting
+- Type ``done``, ``quit``, or ``q`` to exit the assistant
+
+**Session Commands:**
+
+While in the assistant, you can use these commands:
+
+- ``done`` / ``quit`` / ``exit`` / ``q`` - End the session
+- ``clear`` - Discard all pending actions
+
 nb research
 -----------
 

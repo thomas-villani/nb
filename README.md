@@ -24,6 +24,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Meeting recording** - Record audio and transcribe with speaker diarization (optional)
 - **Raindrop inbox** - Pull bookmarks from Raindrop.io and clip them as notes
 - **Git integration** - Version control notes with auto-commit and GitHub sync
+- **AI assistant** - Interactive AI agent for task management with confirmation flow
 
 ## Installation
 
@@ -1288,6 +1289,73 @@ recorder:
 Use `nb record devices` to find device indices for your system. WASAPI devices typically require 48000 Hz sample rate.
 
 **Speaker labeling**: When recording with both microphone and system audio, speakers are automatically distinguished by channel. Your microphone is labeled with `mic_speaker_label` (default: "You"), while remote participants from system audio are labeled "Speaker 100", "Speaker 101", etc. Override with `--speakers "0:Me,100:Alice,101:Bob"`.
+
+### AI Assistant
+
+An interactive AI agent that can analyze your todos and notes, and take action on your behalf.
+Write operations require confirmation before executing.
+
+```bash
+# Start interactive assistant
+nb assistant
+
+# Focus on specific notebook
+nb assistant -n work
+
+# Preview changes without executing
+nb assistant --dry-run
+
+# Use fast model (cheaper)
+nb assistant --fast
+```
+
+**Features:**
+
+- **Read operations**: Search notes, read note content, query todos, get project stats, view calendar
+- **Write operations**: Create/update todos, create notes, append to notes
+- **Confirmation flow**: All write operations are queued and require explicit approval
+- **Context injection**: Automatically includes overdue todos, calendar, and recent notes
+
+**Example interactions:**
+
+```
+> reschedule the todos for later this week to monday next week
+> mark the API documentation todo as complete
+> analyze the meeting notes and add action items as todos
+> give me a status update on the Wijjit project
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-n, --notebook TEXT` | Focus context on specific notebook |
+| `--no-calendar` | Skip calendar integration |
+| `--smart/--fast` | Use smart model (better) or fast model (cheaper) |
+| `--dry-run` | Show proposed changes without executing |
+| `--token-budget N` | Maximum tokens per session (default: 100000) |
+| `--max-tools N` | Maximum tool calls per turn (default: 10) |
+
+**Confirmation Flow:**
+
+When the assistant proposes changes, you'll see:
+
+```
+===== Proposed Changes =====
+
+[1] ADD TODO to daily/2025-12-21.md
+    - [ ] Review API documentation @due(2025-12-22) #work
+
+[2] UPDATE TODO abc123
+    Status: pending -> completed
+
+=============================
+Apply changes? [y]es / [n]o / [1,2,3] select:
+```
+
+- Type `y` to apply all changes
+- Type `n` to discard all changes
+- Type `1,2` to apply only selected changes
 
 ### Configuration Commands
 

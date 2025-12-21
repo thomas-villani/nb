@@ -1633,14 +1633,6 @@ dependencies = [
 calendar = [
     { name = "pywin32", marker = "sys_platform == 'win32'" },
 ]
-recorder = [
-    { name = "deepgram-sdk" },
-    { name = "numpy" },
-    { name = "sounddevice" },
-    { name = "soundfile" },
-]
-
-[package.dev-dependencies]
 dev = [
     { name = "black" },
     { name = "isort" },
@@ -1656,44 +1648,44 @@ docs = [
     { name = "sphinx" },
     { name = "sphinx-rtd-theme" },
 ]
+recorder = [
+    { name = "deepgram-sdk" },
+    { name = "numpy" },
+    { name = "sounddevice" },
+    { name = "soundfile" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "all2md", extras = ["all"], path = "../mdparse/dist/all2md-1.0.0-py3-none-any.whl" },
+    { name = "black", marker = "extra == 'dev'" },
     { name = "click", specifier = ">=8.0" },
     { name = "deepgram-sdk", marker = "extra == 'recorder'", specifier = ">=3.0.0" },
     { name = "gitpython", specifier = ">=3.1.0" },
     { name = "httpx", specifier = ">=0.27.0" },
+    { name = "isort", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "localvectordb", path = "wheels/localvectordb-1.0.0-py3-none-any.whl" },
+    { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy", marker = "extra == 'recorder'", specifier = ">=1.24.0" },
     { name = "psutil", specifier = ">=7.1.3" },
     { name = "pyperclip", specifier = ">=1.11.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "python-dateutil", specifier = ">=2.8" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "python-frontmatter", specifier = ">=1.0" },
     { name = "pywin32", marker = "sys_platform == 'win32' and extra == 'calendar'", specifier = ">=306" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0" },
+    { name = "ruff", marker = "extra == 'dev'" },
     { name = "sounddevice", marker = "extra == 'recorder'", specifier = ">=0.4.6" },
     { name = "soundfile", marker = "extra == 'recorder'", specifier = ">=0.12.0" },
+    { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7.0" },
+    { name = "sphinx-rtd-theme", marker = "extra == 'docs'", specifier = ">=2.0" },
+    { name = "types-pyperclip", marker = "extra == 'dev'", specifier = ">=1.9.0.20250801" },
+    { name = "types-python-dateutil", marker = "extra == 'dev'", specifier = ">=2.9.0.20251115" },
+    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12.20250915" },
     { name = "wijjit", path = "wheels/wijjit-0.1.0a0-py3-none-any.whl" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "black" },
-    { name = "isort", specifier = ">=7.0.0" },
-    { name = "mypy" },
-    { name = "pytest", specifier = ">=7.0" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "types-pyperclip", specifier = ">=1.9.0.20250801" },
-    { name = "types-python-dateutil", specifier = ">=2.9.0.20251115" },
-    { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
-]
-docs = [
-    { name = "sphinx", specifier = ">=7.0" },
-    { name = "sphinx-rtd-theme", specifier = ">=2.0" },
 ]
 
 [[package]]
