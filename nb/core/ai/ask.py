@@ -543,3 +543,13 @@ def ask_notes_stream(
     )
 
     return sources, stream
+
+
+# Re-export agentic types and functions for convenience
+from nb.core.ai.ask_agentic import (  # noqa: E402, F401
+    AgenticAnswerResult,
+    AgenticContext,
+    ask_notes_agentic,
+    ask_notes_agentic_stream,
+    get_ask_tools,
+)

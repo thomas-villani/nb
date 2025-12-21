@@ -512,6 +512,17 @@ def _run_interactive_planning(context, use_smart: bool, stream: bool) -> None:
     type=int,
     help="Number of similar chunks to include per match (default: 3).",
 )
+@click.option(
+    "--agentic/--no-agentic",
+    default=False,
+    help="Use agentic mode with tool-calling for complex queries (e.g., todo lookups).",
+)
+@click.option(
+    "--max-tool-calls",
+    default=5,
+    type=int,
+    help="Maximum tool calls in agentic mode (default: 5).",
+)
 def ask_command(
     question: str,
     notebook: str | None,
@@ -522,11 +533,16 @@ def ask_command(
     use_smart: bool,
     max_results: int,
     context_window: int,
+    agentic: bool,
+    max_tool_calls: int,
 ) -> None:
     """Ask a question about your notes using AI.
 
     Uses RAG (Retrieval Augmented Generation) to find relevant notes
     and generate an answer based on their content.
+
+    Use --agentic for complex queries that need to query todos or search
+    multiple times.
 
     Examples:
 
@@ -537,11 +553,37 @@ def ask_command(
         nb ask "what server version?" -N work/deploy-notes
 
         nb ask "who owns deployment?" --tag infrastructure
+
+        nb ask "what remains to be done for the widget project?" --agentic
+
+        nb ask "what are my overdue tasks?" --agentic
     """
     from nb.core.llm import LLMConfigError, LLMError
 
     try:
-        if stream:
+        if agentic:
+            # Use agentic mode with tool-calling
+            if stream:
+                _ask_agentic_streaming(
+                    question=question,
+                    notebook=notebook,
+                    tag=tag,
+                    show_sources=show_sources,
+                    use_smart=use_smart,
+                    max_results=max_results,
+                    max_tool_calls=max_tool_calls,
+                )
+            else:
+                _ask_agentic_non_streaming(
+                    question=question,
+                    notebook=notebook,
+                    tag=tag,
+                    show_sources=show_sources,
+                    use_smart=use_smart,
+                    max_results=max_results,
+                    max_tool_calls=max_tool_calls,
+                )
+        elif stream:
             _ask_streaming(
                 question=question,
                 notebook=notebook,
@@ -704,6 +746,107 @@ def _display_sources(sources: list) -> None:
                 padding=(0, 1),
             )
         )
+
+
+def _ask_agentic_streaming(
+    question: str,
+    notebook: str | None,
+    tag: str | None,
+    show_sources: bool,
+    use_smart: bool,
+    max_results: int,
+    max_tool_calls: int,
+) -> None:
+    """Handle streaming agentic ask response."""
+    from nb.core.ai.ask_agentic import ask_notes_agentic_stream
+
+    console.print("[dim]Starting agentic search...[/dim]")
+
+    result = None
+    for message, final_result in ask_notes_agentic_stream(
+        question=question,
+        notebook=notebook,
+        tag=tag,
+        max_context_results=max_results,
+        max_tool_calls=max_tool_calls,
+        use_smart_model=use_smart,
+    ):
+        if final_result is not None:
+            result = final_result
+        else:
+            console.print(f"[dim]{message}[/dim]")
+
+    if result is None:
+        console.print("[yellow]No result returned[/yellow]")
+        return
+
+    # Show sources if requested
+    if show_sources and result.sources:
+        console.print()
+        _display_sources(result.sources)
+        console.print()
+
+    # Show the answer
+    console.print("[bold]Answer:[/bold]")
+    console.print(Markdown(result.answer))
+
+    # Show metadata
+    tool_info = ""
+    if result.tools_used:
+        tool_info = f", tools: {', '.join(result.tools_used)}"
+    console.print(
+        f"\n[dim]Tokens: {result.input_tokens} in, {result.output_tokens} out | "
+        f"Tool calls: {result.tool_calls}{tool_info}[/dim]"
+    )
+
+
+def _ask_agentic_non_streaming(
+    question: str,
+    notebook: str | None,
+    tag: str | None,
+    show_sources: bool,
+    use_smart: bool,
+    max_results: int,
+    max_tool_calls: int,
+) -> None:
+    """Handle non-streaming agentic ask response."""
+    from nb.core.ai.ask_agentic import ask_notes_agentic
+
+    progress_messages = []
+
+    def progress_callback(msg: str) -> None:
+        progress_messages.append(msg)
+
+    with console.status("[bold blue]Thinking...[/bold blue]") as status:
+        result = ask_notes_agentic(
+            question=question,
+            notebook=notebook,
+            tag=tag,
+            max_context_results=max_results,
+            max_tool_calls=max_tool_calls,
+            use_smart_model=use_smart,
+            progress_callback=lambda msg: status.update(
+                f"[bold blue]{msg}[/bold blue]"
+            ),
+        )
+
+    # Show sources if requested
+    if show_sources and result.sources:
+        _display_sources(result.sources)
+        console.print()
+
+    # Show the answer
+    console.print("[bold]Answer:[/bold]")
+    console.print(Markdown(result.answer))
+
+    # Show metadata
+    tool_info = ""
+    if result.tools_used:
+        tool_info = f", tools: {', '.join(result.tools_used)}"
+    console.print(
+        f"\n[dim]Tokens: {result.input_tokens} in, {result.output_tokens} out | "
+        f"Tool calls: {result.tool_calls}{tool_info}[/dim]"
+    )
 
 
 # ============================================================================

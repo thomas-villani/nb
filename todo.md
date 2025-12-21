@@ -175,6 +175,9 @@ todo_exclude: true
 - [ ] Extract from meeting transcripts and other notes
 - [ ] Auto-schedule todos and calendar
 - [x] Auto-research
+- An agent or MCP server to allow direct interface with todo items and notes, maybe `nb agent`
+  - query, create, modify (status, due date, priority, tags) todo items
+  - 
 
 ## Technical Debt
 - [x] Add comprehensive test suite #testing
