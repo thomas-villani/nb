@@ -39,7 +39,9 @@ def plan_group():
 
         nb plan today                    # Plan or replan today
 
-        nb plan week --notebook work     # Scope to work notebook
+        nb plan week -n work             # Filter to work notebook todos
+
+        nb plan week -o work             # Save plan to work notebook
 
         nb plan week --interactive       # Refine plan interactively
     """
@@ -51,23 +53,23 @@ def plan_group():
     "--notebook",
     "-n",
     "notebook",
-    help="Scope to specific notebook.",
+    help="Filter todos to specific notebook.",
     shell_complete=complete_notebook,
 )
 @click.option(
     "--tag",
     "-t",
     "tag",
-    help="Scope to todos with this tag.",
+    help="Filter todos with this tag.",
 )
 @click.option(
-    "--note",
-    "-N",
-    "note_path",
+    "--output",
+    "-o",
+    "output",
     is_flag=False,
     flag_value="today",
     default=None,
-    help="Write plan to note. Use without value for today's note, or specify path.",
+    help="Save plan to note. NOTEBOOK/NOTE for specific note, NOTEBOOK for new note, or 'today'.",
 )
 @click.option(
     "--prompt",
@@ -100,7 +102,7 @@ def plan_group():
 def plan_week_command(
     notebook: str | None,
     tag: str | None,
-    note_path: str | None,
+    output: str | None,
     custom_prompt: str | None,
     no_calendar: bool,
     interactive: bool,
@@ -118,7 +120,9 @@ def plan_week_command(
 
         nb plan week --notebook work --no-calendar
 
-        nb plan week --interactive --note
+        nb plan week --interactive -o today
+
+        nb plan week -o work                 # Save to new note in work
 
         nb plan week --prompt "Focus on urgent items only"
     """
@@ -126,7 +130,7 @@ def plan_week_command(
         horizon="week",
         notebook=notebook,
         tag=tag,
-        note_path=note_path,
+        output=output,
         custom_prompt=custom_prompt,
         include_calendar=not no_calendar,
         interactive=interactive,
@@ -140,23 +144,23 @@ def plan_week_command(
     "--notebook",
     "-n",
     "notebook",
-    help="Scope to specific notebook.",
+    help="Filter todos to specific notebook.",
     shell_complete=complete_notebook,
 )
 @click.option(
     "--tag",
     "-t",
     "tag",
-    help="Scope to todos with this tag.",
+    help="Filter todos with this tag.",
 )
 @click.option(
-    "--note",
-    "-N",
-    "note_path",
+    "--output",
+    "-o",
+    "output",
     is_flag=False,
     flag_value="today",
     default=None,
-    help="Write plan to note. Use without value for today's note, or specify path.",
+    help="Save plan to note. NOTEBOOK/NOTE for specific note, NOTEBOOK for new note, or 'today'.",
 )
 @click.option(
     "--prompt",
@@ -189,7 +193,7 @@ def plan_week_command(
 def plan_today_command(
     notebook: str | None,
     tag: str | None,
-    note_path: str | None,
+    output: str | None,
     custom_prompt: str | None,
     no_calendar: bool,
     interactive: bool,
@@ -207,13 +211,15 @@ def plan_today_command(
 
         nb plan today --interactive
 
-        nb plan today --note --prompt "I have a meeting at 2pm"
+        nb plan today -o today --prompt "I have a meeting at 2pm"
+
+        nb plan today -o work              # Save to new note in work
     """
     _run_planning(
         horizon="day",
         notebook=notebook,
         tag=tag,
-        note_path=note_path,
+        output=output,
         custom_prompt=custom_prompt,
         include_calendar=not no_calendar,
         interactive=interactive,
@@ -226,7 +232,7 @@ def _run_planning(
     horizon: Literal["day", "week"],
     notebook: str | None,
     tag: str | None,
-    note_path: str | None,
+    output: str | None,
     custom_prompt: str | None,
     include_calendar: bool,
     interactive: bool,
@@ -234,8 +240,13 @@ def _run_planning(
     use_smart: bool,
 ) -> None:
     """Shared implementation for plan commands."""
+    from datetime import date
+    from pathlib import Path
+
     from nb.core.ai.planning import (
+        PlanResult,
         PlanScope,
+        append_plan_to_note,
         gather_planning_context,
     )
     from nb.core.llm import LLMConfigError, LLMError
@@ -258,15 +269,34 @@ def _run_planning(
         # Display context summary
         _display_context_summary(context)
 
+        plan_content = None
         if interactive:
             # Run interactive planning session
-            _run_interactive_planning(context, use_smart, stream)
+            _run_interactive_planning(context, use_smart, stream, output)
         else:
             # Generate plan directly
             if stream:
-                _run_streaming_plan(context, custom_prompt, use_smart)
+                plan_content = _run_streaming_plan(context, custom_prompt, use_smart)
             else:
-                _run_non_streaming_plan(context, custom_prompt, use_smart)
+                plan_content = _run_non_streaming_plan(
+                    context, custom_prompt, use_smart
+                )
+
+            # Save to output if specified (non-interactive mode)
+            if output and plan_content:
+                if output == "today":
+                    note_path = None  # Will use today's note
+                elif "/" in output or output.endswith(".md"):
+                    # Explicit path: NOTEBOOK/NOTE or path.md
+                    note_path = Path(output)
+                else:
+                    # Just notebook name - create new note with date prefix
+                    today = date.today().isoformat()
+                    note_path = Path(output) / f"{today}-plan-{horizon}.md"
+
+                plan_result = PlanResult(horizon=horizon, raw_response=plan_content)
+                saved_path = append_plan_to_note(plan_result, note_path=note_path)
+                console.print(f"\n[green]Plan saved to {saved_path}[/green]")
 
     except LLMConfigError as e:
         console.print(f"[red]Configuration error:[/red] {e}")
@@ -313,8 +343,8 @@ def _display_context_summary(context) -> None:
     console.print()
 
 
-def _run_streaming_plan(context, custom_prompt: str | None, use_smart: bool) -> None:
-    """Run streaming plan generation."""
+def _run_streaming_plan(context, custom_prompt: str | None, use_smart: bool) -> str:
+    """Run streaming plan generation. Returns the plan content."""
     from nb.core.ai.planning import generate_plan_stream
 
     console.print("[bold]Generating plan...[/bold]")
@@ -336,11 +366,11 @@ def _run_streaming_plan(context, custom_prompt: str | None, use_smart: bool) -> 
                 f"\n[dim]Tokens: {chunk.input_tokens} in, {chunk.output_tokens} out[/dim]"
             )
 
+    return full_response
 
-def _run_non_streaming_plan(
-    context, custom_prompt: str | None, use_smart: bool
-) -> None:
-    """Run non-streaming plan generation."""
+
+def _run_non_streaming_plan(context, custom_prompt: str | None, use_smart: bool) -> str:
+    """Run non-streaming plan generation. Returns the plan content."""
     from nb.core.ai.planning import generate_plan
 
     with console.status("[bold blue]Generating plan...[/bold blue]"):
@@ -357,21 +387,40 @@ def _run_non_streaming_plan(
             f"\n[dim]Tokens: {result.input_tokens} in, {result.output_tokens} out[/dim]"
         )
 
+    return result.raw_response
 
-def _run_interactive_planning(context, use_smart: bool, stream: bool) -> None:
+
+def _run_interactive_planning(
+    context, use_smart: bool, stream: bool, output: str | None
+) -> None:
     """Run interactive planning session."""
+    from datetime import date
+    from pathlib import Path
+
     from nb.core.ai.planning import (
+        PlanResult,
         append_plan_to_note,
         continue_planning_session,
         continue_planning_session_stream,
         create_planning_session,
     )
 
+    def _resolve_output_path(output_val: str | None) -> Path | None:
+        """Resolve output value to a Path or None for today's note."""
+        if output_val is None or output_val == "today":
+            return None  # Will use today's note
+        elif "/" in output_val or output_val.endswith(".md"):
+            return Path(output_val)
+        else:
+            # Just notebook name - create new note with date prefix
+            today = date.today().isoformat()
+            return Path(output_val) / f"{today}-plan-{context.horizon}.md"
+
     session = create_planning_session(context)
 
     console.print("[bold]Interactive Planning Mode[/bold]")
     console.print("[dim]Type your requests to refine the plan. Commands:[/dim]")
-    console.print("[dim]  save - Save current plan to today's note[/dim]")
+    console.print("[dim]  save - Save current plan to note[/dim]")
     console.print("[dim]  done/quit/exit - Finish and exit[/dim]")
     console.print()
 
@@ -414,14 +463,13 @@ def _run_interactive_planning(context, use_smart: bool, stream: bool) -> None:
 
         if lower_input == "save":
             if session.current_plan:
-                from nb.core.ai.planning import PlanResult
-
                 plan = PlanResult(
                     horizon=context.horizon,
                     raw_response=session.current_plan,
                 )
-                note_path = append_plan_to_note(plan)
-                console.print(f"[green]Plan saved to {note_path}[/green]")
+                note_path = _resolve_output_path(output)
+                saved_path = append_plan_to_note(plan, note_path=note_path)
+                console.print(f"[green]Plan saved to {saved_path}[/green]")
             else:
                 console.print("[yellow]No plan to save yet.[/yellow]")
             continue
@@ -443,19 +491,29 @@ def _run_interactive_planning(context, use_smart: bool, stream: bool) -> None:
             console.print("[bold cyan]Assistant:[/bold cyan]")
             console.print(Markdown(response))
 
-    # Offer to save on exit
+    # Offer to save on exit if output was specified or if there's a plan
     if session.current_plan:
         console.print()
-        save = console.input("[dim]Save plan to today's note? [y/N]:[/dim] ")
-        if save.lower() in ("y", "yes"):
-            from nb.core.ai.planning import PlanResult
-
-            plan = PlanResult(
-                horizon=context.horizon,
-                raw_response=session.current_plan,
-            )
-            note_path = append_plan_to_note(plan)
-            console.print(f"[green]Plan saved to {note_path}[/green]")
+        if output:
+            # Auto-save if output was specified
+            save = console.input(f"[dim]Save plan to {output}? [Y/n]:[/dim] ")
+            if save.lower() not in ("n", "no"):
+                plan = PlanResult(
+                    horizon=context.horizon,
+                    raw_response=session.current_plan,
+                )
+                note_path = _resolve_output_path(output)
+                saved_path = append_plan_to_note(plan, note_path=note_path)
+                console.print(f"[green]Plan saved to {saved_path}[/green]")
+        else:
+            save = console.input("[dim]Save plan to today's note? [y/N]:[/dim] ")
+            if save.lower() in ("y", "yes"):
+                plan = PlanResult(
+                    horizon=context.horizon,
+                    raw_response=session.current_plan,
+                )
+                saved_path = append_plan_to_note(plan)
+                console.print(f"[green]Plan saved to {saved_path}[/green]")
 
 
 # ============================================================================
@@ -881,13 +939,13 @@ def summarize_options(f):
         help="Store summary in source note's YAML frontmatter.",
     )(f)
     f = click.option(
-        "--note",
-        "-N",
-        "output_note",
+        "--output",
+        "-o",
+        "output",
         is_flag=False,
         flag_value="today",
         default=None,
-        help="Save summary to note. Use without value for today's note, or specify path.",
+        help="Save output to note. NOTEBOOK/NOTE for specific note, NOTEBOOK for new note, or 'today'.",
     )(f)
     f = click.option(
         "--days",
@@ -898,13 +956,13 @@ def summarize_options(f):
     f = click.option(
         "--tag",
         "-t",
-        help="Summarize notes with this tag.",
+        help="Filter to notes with this tag.",
     )(f)
     f = click.option(
         "--notebook",
         "-n",
         "notebook",
-        help="Summarize notes from this notebook.",
+        help="Filter to notes from this notebook.",
         shell_complete=complete_notebook,
     )(f)
     f = click.argument("target", required=False)(f)
@@ -918,7 +976,7 @@ def summarize_command(
     notebook: str | None,
     tag: str | None,
     days: int | None,
-    output_note: str | None,
+    output: str | None,
     front_matter: bool,
     custom_prompt: str | None,
     stream: bool,
@@ -942,7 +1000,9 @@ def summarize_command(
 
         nb summarize work --days 7        # Week summary for notebook
 
-        nb summarize --note               # Save to today's note
+        nb summarize -o today             # Save to today's note
+
+        nb summarize -o work              # Save to new note in work notebook
 
         nb summarize --front-matter       # Store in source's frontmatter
     """
@@ -951,7 +1011,7 @@ def summarize_command(
         notebook=notebook,
         tag=tag,
         days=days,
-        output_note=output_note,
+        output=output,
         front_matter=front_matter,
         custom_prompt=custom_prompt,
         stream=stream,
@@ -967,7 +1027,7 @@ def tldr_command(
     notebook: str | None,
     tag: str | None,
     days: int | None,
-    output_note: str | None,
+    output: str | None,
     front_matter: bool,
     custom_prompt: str | None,
     stream: bool,
@@ -984,13 +1044,15 @@ def tldr_command(
         nb tldr work --days 7             # Week TLDR for work
 
         nb tldr --tag meeting             # TLDR meeting notes
+
+        nb tldr -o work                   # Save TLDR to new note in work
     """
     _run_summarize(
         target=target,
         notebook=notebook,
         tag=tag,
         days=days,
-        output_note=output_note,
+        output=output,
         front_matter=front_matter,
         custom_prompt=custom_prompt,
         stream=stream,
@@ -1004,7 +1066,7 @@ def _run_summarize(
     notebook: str | None,
     tag: str | None,
     days: int | None,
-    output_note: str | None,
+    output: str | None,
     front_matter: bool,
     custom_prompt: str | None,
     stream: bool,
@@ -1012,6 +1074,7 @@ def _run_summarize(
     mode: Literal["summarize", "tldr"],
 ) -> None:
     """Shared implementation for summarize and tldr commands."""
+    from datetime import date
     from pathlib import Path
 
     from nb.core.ai.summarize import (
@@ -1019,6 +1082,7 @@ def _run_summarize(
         resolve_target,
         update_note_frontmatter_summary,
     )
+    from nb.core.clip import slugify
     from nb.core.llm import LLMConfigError, LLMError
 
     try:
@@ -1074,9 +1138,19 @@ def _run_summarize(
                 f"\n[green]Updated frontmatter in {len(resolved.notes)} note(s)[/green]"
             )
 
-        # Handle --note: save to output note
-        if output_note:
-            note_path = None if output_note == "today" else Path(output_note)
+        # Handle --output: save to output note
+        if output:
+            if output == "today":
+                note_path = None  # Will use today's note
+            elif "/" in output or output.endswith(".md"):
+                # Explicit path: NOTEBOOK/NOTE or path.md
+                note_path = Path(output)
+            else:
+                # Just notebook name - create new note with date prefix
+                today = date.today().isoformat()
+                slug = slugify(resolved.description)
+                note_path = Path(output) / f"{today}-summary-{slug}.md"
+
             saved_path = append_summary_to_note(
                 result.summary,
                 resolved.description,
@@ -1225,20 +1299,13 @@ def _summarize_multiple_notes(
 @click.command(name="research")
 @click.argument("query")
 @click.option(
-    "--note",
-    "-N",
-    "note_path",
+    "--output",
+    "-o",
+    "output",
     is_flag=False,
     flag_value="today",
     default=None,
-    help="Save report to note. Use without value for today's note, or specify path.",
-)
-@click.option(
-    "--notebook",
-    "-n",
-    "notebook",
-    help="Create note in this notebook (for new notes).",
-    shell_complete=complete_notebook,
+    help="Save report to note. NOTEBOOK/NOTE for specific note, NOTEBOOK for new note, or 'today'.",
 )
 @click.option(
     "--search",
@@ -1285,8 +1352,7 @@ def _summarize_multiple_notes(
 )
 def research_command(
     query: str,
-    note_path: str | None,
-    notebook: str | None,
+    output: str | None,
     search_types: tuple[str, ...],
     max_sources: int,
     strategy: Literal["breadth", "depth", "auto"],
@@ -1306,9 +1372,9 @@ def research_command(
 
         nb research "CoolCo 2025 Q4 financial results"
 
-        nb research "AI trends 2025" --note today
+        nb research "AI trends 2025" -o today
 
-        nb research "climate change policies" --search news
+        nb research "climate change policies" -o work
 
         nb research "machine learning" --search scholar --use-vectordb
 
@@ -1330,8 +1396,7 @@ def research_command(
                 use_smart=use_smart,
                 use_vectordb=use_vectordb,
                 token_budget=token_budget,
-                note_path=note_path,
-                notebook=notebook,
+                output=output,
             )
         else:
             _research_non_streaming(
@@ -1342,8 +1407,7 @@ def research_command(
                 use_smart=use_smart,
                 use_vectordb=use_vectordb,
                 token_budget=token_budget,
-                note_path=note_path,
-                notebook=notebook,
+                output=output,
             )
     except LLMConfigError as e:
         console.print(f"[red]Configuration error:[/red] {e}")
@@ -1375,8 +1439,7 @@ def _research_streaming(
     use_smart: bool,
     use_vectordb: bool,
     token_budget: int,
-    note_path: str | None,
-    notebook: str | None,
+    output: str | None,
 ) -> None:
     """Handle streaming research with progress updates."""
     from nb.core.ai.research import append_research_to_note, research_stream
@@ -1406,18 +1469,23 @@ def _research_streaming(
     # Display results
     _display_research_result(result)
 
-    # Save to note if requested
-    if note_path is not None:
-        # Determine target path
-        target = note_path if note_path != "today" else None
-        if notebook and target is None:
-            # Create new note in notebook
-            from pathlib import Path
+    # Save to note if requested via --output
+    if output:
+        from datetime import date
+        from pathlib import Path
 
-            from nb.core.clip import slugify
+        from nb.core.clip import slugify
 
+        if output == "today":
+            target = None  # Will use today's note
+        elif "/" in output or output.endswith(".md"):
+            # Explicit path: NOTEBOOK/NOTE or path.md
+            target = output
+        else:
+            # Just notebook name - create new note with date prefix
+            today = date.today().isoformat()
             slug = slugify(query)
-            target = str(Path(notebook) / f"research-{slug}.md")
+            target = str(Path(output) / f"{today}-research-{slug}.md")
 
         saved_path = append_research_to_note(result, target)
         console.print(f"\n[green]Report saved to:[/green] {saved_path}")
@@ -1431,8 +1499,7 @@ def _research_non_streaming(
     use_smart: bool,
     use_vectordb: bool,
     token_budget: int,
-    note_path: str | None,
-    notebook: str | None,
+    output: str | None,
 ) -> None:
     """Handle non-streaming research."""
     from nb.core.ai.research import append_research_to_note, research
@@ -1459,16 +1526,23 @@ def _research_non_streaming(
     # Display results
     _display_research_result(result)
 
-    # Save to note if requested
-    if note_path is not None:
-        target = note_path if note_path != "today" else None
-        if notebook and target is None:
-            from pathlib import Path
+    # Save to note if requested via --output
+    if output:
+        from datetime import date
+        from pathlib import Path
 
-            from nb.core.clip import slugify
+        from nb.core.clip import slugify
 
+        if output == "today":
+            target = None  # Will use today's note
+        elif "/" in output or output.endswith(".md"):
+            # Explicit path: NOTEBOOK/NOTE or path.md
+            target = output
+        else:
+            # Just notebook name - create new note with date prefix
+            today = date.today().isoformat()
             slug = slugify(query)
-            target = str(Path(notebook) / f"research-{slug}.md")
+            target = str(Path(output) / f"{today}-research-{slug}.md")
 
         saved_path = append_research_to_note(result, target)
         console.print(f"\n[green]Report saved to:[/green] {saved_path}")

@@ -931,9 +931,10 @@ def append_research_to_note(
             note_path = notes_root / note_path
 
         if not note_path.exists():
-            # Create the note
+            # Create the note with query as title
             note_path.parent.mkdir(parents=True, exist_ok=True)
-            note_path.write_text(f"# {note_path.stem}\n\n", encoding="utf-8")
+            title = result.query if result.query else note_path.stem
+            note_path.write_text(f"# {title}\n\n", encoding="utf-8")
 
     # Read current content
     content = note_path.read_text(encoding="utf-8")

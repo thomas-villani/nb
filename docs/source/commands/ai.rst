@@ -31,12 +31,12 @@ Generate AI-assisted daily or weekly plans based on your todos, calendar, and re
 
    * - Option
      - Description
-   * - ``-b, --notebook TEXT``
-     - Scope planning to a specific notebook
+   * - ``-n, --notebook TEXT``
+     - Filter todos to a specific notebook
    * - ``-t, --tag TEXT``
-     - Scope to todos with this tag
-   * - ``-n, --note [PATH]``
-     - Write plan to note (default: today's daily note if no path given)
+     - Filter todos with this tag
+   * - ``-o, --output [PATH]``
+     - Save plan to note. Use NOTEBOOK/NOTE for specific note, NOTEBOOK for new note, or 'today'
    * - ``-p, --prompt TEXT``
      - Add custom instructions for the plan
    * - ``--no-calendar``
@@ -63,7 +63,7 @@ Generate AI-assisted daily or weekly plans based on your todos, calendar, and re
    # Plan the upcoming week
    nb plan week
 
-   # Plan today with focus on work notebook
+   # Plan today with focus on work notebook todos
    nb plan today --notebook work
 
    # Interactive planning session (refine through conversation)
@@ -73,7 +73,10 @@ Generate AI-assisted daily or weekly plans based on your todos, calendar, and re
    nb plan week --prompt "Focus on urgent items, skip meetings"
 
    # Save plan to today's daily note
-   nb plan week --note
+   nb plan week -o today
+
+   # Save plan to a new note in work notebook
+   nb plan week -o work
 
    # Skip calendar integration (faster, or for non-Windows)
    nb plan today --no-calendar
@@ -122,9 +125,9 @@ Ask questions about your notes using AI-powered retrieval augmented generation (
 
    * - Option
      - Description
-   * - ``-b, --notebook TEXT``
+   * - ``-n, --notebook TEXT``
      - Filter to notes in a specific notebook
-   * - ``-n, --note TEXT``
+   * - ``-N, --note TEXT``
      - Ask about a specific note instead of searching
    * - ``-t, --tag TEXT``
      - Filter to notes with this tag
@@ -138,6 +141,8 @@ Ask questions about your notes using AI-powered retrieval augmented generation (
      - Maximum number of documents to retrieve (default: 5)
    * - ``--context-window N``
      - Number of similar chunks to include per match (default: 3)
+   * - ``--agentic / --no-agentic``
+     - Use agentic mode with tool-calling for complex queries
 
 **How it works:**
 
@@ -155,10 +160,10 @@ Ask questions about your notes using AI-powered retrieval augmented generation (
    nb ask "what did we decide about the API design?"
 
    # Ask about notes in a specific notebook
-   nb ask "summarize project X status" --notebook work
+   nb ask "summarize project X status" -n work
 
    # Ask about a specific note
-   nb ask "what are the action items?" -n work/meeting-notes
+   nb ask "what are the action items?" -N work/meeting-notes
 
    # Filter by tag
    nb ask "what are our deployment procedures?" --tag infrastructure
@@ -171,6 +176,9 @@ Ask questions about your notes using AI-powered retrieval augmented generation (
 
    # Retrieve more context for complex questions
    nb ask "comprehensive overview of the project" -k 10
+
+   # Use agentic mode for complex queries involving todos
+   nb ask "what are my overdue tasks?" --agentic
 
 Configuration
 -------------
@@ -216,16 +224,184 @@ Filters help narrow down the search space for more relevant results:
 .. code-block:: bash
 
    # Only search work-related notes
-   nb ask "deployment checklist" -b work
+   nb ask "deployment checklist" -n work
 
    # Only search notes tagged with a project
    nb ask "current blockers" -t project-alpha
 
    # Ask about a specific meeting note
-   nb ask "what were the action items?" -n work/2025-01-15
+   nb ask "what were the action items?" -N work/2025-01-15
 
 Model selection
 ^^^^^^^^^^^^^^^
 
 - Use ``--smart`` (default) for complex questions, analysis, and summaries
 - Use ``--fast`` for simple lookups and quick answers to save cost
+
+nb summarize
+------------
+
+Generate comprehensive summaries of one or more notes using AI.
+
+**Usage:** ``nb summarize [TARGET] [OPTIONS]``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``TARGET``
+     - Note path, notebook name, or date reference (e.g., "yesterday", "work", "work/meeting")
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-n, --notebook TEXT``
+     - Filter to notes in a specific notebook
+   * - ``-t, --tag TEXT``
+     - Filter to notes with this tag
+   * - ``-d, --days N``
+     - Limit to notes from the last N days
+   * - ``-o, --output [PATH]``
+     - Save summary to note. NOTEBOOK/NOTE for specific note, NOTEBOOK for new note, or 'today'
+   * - ``-fm, --front-matter``
+     - Store summary in source note's YAML frontmatter
+   * - ``-p, --prompt TEXT``
+     - Custom instructions for the summary
+   * - ``--stream / --no-stream``
+     - Stream the response in real-time (default: stream)
+   * - ``--smart / --fast``
+     - Use smart model or fast model
+
+**Examples:**
+
+.. code-block:: bash
+
+   # Summarize today's note
+   nb summarize
+
+   # Summarize yesterday's note
+   nb summarize yesterday
+
+   # Summarize all notes in a notebook
+   nb summarize work
+
+   # Summarize a specific note
+   nb summarize work/meeting-notes
+
+   # Summarize notes with a tag
+   nb summarize --tag project-x
+
+   # Week summary for a notebook
+   nb summarize work --days 7
+
+   # Save summary to today's note
+   nb summarize -o today
+
+   # Save summary to a new note in work notebook
+   nb summarize -o work
+
+   # Store in source note's frontmatter
+   nb summarize --front-matter
+
+nb tldr
+-------
+
+Generate ultra-brief 1-2 sentence summaries of notes. Like ``summarize`` but produces much shorter output.
+
+**Usage:** ``nb tldr [TARGET] [OPTIONS]``
+
+Options are the same as ``nb summarize``.
+
+**Examples:**
+
+.. code-block:: bash
+
+   # TLDR today's note
+   nb tldr
+
+   # Week TLDR for work notebook
+   nb tldr work --days 7
+
+   # TLDR notes with a tag
+   nb tldr --tag meeting
+
+   # Save TLDR to work notebook
+   nb tldr -o work
+
+nb research
+-----------
+
+Research a topic using web search and AI analysis. Uses an agent to search the web, fetch content, and generate a comprehensive research report.
+
+**Usage:** ``nb research QUERY [OPTIONS]``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``QUERY``
+     - The research topic or question
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-o, --output [PATH]``
+     - Save report to note. NOTEBOOK/NOTE for specific note, NOTEBOOK for new note, or 'today'
+   * - ``-s, --search TYPE``
+     - Restrict to specific search types (web, news, scholar, patents). Can be repeated.
+   * - ``-k, --max-sources N``
+     - Maximum sources to include (default: 10)
+   * - ``--strategy TYPE``
+     - Research strategy: breadth, depth, or auto (default: auto)
+   * - ``--token-budget N``
+     - Maximum tokens to consume (default: 100000)
+   * - ``--use-vectordb / --no-vectordb``
+     - Use vector DB for context management (default: no)
+   * - ``--stream / --no-stream``
+     - Stream progress (default: stream)
+   * - ``--smart / --fast``
+     - Use smart model or fast model
+
+**Requirements:**
+
+Requires ``SERPER_API_KEY`` environment variable for web search. Get a key at https://serper.dev
+
+**Examples:**
+
+.. code-block:: bash
+
+   # Research a topic
+   nb research "AI trends 2025"
+
+   # Save report to today's note
+   nb research "AI trends 2025" -o today
+
+   # Save report to a new note in work notebook
+   nb research "AI trends 2025" -o work
+
+   # Search news only
+   nb research "climate change policies" --search news
+
+   # Search academic papers
+   nb research "machine learning" --search scholar
+
+   # Use depth strategy for thorough research
+   nb research "market analysis" --strategy depth --token-budget 200000
