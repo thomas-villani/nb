@@ -262,3 +262,126 @@ class TestPlanCommand:
         result = runner.invoke(cli, ["plan", "week", "--help"])
         assert "--smart" in result.output
         assert "--fast" in result.output
+
+
+class TestReviewCommand:
+    """Tests for the nb review command."""
+
+    def test_review_help(self, runner):
+        """Test that review --help works."""
+        result = runner.invoke(cli, ["review", "--help"])
+
+        assert result.exit_code == 0
+        assert "AI-assisted daily and weekly reviews" in result.output
+        assert "day" in result.output
+        assert "week" in result.output
+
+    def test_review_day_help(self, runner):
+        """Test that review day --help works."""
+        result = runner.invoke(cli, ["review", "day", "--help"])
+
+        assert result.exit_code == 0
+        assert "end-of-day review" in result.output
+        assert "--notebook" in result.output
+        assert "--tag" in result.output
+        assert "--output" in result.output
+
+    def test_review_week_help(self, runner):
+        """Test that review week --help works."""
+        result = runner.invoke(cli, ["review", "week", "--help"])
+
+        assert result.exit_code == 0
+        assert "end-of-week review" in result.output
+        assert "--prompt" in result.output
+        assert "--stream" in result.output
+
+    def test_review_day_without_api_key(self, runner, mock_cli_config):
+        """Test that review day fails gracefully without API key."""
+        from nb.core.llm import LLMConfigError
+
+        with (
+            patch(
+                "nb.core.ai.review.get_llm_client",
+                side_effect=LLMConfigError("No API key configured"),
+            ),
+            patch("nb.core.ai.review.get_config", return_value=mock_cli_config),
+        ):
+            result = runner.invoke(cli, ["review", "day", "--no-stream"])
+
+            assert result.exit_code == 1
+            assert "Configuration error" in result.output or "API key" in result.output
+
+    def test_review_day_option_parsing(self, runner):
+        """Test that review day parses options correctly."""
+        result = runner.invoke(
+            cli,
+            ["review", "day", "--notebook", "work", "--help"],
+        )
+        assert result.exit_code == 0
+        assert "--notebook" in result.output
+
+    def test_review_week_option_parsing(self, runner):
+        """Test that review week parses options correctly."""
+        result = runner.invoke(
+            cli,
+            ["review", "week", "--prompt", "Focus on wins", "--help"],
+        )
+        assert result.exit_code == 0
+        assert "--prompt" in result.output
+
+    def test_review_smart_fast_options(self, runner):
+        """Test that --smart and --fast options are available."""
+        result = runner.invoke(cli, ["review", "day", "--help"])
+        assert "--smart" in result.output
+        assert "--fast" in result.output
+
+
+class TestStandupCommand:
+    """Tests for the nb standup command."""
+
+    def test_standup_help(self, runner):
+        """Test that standup --help works."""
+        result = runner.invoke(cli, ["standup", "--help"])
+
+        assert result.exit_code == 0
+        assert "morning standup briefing" in result.output
+        assert "--notebook" in result.output
+        assert "--tag" in result.output
+        assert "--output" in result.output
+        assert "--no-calendar" in result.output
+
+    def test_standup_without_api_key(self, runner, mock_cli_config):
+        """Test that standup fails gracefully without API key."""
+        from nb.core.llm import LLMConfigError
+
+        with (
+            patch(
+                "nb.core.ai.standup.get_llm_client",
+                side_effect=LLMConfigError("No API key configured"),
+            ),
+            patch("nb.core.ai.standup.get_config", return_value=mock_cli_config),
+        ):
+            result = runner.invoke(cli, ["standup", "--no-stream"])
+
+            assert result.exit_code == 1
+            assert "Configuration error" in result.output or "API key" in result.output
+
+    def test_standup_option_parsing(self, runner):
+        """Test that standup parses options correctly."""
+        result = runner.invoke(
+            cli,
+            ["standup", "--notebook", "work", "--help"],
+        )
+        assert result.exit_code == 0
+        assert "--notebook" in result.output
+
+    def test_standup_no_calendar_option(self, runner):
+        """Test that --no-calendar option is available."""
+        result = runner.invoke(cli, ["standup", "--help"])
+        assert "--no-calendar" in result.output
+
+    def test_standup_smart_fast_options(self, runner):
+        """Test that --smart and --fast options are available."""
+        result = runner.invoke(cli, ["standup", "--help"])
+        assert "--smart" in result.output
+        assert "--fast" in result.output

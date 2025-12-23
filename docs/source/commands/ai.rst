@@ -99,6 +99,160 @@ On Windows, the plan command can read your Outlook calendar to:
 
 Install the optional dependency: ``pip install nb-cli[outlook]``
 
+nb review
+---------
+
+Generate AI-assisted daily or weekly reviews reflecting on completed work, items carrying over, wins, and areas for improvement.
+
+**Usage:** ``nb review [day|week] [OPTIONS]``
+
+**Subcommands:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Subcommand
+     - Description
+   * - ``day``
+     - Generate an end-of-day review
+   * - ``week``
+     - Generate an end-of-week review with improvement suggestions
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-n, --notebook TEXT``
+     - Filter todos to a specific notebook
+   * - ``-t, --tag TEXT``
+     - Filter todos with this tag
+   * - ``-o, --output [PATH]``
+     - Save review to note. Use NOTEBOOK/NOTE for specific note, NOTEBOOK for new note, or 'today'
+   * - ``-p, --prompt TEXT``
+     - Add custom instructions for the review
+   * - ``--stream / --no-stream``
+     - Stream the response in real-time (default: stream)
+   * - ``--smart / --fast``
+     - Use smart model (better) or fast model (cheaper)
+
+**How it works:**
+
+1. Gathers completed todos from the period (today or this week)
+2. Collects pending todos that are carrying over
+3. Identifies overdue items needing attention
+4. Sends this context to the LLM with review prompts
+5. Generates a structured review with sections
+
+**Review Sections:**
+
+- **Completed** - What got done, grouped by project/notebook
+- **Carrying Over** - Pending items moving forward with brief context
+- **Wins** - Notable achievements, milestones, or progress
+- **Improvements** (weekly only) - Process improvement suggestions based on patterns
+
+**Examples:**
+
+.. code-block:: bash
+
+   # End of day review
+   nb review day
+
+   # End of day review for work notebook
+   nb review day --notebook work
+
+   # Weekly review
+   nb review week
+
+   # Save review to today's daily note
+   nb review week -o today
+
+   # Save review to a new note in work notebook
+   nb review week -o work
+
+   # Save review to a specific note
+   nb review week -o work/weekly-reviews
+
+   # Add custom focus
+   nb review week --prompt "Focus on wins and blockers"
+
+   # Use faster/cheaper model
+   nb review day --fast
+
+nb standup
+----------
+
+Generate an AI-powered morning standup briefing based on yesterday's completed work, today's calendar, and items needing attention.
+
+**Usage:** ``nb standup [OPTIONS]``
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-n, --notebook TEXT``
+     - Filter todos to a specific notebook
+   * - ``-t, --tag TEXT``
+     - Filter todos with this tag
+   * - ``-o, --output [PATH]``
+     - Save standup to note. Use NOTEBOOK/NOTE for specific note, NOTEBOOK for new note, or 'today'
+   * - ``-p, --prompt TEXT``
+     - Add custom instructions for the standup
+   * - ``--no-calendar``
+     - Skip Outlook calendar integration
+   * - ``--stream / --no-stream``
+     - Stream the response in real-time (default: stream)
+   * - ``--smart / --fast``
+     - Use smart model (better) or fast model (cheaper)
+
+**How it works:**
+
+1. Gathers completed todos from yesterday
+2. Fetches today's calendar events from Outlook (on Windows)
+3. Collects overdue and in-progress todos
+4. Identifies todos due today
+5. Generates a focused morning briefing
+
+**Standup Sections:**
+
+- **Yesterday** - Brief 1-2 sentence summary of completed work
+- **Today's Schedule** - Calendar events and meetings to be aware of
+- **Focus Areas** - Top 2-3 priorities based on due dates and importance
+- **Needs Attention** - Overdue items or stale tasks requiring action
+
+**Examples:**
+
+.. code-block:: bash
+
+   # Morning standup briefing
+   nb standup
+
+   # Focus on work notebook todos
+   nb standup --notebook work
+
+   # Save to today's daily note
+   nb standup -o today
+
+   # Save to a new note in work notebook
+   nb standup -o work
+
+   # Skip calendar integration (faster, or for non-Windows)
+   nb standup --no-calendar
+
+   # Use faster/cheaper model
+   nb standup --fast
+
+   # Add custom instructions
+   nb standup --prompt "Prioritize client-facing tasks"
+
 nb ask
 ------
 

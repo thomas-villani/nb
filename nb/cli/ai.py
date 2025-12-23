@@ -1580,10 +1580,564 @@ def _display_research_result(result) -> None:
     )
 
 
+# ============================================================================
+# Review Command Group
+# ============================================================================
+
+
+@click.group(name="review")
+def review_group():
+    """AI-assisted daily and weekly reviews.
+
+    Generate reflective reviews of your completed work, items carrying over,
+    wins, and areas for improvement.
+
+    Examples:
+
+        nb review day                     # End of day review
+
+        nb review week                    # End of week review
+
+        nb review week -o today           # Save to today's note
+
+        nb review day -n work             # Filter to work notebook
+    """
+    pass
+
+
+@review_group.command(name="day")
+@click.option(
+    "--notebook",
+    "-n",
+    "notebook",
+    help="Filter todos to specific notebook.",
+    shell_complete=complete_notebook,
+)
+@click.option(
+    "--tag",
+    "-t",
+    "tag",
+    help="Filter todos with this tag.",
+)
+@click.option(
+    "--output",
+    "-o",
+    "output",
+    is_flag=False,
+    flag_value="today",
+    default=None,
+    help="Save review to note. NOTEBOOK/NOTE for specific note, NOTEBOOK for new note, or 'today'.",
+)
+@click.option(
+    "--prompt",
+    "-p",
+    "custom_prompt",
+    help="Custom instructions for the review.",
+)
+@click.option(
+    "--stream/--no-stream",
+    default=True,
+    help="Stream the response (default: stream).",
+)
+@click.option(
+    "--smart/--fast",
+    "use_smart",
+    default=True,
+    help="Use smart model (better) or fast model (cheaper). Default: smart.",
+)
+def review_day_command(
+    notebook: str | None,
+    tag: str | None,
+    output: str | None,
+    custom_prompt: str | None,
+    stream: bool,
+    use_smart: bool,
+) -> None:
+    """Generate an end-of-day review.
+
+    Reflects on what was completed today, what's carrying over,
+    and any wins worth noting.
+
+    Examples:
+
+        nb review day
+
+        nb review day --notebook work
+
+        nb review day -o today
+    """
+    _run_review(
+        horizon="day",
+        notebook=notebook,
+        tag=tag,
+        output=output,
+        custom_prompt=custom_prompt,
+        stream=stream,
+        use_smart=use_smart,
+    )
+
+
+@review_group.command(name="week")
+@click.option(
+    "--notebook",
+    "-n",
+    "notebook",
+    help="Filter todos to specific notebook.",
+    shell_complete=complete_notebook,
+)
+@click.option(
+    "--tag",
+    "-t",
+    "tag",
+    help="Filter todos with this tag.",
+)
+@click.option(
+    "--output",
+    "-o",
+    "output",
+    is_flag=False,
+    flag_value="today",
+    default=None,
+    help="Save review to note. NOTEBOOK/NOTE for specific note, NOTEBOOK for new note, or 'today'.",
+)
+@click.option(
+    "--prompt",
+    "-p",
+    "custom_prompt",
+    help="Custom instructions for the review.",
+)
+@click.option(
+    "--stream/--no-stream",
+    default=True,
+    help="Stream the response (default: stream).",
+)
+@click.option(
+    "--smart/--fast",
+    "use_smart",
+    default=True,
+    help="Use smart model (better) or fast model (cheaper). Default: smart.",
+)
+def review_week_command(
+    notebook: str | None,
+    tag: str | None,
+    output: str | None,
+    custom_prompt: str | None,
+    stream: bool,
+    use_smart: bool,
+) -> None:
+    """Generate an end-of-week review.
+
+    Reflects on what was completed this week, what's carrying over,
+    wins, and suggestions for improvement.
+
+    Examples:
+
+        nb review week
+
+        nb review week --notebook work
+
+        nb review week -o work/weekly-reviews
+    """
+    _run_review(
+        horizon="week",
+        notebook=notebook,
+        tag=tag,
+        output=output,
+        custom_prompt=custom_prompt,
+        stream=stream,
+        use_smart=use_smart,
+    )
+
+
+def _run_review(
+    horizon: Literal["day", "week"],
+    notebook: str | None,
+    tag: str | None,
+    output: str | None,
+    custom_prompt: str | None,
+    stream: bool,
+    use_smart: bool,
+) -> None:
+    """Shared implementation for review commands."""
+    from datetime import date
+    from pathlib import Path
+
+    from nb.core.ai.review import (
+        ReviewResult,
+        ReviewScope,
+        append_review_to_note,
+        gather_review_context,
+    )
+    from nb.core.llm import LLMConfigError, LLMError
+
+    try:
+        # Build scope
+        scope = ReviewScope(
+            notebooks=[notebook] if notebook else None,
+            tags=[tag] if tag else None,
+        )
+
+        # Gather context
+        with console.status("[bold blue]Gathering review context...[/bold blue]"):
+            context = gather_review_context(scope=scope, horizon=horizon)
+
+        # Display context summary
+        _display_review_context_summary(context)
+
+        review_content = None
+        if stream:
+            review_content = _run_streaming_review(context, custom_prompt, use_smart)
+        else:
+            review_content = _run_non_streaming_review(
+                context, custom_prompt, use_smart
+            )
+
+        # Save to output if specified
+        if output and review_content:
+            if output == "today":
+                note_path = None  # Will use today's note
+            elif "/" in output or output.endswith(".md"):
+                # Explicit path: NOTEBOOK/NOTE or path.md
+                note_path = Path(output)
+            else:
+                # Just notebook name - create new note with date prefix
+                today = date.today().isoformat()
+                note_path = Path(output) / f"{today}-review-{horizon}.md"
+
+            review_result = ReviewResult(
+                horizon=horizon,
+                raw_response=review_content,
+                completed_count=len(context.completed_todos),
+                pending_count=len(context.pending_todos),
+            )
+            saved_path = append_review_to_note(review_result, note_path=note_path)
+            console.print(f"\n[green]Review saved to {saved_path}[/green]")
+
+    except LLMConfigError as e:
+        console.print(f"[red]Configuration error:[/red] {e}")
+        console.print(
+            "\n[dim]Hint: Set ANTHROPIC_API_KEY environment variable or configure "
+            "with 'nb config set llm.api_key <key>'[/dim]"
+        )
+        sys.exit(1)
+    except LLMError as e:
+        console.print(f"[red]LLM error:[/red] {e}")
+        sys.exit(1)
+    except ValueError as e:
+        console.print(f"[yellow]{e}[/yellow]")
+        sys.exit(1)
+
+
+def _display_review_context_summary(context) -> None:
+    """Display a summary of the review context."""
+    from nb.core.ai.review import ReviewContext
+
+    ctx: ReviewContext = context
+
+    # Build summary table
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column("Label", style="dim")
+    table.add_column("Value")
+
+    table.add_row("Period", f"{ctx.horizon} ({ctx.period_start} - {ctx.period_end})")
+    table.add_row("Completed", f"[green]{len(ctx.completed_todos)}[/green]")
+    table.add_row("Carrying over", str(len(ctx.pending_todos)))
+
+    if ctx.overdue_todos:
+        table.add_row("Overdue", f"[red]{len(ctx.overdue_todos)}[/red]")
+
+    console.print(
+        Panel(table, title="[bold]Review Context[/bold]", border_style="blue")
+    )
+    console.print()
+
+
+def _run_streaming_review(context, custom_prompt: str | None, use_smart: bool) -> str:
+    """Run streaming review generation. Returns the review content."""
+    from nb.core.ai.review import generate_review_stream
+
+    console.print("[bold]Generating review...[/bold]")
+    console.print()
+
+    full_response = ""
+    for chunk in generate_review_stream(
+        context,
+        use_smart_model=use_smart,
+        custom_prompt=custom_prompt,
+    ):
+        if chunk.content:
+            console.print(chunk.content, end="")
+            full_response += chunk.content
+
+        if chunk.is_final and (chunk.input_tokens or chunk.output_tokens):
+            console.print()
+            console.print(
+                f"\n[dim]Tokens: {chunk.input_tokens} in, {chunk.output_tokens} out[/dim]"
+            )
+
+    return full_response
+
+
+def _run_non_streaming_review(
+    context, custom_prompt: str | None, use_smart: bool
+) -> str:
+    """Run non-streaming review generation. Returns the review content."""
+    from nb.core.ai.review import generate_review
+
+    with console.status("[bold blue]Generating review...[/bold blue]"):
+        result = generate_review(
+            context,
+            use_smart_model=use_smart,
+            custom_prompt=custom_prompt,
+        )
+
+    console.print(Markdown(result.raw_response))
+
+    if result.input_tokens or result.output_tokens:
+        console.print(
+            f"\n[dim]Tokens: {result.input_tokens} in, {result.output_tokens} out[/dim]"
+        )
+
+    return result.raw_response
+
+
+# ============================================================================
+# Standup Command
+# ============================================================================
+
+
+@click.command(name="standup")
+@click.option(
+    "--notebook",
+    "-n",
+    "notebook",
+    help="Filter todos to specific notebook.",
+    shell_complete=complete_notebook,
+)
+@click.option(
+    "--tag",
+    "-t",
+    "tag",
+    help="Filter todos with this tag.",
+)
+@click.option(
+    "--output",
+    "-o",
+    "output",
+    is_flag=False,
+    flag_value="today",
+    default=None,
+    help="Save standup to note. NOTEBOOK/NOTE for specific note, NOTEBOOK for new note, or 'today'.",
+)
+@click.option(
+    "--prompt",
+    "-p",
+    "custom_prompt",
+    help="Custom instructions for the standup.",
+)
+@click.option(
+    "--no-calendar",
+    is_flag=True,
+    help="Skip calendar integration.",
+)
+@click.option(
+    "--stream/--no-stream",
+    default=True,
+    help="Stream the response (default: stream).",
+)
+@click.option(
+    "--smart/--fast",
+    "use_smart",
+    default=True,
+    help="Use smart model (better) or fast model (cheaper). Default: smart.",
+)
+def standup_command(
+    notebook: str | None,
+    tag: str | None,
+    output: str | None,
+    custom_prompt: str | None,
+    no_calendar: bool,
+    stream: bool,
+    use_smart: bool,
+) -> None:
+    """Generate a morning standup briefing.
+
+    Shows yesterday's completed work, today's calendar, and items
+    needing attention. Helps prioritize the day ahead.
+
+    Examples:
+
+        nb standup                        # Morning briefing
+
+        nb standup -o today               # Save to today's note
+
+        nb standup --notebook work        # Filter to work notebook
+
+        nb standup --no-calendar          # Skip calendar integration
+    """
+    from datetime import date
+    from pathlib import Path
+
+    from nb.core.ai.standup import (
+        StandupResult,
+        StandupScope,
+        append_standup_to_note,
+        gather_standup_context,
+    )
+    from nb.core.llm import LLMConfigError, LLMError
+
+    try:
+        # Build scope
+        scope = StandupScope(
+            notebooks=[notebook] if notebook else None,
+            tags=[tag] if tag else None,
+        )
+
+        # Gather context
+        with console.status("[bold blue]Gathering standup context...[/bold blue]"):
+            context = gather_standup_context(
+                scope=scope,
+                include_calendar=not no_calendar,
+            )
+
+        # Display context summary
+        _display_standup_context_summary(context)
+
+        standup_content = None
+        if stream:
+            standup_content = _run_streaming_standup(context, custom_prompt, use_smart)
+        else:
+            standup_content = _run_non_streaming_standup(
+                context, custom_prompt, use_smart
+            )
+
+        # Save to output if specified
+        if output and standup_content:
+            if output == "today":
+                note_path = None  # Will use today's note
+            elif "/" in output or output.endswith(".md"):
+                # Explicit path: NOTEBOOK/NOTE or path.md
+                note_path = Path(output)
+            else:
+                # Just notebook name - create new note with date prefix
+                today = date.today().isoformat()
+                note_path = Path(output) / f"{today}-standup.md"
+
+            standup_result = StandupResult(
+                raw_response=standup_content,
+                yesterday_count=len(context.yesterday_completed),
+                today_count=(
+                    len(context.overdue_todos)
+                    + len(context.in_progress_todos)
+                    + len(context.due_today)
+                ),
+                overdue_count=len(context.overdue_todos),
+            )
+            saved_path = append_standup_to_note(standup_result, note_path=note_path)
+            console.print(f"\n[green]Standup saved to {saved_path}[/green]")
+
+    except LLMConfigError as e:
+        console.print(f"[red]Configuration error:[/red] {e}")
+        console.print(
+            "\n[dim]Hint: Set ANTHROPIC_API_KEY environment variable or configure "
+            "with 'nb config set llm.api_key <key>'[/dim]"
+        )
+        sys.exit(1)
+    except LLMError as e:
+        console.print(f"[red]LLM error:[/red] {e}")
+        sys.exit(1)
+    except ValueError as e:
+        console.print(f"[yellow]{e}[/yellow]")
+        sys.exit(1)
+
+
+def _display_standup_context_summary(context) -> None:
+    """Display a summary of the standup context."""
+    from nb.core.ai.standup import StandupContext
+
+    ctx: StandupContext = context
+
+    # Build summary table
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column("Label", style="dim")
+    table.add_column("Value")
+
+    table.add_row("Date", ctx.today.strftime("%A, %B %d, %Y"))
+    table.add_row(
+        "Yesterday completed", f"[green]{len(ctx.yesterday_completed)}[/green]"
+    )
+
+    if ctx.calendar_events:
+        table.add_row("Calendar events", str(len(ctx.calendar_events)))
+
+    if ctx.overdue_todos:
+        table.add_row("Overdue", f"[red]{len(ctx.overdue_todos)}[/red]")
+    if ctx.in_progress_todos:
+        table.add_row("In progress", f"[yellow]{len(ctx.in_progress_todos)}[/yellow]")
+    if ctx.due_today:
+        table.add_row("Due today", str(len(ctx.due_today)))
+
+    console.print(
+        Panel(table, title="[bold]Standup Context[/bold]", border_style="blue")
+    )
+    console.print()
+
+
+def _run_streaming_standup(context, custom_prompt: str | None, use_smart: bool) -> str:
+    """Run streaming standup generation. Returns the standup content."""
+    from nb.core.ai.standup import generate_standup_stream
+
+    console.print("[bold]Generating standup...[/bold]")
+    console.print()
+
+    full_response = ""
+    for chunk in generate_standup_stream(
+        context,
+        use_smart_model=use_smart,
+        custom_prompt=custom_prompt,
+    ):
+        if chunk.content:
+            console.print(chunk.content, end="")
+            full_response += chunk.content
+
+        if chunk.is_final and (chunk.input_tokens or chunk.output_tokens):
+            console.print()
+            console.print(
+                f"\n[dim]Tokens: {chunk.input_tokens} in, {chunk.output_tokens} out[/dim]"
+            )
+
+    return full_response
+
+
+def _run_non_streaming_standup(
+    context, custom_prompt: str | None, use_smart: bool
+) -> str:
+    """Run non-streaming standup generation. Returns the standup content."""
+    from nb.core.ai.standup import generate_standup
+
+    with console.status("[bold blue]Generating standup...[/bold blue]"):
+        result = generate_standup(
+            context,
+            use_smart_model=use_smart,
+            custom_prompt=custom_prompt,
+        )
+
+    console.print(Markdown(result.raw_response))
+
+    if result.input_tokens or result.output_tokens:
+        console.print(
+            f"\n[dim]Tokens: {result.input_tokens} in, {result.output_tokens} out[/dim]"
+        )
+
+    return result.raw_response
+
+
 def register_ai_commands(cli: click.Group) -> None:
     """Register AI commands with the main CLI."""
     cli.add_command(ask_command)
     cli.add_command(plan_group)
+    cli.add_command(review_group)
+    cli.add_command(standup_command)
     cli.add_command(summarize_command)
     cli.add_command(tldr_command)
     cli.add_command(research_command)

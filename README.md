@@ -25,6 +25,8 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Raindrop inbox** - Pull bookmarks from Raindrop.io and clip them as notes with AI summaries
 - **Git integration** - Version control notes with auto-commit and GitHub sync
 - **AI assistant** - Interactive AI agent for task management with confirmation flow
+- **AI reviews** - Daily/weekly reviews reflecting on completed work, wins, and improvements
+- **AI standups** - Morning briefings with yesterday's work, calendar, and focus areas
 
 ## Installation
 
@@ -1325,6 +1327,40 @@ recorder:
 Use `nb record devices` to find device indices for your system. WASAPI devices typically require 48000 Hz sample rate.
 
 **Speaker labeling**: When recording with both microphone and system audio, speakers are automatically distinguished by channel. Your microphone is labeled with `mic_speaker_label` (default: "You"), while remote participants from system audio are labeled "Speaker 100", "Speaker 101", etc. Override with `--speakers "0:Me,100:Alice,101:Bob"`.
+
+### AI Review & Standup
+
+Generate AI-powered daily/weekly reviews and morning standups.
+
+```bash
+# Daily review - reflect on completed work
+nb review day                     # End of day review
+nb review day -n work             # Filter to work notebook
+nb review day -o today            # Save to today's note
+
+# Weekly review - comprehensive week reflection
+nb review week                    # End of week review
+nb review week -o work/reviews    # Save to specific note
+nb review week --prompt "Focus on wins"  # Custom instructions
+
+# Morning standup - plan the day ahead
+nb standup                        # Morning briefing
+nb standup -o today               # Save to today's note
+nb standup --notebook work        # Filter to work notebook
+nb standup --no-calendar          # Skip calendar integration
+```
+
+**Review sections:**
+- **Completed** - What got done, grouped by project/notebook
+- **Carrying Over** - Pending items moving forward with context
+- **Wins** - Notable achievements or milestones
+- **Improvements** (weekly) - Process improvement suggestions
+
+**Standup sections:**
+- **Yesterday** - Brief summary of completed work
+- **Today's Schedule** - Calendar events to be aware of
+- **Focus Areas** - Top priorities based on due dates and overdue items
+- **Needs Attention** - Blockers or stale tasks requiring action
 
 ### AI Assistant
 
