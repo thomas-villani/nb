@@ -1,3 +1,75 @@
+# v0.4.3 - 2025-12-23
+
+Patch release that introduces AI-powered daily/weekly reviews and morning standups, plus stable note IDs for faster lookups. Includes CLI/TUI wiring, docs, and tests.
+
+## New Features
+
+- Add AI-powered review and standup flows
+  - New CLI commands: `nb review` (group with `day` and `week`) and `nb standup`
+  - Engines implemented at `nb/core/ai/review.py` and `nb/core/ai/standup.py` to gather todos/calendar context, build LLM prompts, and produce streaming or non-streaming outputs
+  - Support saving outputs to notes: formatting/append to daily or specified notes, notebook/tag filtering, custom prompts, streaming, and model selection (`smart` / `fast`)
+  - CLI wiring updated in `nb/cli/ai.py` to register commands and display contextual summaries before generation
+  - Documentation and README examples added showing usage and available sections (e.g., Completed, Carrying Over, Wins, Improvements, Yesterday, Today's Schedule, Focus Areas)
+
+- Stable note IDs for faster lookup and consistent behavior
+  - Set `Note.id` using `make_note_id` in `nb/cli/search.py` for streamed and listed notes
+  - Set `Note.id` using `make_note_id` in `nb/tui/search.py` when creating notes for the viewer
+  - Enables quicker loading and consistent inclusion of notes across CLI and TUI flows; `todo.md` updated to mark related tasks completed
+
+## Tests & Reliability
+
+- Add tests `tests/test_cli_ai.py` covering CLI help output, option parsing, and graceful failure when LLM configuration (API key) is missing
+- AI flows handle missing calendar integrations gracefully and surface LLM configuration errors with actionable hints for developers/users
+
+## Other Changes
+
+- Bumped package version 0.4.2 → 0.4.3
+
+# v0.4.2 - 2025-12-23
+
+This patch release adds pinned-note support, stable note IDs, a files-only search mode, and a DB schema bump to v17. It also introduces a breaking change for how API keys are loaded (moved to environment/.env-only) and includes a few maintenance fixes.
+
+## New Features
+
+- Add pin/unpin/pinned CLI commands and an nb.core.pinned module to manage pinned notes stored in the database; repinning updates the note timestamp. ([dafca5c])
+- Introduce stable note IDs via make_note_id and add an id field to the Note model for stable lookups; note IDs are stored on upsert/index and used when rebuilding/syncing the search index. ([dafca5c])
+- Add get_note_by_id API with prefix matching for fast resolution of notes by stable ID. ([dafca5c])
+- Add --files-only (-l) option to search and grep to output file paths only (useful for external tooling and scripts). ([dafca5c])
+- Change history/list behaviors:
+  - history now defaults to recently modified notes; use --viewed / -v to show view history.
+  - list now shows N recently modified notes per notebook with a new --limit / -l option (default 5). ([dafca5c])
+- Bump DB schema to v17: add notes.id column, an index for id lookups, and a pinned_notes table with appropriate indices; include a migration script. ([dafca5c])
+
+## Breaking Changes
+
+- API key handling moved to environment/.env only — keys in config.yaml are now ignored. ([0f22574])
+  - Recognized environment variables: OPENAI_API_KEY, ANTHROPIC_API_KEY, SERPER_API_KEY, DEEPGRAM_API_KEY, RAINDROP_API_KEY.
+  - Added env_file support to config (Config.env_file) and dotenv loading priority:
+    shell environment > custom env_file (config) > default .nb/.env (default loading uses override=False so shell vars are never overwritten).
+  - New command: nb config api-keys — displays detected API keys (masked) and shows which env/.env sources exist.
+  - Config/dataclass changes: embedding/llm/search/recorder/raindrop API keys are populated from environment at runtime; they are not persisted in config.yaml and cannot be configured via CLI/config set commands.
+  - save_config now persists env_file and nb config exposes get/set for env_file.
+  - Tests updated to assert API keys come from environment.
+
+## Bug Fixes
+
+- Fix issue in pyproject.toml and add an 'all' dependency group to simplify developer installs. ([0934028])
+- Misc: update CHANGELOG.md. ([4398bb4])
+- Bump package version to 0.4.2. ([8af88ab])
+
+## Migration / Upgrade Notes (for developers)
+
+- Database migration: schema bumped to v17. Run migrations (automatic if migration is enabled in your setup). If you manage migrations manually, apply the included migration script to add notes.id and the pinned_notes table before using pinned-note features or id lookups.
+- API keys:
+  - Ensure your API keys are provided via environment variables or a gitignored .env file.
+  - To persist a custom .env path in config: nb config set env_file /path/to/.env
+  - Example (bash):
+    - export OPENAI_API_KEY="sk-..."
+    - or create ~/.nb/.env with OPENAI_API_KEY=sk-... and then nb config set env_file ~/.nb/.env
+  - Verify detected keys with: nb config api-keys
+  - Note: any API keys present in config.yaml will be ignored after this release.
+- If you rely on automated tooling or CI that previously read keys from config.yaml, update pipelines to set required env vars or reference an env_file.
+
 # v0.4.1 - 2025-12-21
 
 Patch release with optional AI-generated TL;DRs for inbox clipping, inbox/template detection fixes, tests and docs updates.
