@@ -200,11 +200,14 @@ class TestParseLLMConfig:
 
         assert result.api_key == "openai-test-key"
 
-    def test_config_api_key_overrides_env(self, monkeypatch):
+    def test_config_api_key_ignored(self, monkeypatch):
+        """API keys in config are ignored - only env vars are used."""
         monkeypatch.setenv("ANTHROPIC_API_KEY", "env-key")
+        # Even if api_key is in config data, it should be ignored
         result = _parse_llm_config({"api_key": "config-key"})
 
-        assert result.api_key == "config-key"
+        # Should use env var, not config value
+        assert result.api_key == "env-key"
 
 
 class TestConfig:
@@ -351,12 +354,25 @@ class TestParseEmbeddings:
         assert result.provider == "ollama"
         assert result.model == "nomic-embed-text"
 
-    def test_custom_config(self):
+    def test_custom_config(self, monkeypatch):
+        # Clear env var to test that config doesn't use it
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
         data = {
             "provider": "openai",
             "model": "text-embedding-3-small",
-            "api_key": "sk-xxx",
         }
+        result = _parse_embeddings(data)
+
+        assert result.provider == "openai"
+        assert result.model == "text-embedding-3-small"
+        # API key comes from env var, not config - and we cleared it
+        assert result.api_key is None
+
+    def test_api_key_from_env(self, monkeypatch):
+        """API key is loaded from OPENAI_API_KEY env var for OpenAI provider."""
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-xxx")
+        data = {"provider": "openai"}
         result = _parse_embeddings(data)
 
         assert result.provider == "openai"

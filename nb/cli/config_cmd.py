@@ -28,6 +28,7 @@ def config_cmd(ctx: click.Context) -> None:
       get <key>           Get a configuration value
       set <key> <value>   Set a configuration value
       list                List all configurable settings
+      api-keys            Show detected API keys (masked)
 
     \b
     Examples:
@@ -35,6 +36,7 @@ def config_cmd(ctx: click.Context) -> None:
       nb config get editor   # Show current editor setting
       nb config set editor code  # Set editor to 'code'
       nb config list         # Show all configurable settings
+      nb config api-keys     # Show which API keys are detected
     """
     if ctx.invoked_subcommand is None:
         # Default: open config file in editor
@@ -134,6 +136,99 @@ def config_list() -> None:
         console.print(f"    {description}")
         console.print(f"    Current: {value_str}")
         console.print()
+
+
+@config_cmd.command("api-keys")
+def config_api_keys() -> None:
+    """Show detected API keys and their sources.
+
+    API keys are loaded from environment variables (never from config.yaml).
+
+    \b
+    Priority order (first found wins):
+      1. Shell environment variables
+      2. Custom env_file (if configured)
+      3. Default .nb/.env file
+
+    \b
+    Supported API keys:
+      ANTHROPIC_API_KEY   - For AI commands (llm.provider: anthropic)
+      OPENAI_API_KEY      - For AI commands (llm.provider: openai) or embeddings
+      SERPER_API_KEY      - For web search in research command
+      DEEPGRAM_API_KEY    - For audio transcription
+      RAINDROP_API_KEY    - For inbox/bookmark integration
+    """
+    import os
+
+    config = get_config()
+
+    # Define all API keys we care about
+    api_keys = [
+        ("ANTHROPIC_API_KEY", "LLM (Anthropic Claude)", "llm.provider: anthropic"),
+        ("OPENAI_API_KEY", "LLM (OpenAI) / Embeddings", "llm.provider: openai"),
+        ("SERPER_API_KEY", "Web Search", "nb ai research"),
+        ("DEEPGRAM_API_KEY", "Audio Transcription", "nb transcribe"),
+        ("RAINDROP_API_KEY", "Inbox Integration", "nb inbox"),
+    ]
+
+    console.print("\n[bold]API Keys[/bold]\n")
+
+    # Show env file locations
+    default_env = config.notes_root / ".nb" / ".env"
+    console.print("[dim]Sources (priority order):[/dim]")
+    console.print("  1. Shell environment variables")
+    if config.env_file:
+        exists = (
+            "[green]exists[/green]"
+            if config.env_file.exists()
+            else "[red]not found[/red]"
+        )
+        console.print(f"  2. Custom env_file: {config.env_file} ({exists})")
+        console.print(f"  3. Default: {default_env}", end="")
+    else:
+        console.print(f"  2. Default: {default_env}", end="")
+    if default_env.exists():
+        console.print(" [green](exists)[/green]")
+    else:
+        console.print(" [dim](not found)[/dim]")
+    console.print()
+
+    # Show each API key
+    found_any = False
+    for env_var, description, usage in api_keys:
+        value = os.environ.get(env_var)
+        if value:
+            found_any = True
+            masked = _mask_api_key(value)
+            console.print(f"  [green]{env_var}[/green]")
+            console.print(f"    {description}")
+            console.print(f"    Value: {masked}")
+            console.print(f"    Used by: {usage}")
+        else:
+            console.print(f"  [dim]{env_var}[/dim]")
+            console.print(f"    {description}")
+            console.print("    [dim]<not set>[/dim]")
+        console.print()
+
+    if not found_any:
+        console.print("[yellow]No API keys detected.[/yellow]")
+        console.print("\n[dim]To configure API keys, create a .env file at:[/dim]")
+        console.print(f"  {default_env}")
+        console.print("\n[dim]Example .env file:[/dim]")
+        console.print("  ANTHROPIC_API_KEY=sk-ant-...")
+        console.print("  DEEPGRAM_API_KEY=...")
+
+
+def _mask_api_key(key: str) -> str:
+    """Mask an API key for display, showing only first 4 and last 4 chars.
+
+    For very long keys, limits the masked portion to keep display reasonable.
+    """
+    if len(key) <= 12:
+        return "*" * len(key)
+    # Limit masked portion to 32 chars for readability
+    masked_len = min(len(key) - 8, 32)
+    return f"{key[:4]}{'*' * masked_len}{key[-4:]}"
 
 
 @config_cmd.command("edit")

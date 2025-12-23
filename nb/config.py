@@ -54,26 +54,30 @@ class LinkedNoteConfig:
 
 @dataclass
 class EmbeddingsConfig:
-    """Configuration for embedding generation (localvectordb)."""
+    """Configuration for embedding generation (localvectordb).
+
+    API key is loaded from OPENAI_API_KEY environment variable when using OpenAI provider.
+    """
 
     provider: str = "ollama"  # "ollama" or "openai"
     model: str = "nomic-embed-text"
     base_url: str | None = None  # For custom Ollama endpoint
-    api_key: str | None = None  # For OpenAI
+    api_key: str | None = None  # Loaded from OPENAI_API_KEY env var (not config)
     chunk_size: int = 500  # Max tokens per chunk
     chunking_method: str = "paragraphs"  # sentences, tokens, paragraphs, sections
 
 
 @dataclass
 class SearchConfig:
-    """Configuration for search behavior."""
+    """Configuration for search behavior.
+
+    Serper API key is loaded from SERPER_API_KEY environment variable.
+    """
 
     vector_weight: float = 0.7  # Hybrid search: 0=keyword only, 1=vector only
     score_threshold: float = 0.4  # Minimum score to show results
     recency_decay_days: int = 30  # Half-life for recency boost
-    serper_api_key: str | None = (
-        None  # API key (uses SERPER_API_KEY env var if not set)
-    )
+    serper_api_key: str | None = None  # Loaded from SERPER_API_KEY env var (not config)
 
 
 @dataclass
@@ -87,7 +91,10 @@ class TodoConfig:
 
 @dataclass
 class RecorderConfig:
-    """Configuration for audio recording."""
+    """Configuration for audio recording.
+
+    Deepgram API key is loaded from DEEPGRAM_API_KEY environment variable.
+    """
 
     mic_device: int | None = None  # Microphone device index (-1 or None for default)
     loopback_device: int | None = None  # System audio device index
@@ -96,7 +103,7 @@ class RecorderConfig:
     transcribe_timeout: int = 600  # Deepgram API timeout in seconds (default 10 min)
     mic_speaker_label: str = "You"  # Label for microphone speaker in transcripts
     deepgram_api_key: str | None = (
-        None  # API key (uses DEEPGRAM_API_KEY env var if not set)
+        None  # Loaded from DEEPGRAM_API_KEY env var (not config)
     )
 
 
@@ -111,11 +118,14 @@ class ClipConfig:
 
 @dataclass
 class RaindropConfig:
-    """Configuration for Raindrop.io integration."""
+    """Configuration for Raindrop.io integration.
+
+    API token is loaded from RAINDROP_API_KEY environment variable.
+    """
 
     collection: str = "nb-inbox"  # Collection to pull from
     auto_archive: bool = True  # Move to archive after clipping
-    api_token: str | None = None  # Raindrop API token (set via env or config)
+    api_token: str | None = None  # Loaded from RAINDROP_API_KEY env var (not config)
 
 
 @dataclass
@@ -152,12 +162,13 @@ class LLMConfig:
     """Configuration for LLM integration.
 
     Supports Anthropic (Claude) and OpenAI APIs via direct REST calls.
-    API keys are loaded from environment variables if not set in config.
+    API key is loaded from ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable
+    (based on provider setting).
     """
 
     provider: str = "anthropic"  # anthropic, openai
     models: LLMModelConfig = field(default_factory=LLMModelConfig)
-    api_key: str | None = None  # Uses ANTHROPIC_API_KEY or OPENAI_API_KEY env var
+    api_key: str | None = None  # Loaded from env var (not config)
     base_url: str | None = None  # Custom API endpoint (e.g., for proxies)
     max_tokens: int = 4096  # Max tokens in response
     temperature: float = 0.7  # Sampling temperature
@@ -246,6 +257,7 @@ class Config:
 
     notes_root: Path
     editor: str
+    env_file: Path | None = None  # Custom .env file path (default: .nb/.env)
     notebooks: list[NotebookConfig] = field(
         default_factory=lambda: [
             NotebookConfig(name="daily", date_based=True),
@@ -476,14 +488,25 @@ def _parse_notebooks(data: list[Any]) -> list[NotebookConfig]:
 
 
 def _parse_embeddings(data: dict[str, Any] | None) -> EmbeddingsConfig:
-    """Parse embeddings configuration."""
+    """Parse embeddings configuration.
+
+    API key is loaded from OPENAI_API_KEY environment variable when using OpenAI provider.
+    """
     if data is None:
-        return EmbeddingsConfig()
+        data = {}
+
+    provider = data.get("provider", "ollama")
+
+    # Get API key from environment variable (only needed for OpenAI)
+    api_key = None
+    if provider == "openai":
+        api_key = os.environ.get("OPENAI_API_KEY")
+
     return EmbeddingsConfig(
-        provider=data.get("provider", "ollama"),
+        provider=provider,
         model=data.get("model", "nomic-embed-text"),
         base_url=data.get("base_url"),
-        api_key=data.get("api_key"),
+        api_key=api_key,
         chunk_size=data.get("chunk_size", 500),
         chunking_method=data.get("chunking_method", "paragraphs"),
     )
@@ -533,21 +556,16 @@ def _parse_kanban_boards(data: list[dict[str, Any]]) -> list[KanbanBoardConfig]:
 def _parse_search(data: dict[str, Any] | None) -> SearchConfig:
     """Parse search configuration.
 
-    API key is loaded from config or SERPER_API_KEY environment variable.
+    Serper API key is loaded from SERPER_API_KEY environment variable.
     """
     if data is None:
         data = {}
-
-    # Get API key from config or environment variable
-    serper_api_key = data.get("serper_api_key")
-    if not serper_api_key:
-        serper_api_key = os.environ.get("SERPER_API_KEY")
 
     return SearchConfig(
         vector_weight=data.get("vector_weight", 0.7),
         score_threshold=data.get("score_threshold", 0.4),
         recency_decay_days=data.get("recency_decay_days", 30),
-        serper_api_key=serper_api_key,
+        serper_api_key=os.environ.get("SERPER_API_KEY"),
     )
 
 
@@ -565,15 +583,10 @@ def _parse_todo_config(data: dict[str, Any] | None) -> TodoConfig:
 def _parse_recorder_config(data: dict[str, Any] | None) -> RecorderConfig:
     """Parse recorder configuration.
 
-    API key is loaded from config or DEEPGRAM_API_KEY environment variable.
+    Deepgram API key is loaded from DEEPGRAM_API_KEY environment variable.
     """
     if data is None:
         data = {}
-
-    # Get API key from config or environment variable
-    deepgram_api_key = data.get("deepgram_api_key")
-    if not deepgram_api_key:
-        deepgram_api_key = os.environ.get("DEEPGRAM_API_KEY")
 
     return RecorderConfig(
         mic_device=data.get("mic_device"),
@@ -582,7 +595,7 @@ def _parse_recorder_config(data: dict[str, Any] | None) -> RecorderConfig:
         auto_delete_audio=data.get("auto_delete_audio", False),
         transcribe_timeout=data.get("transcribe_timeout", 600),
         mic_speaker_label=data.get("mic_speaker_label", "You"),
-        deepgram_api_key=deepgram_api_key,
+        deepgram_api_key=os.environ.get("DEEPGRAM_API_KEY"),
     )
 
 
@@ -598,15 +611,17 @@ def _parse_clip_config(data: dict[str, Any] | None) -> ClipConfig:
 
 
 def _parse_raindrop_config(data: dict[str, Any] | None) -> RaindropConfig:
-    """Parse Raindrop configuration."""
+    """Parse Raindrop configuration.
+
+    API token is loaded from RAINDROP_API_KEY environment variable.
+    """
     if data is None:
-        return RaindropConfig()
-    # Check environment variable for API token
-    api_token = os.environ.get("RAINDROP_API_KEY") or data.get("api_token")
+        data = {}
+
     return RaindropConfig(
         collection=data.get("collection", "nb-inbox"),
         auto_archive=data.get("auto_archive", True),
-        api_token=api_token,
+        api_token=os.environ.get("RAINDROP_API_KEY"),
     )
 
 
@@ -646,7 +661,7 @@ def _parse_llm_models_config(data: dict[str, Any] | None) -> LLMModelConfig:
 def _parse_llm_config(data: dict[str, Any] | None) -> LLMConfig:
     """Parse LLM configuration.
 
-    API key is loaded from environment variables if not set:
+    API key is loaded from environment variable:
     - ANTHROPIC_API_KEY for Anthropic provider
     - OPENAI_API_KEY for OpenAI provider
     """
@@ -655,13 +670,13 @@ def _parse_llm_config(data: dict[str, Any] | None) -> LLMConfig:
 
     provider = data.get("provider", "anthropic")
 
-    # Get API key from config or environment variable
-    api_key = data.get("api_key")
-    if not api_key:
-        if provider == "anthropic":
-            api_key = os.environ.get("ANTHROPIC_API_KEY")
-        elif provider == "openai":
-            api_key = os.environ.get("OPENAI_API_KEY")
+    # Get API key from environment variable based on provider
+    if provider == "anthropic":
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+    elif provider == "openai":
+        api_key = os.environ.get("OPENAI_API_KEY")
+    else:
+        api_key = None
 
     return LLMConfig(
         provider=provider,
@@ -678,7 +693,13 @@ def load_config(config_path: Path | None = None) -> Config:
     """Load configuration from YAML file.
 
     If config file doesn't exist, creates default configuration.
-    Also loads environment variables from .nb/.env if it exists.
+
+    Environment variables are loaded in this priority order (first wins):
+    1. Shell environment variables (already set before nb runs)
+    2. Custom env_file specified in config (if set)
+    3. Default .nb/.env file
+
+    API keys are ONLY loaded from environment variables, never from config.
     """
     if config_path is None:
         config_path = get_config_path()
@@ -702,11 +723,19 @@ def load_config(config_path: Path | None = None) -> Config:
     else:
         notes_root = get_default_notes_root()
 
-    # Load environment variables from .nb/.env (for API keys etc.)
-    # This allows users to store secrets in a gitignored .env file
-    env_file = notes_root / ".nb" / ".env"
-    if env_file.exists():
-        load_dotenv(env_file, override=False)  # Don't override existing env vars
+    # Load environment variables from .env files (for API keys etc.)
+    # Priority: shell env vars > custom env_file > default .nb/.env
+    # Using override=False means existing env vars are NOT overwritten
+    custom_env_file: Path | None = None
+    if "env_file" in data:
+        custom_env_file = expand_path(data["env_file"])
+        if custom_env_file.exists():
+            load_dotenv(custom_env_file, override=False)
+
+    # Also load default .nb/.env (won't override vars already set)
+    default_env_file = notes_root / ".nb" / ".env"
+    if default_env_file.exists():
+        load_dotenv(default_env_file, override=False)
 
     # Get editor: prefer $EDITOR environment variable
     editor = os.environ.get("EDITOR") or data.get("editor", DEFAULT_EDITOR)
@@ -734,6 +763,7 @@ def load_config(config_path: Path | None = None) -> Config:
     return Config(
         notes_root=notes_root,
         editor=editor,
+        env_file=custom_env_file,
         notebooks=notebooks,
         todo_views=todo_views,
         kanban_boards=kanban_boards,
@@ -916,28 +946,38 @@ def save_config(config: Config) -> None:
     data: dict[str, Any] = {
         "notes_root": str(config.notes_root),
         "editor": config.editor,
-        "notebooks": notebooks_data,
-        "todo_views": [
-            {"name": view.name, "filters": view.filters} for view in config.todo_views
-        ],
-        "kanban_boards": [
-            {
-                "name": board.name,
-                "columns": [
-                    {"name": col.name, "filters": col.filters, "color": col.color}
-                    for col in board.columns
-                ],
-            }
-            for board in config.kanban_boards
-        ],
-        "embeddings": embeddings_data,
-        "search": search_data,
-        "todo": todo_data,
-        "date_format": config.date_format,
-        "time_format": config.time_format,
-        "daily_title_format": config.daily_title_format,
-        "week_start_day": config.week_start_day,
     }
+
+    # Include env_file only if custom path is set
+    if config.env_file is not None:
+        data["env_file"] = str(config.env_file)
+
+    data.update(
+        {
+            "notebooks": notebooks_data,
+            "todo_views": [
+                {"name": view.name, "filters": view.filters}
+                for view in config.todo_views
+            ],
+            "kanban_boards": [
+                {
+                    "name": board.name,
+                    "columns": [
+                        {"name": col.name, "filters": col.filters, "color": col.color}
+                        for col in board.columns
+                    ],
+                }
+                for board in config.kanban_boards
+            ],
+            "embeddings": embeddings_data,
+            "search": search_data,
+            "todo": todo_data,
+            "date_format": config.date_format,
+            "time_format": config.time_format,
+            "daily_title_format": config.daily_title_format,
+            "week_start_day": config.week_start_day,
+        }
+    )
 
     # Only include optional configs if they have non-default settings
     if recorder_data:
@@ -1100,8 +1140,10 @@ def reset_config() -> None:
 
 
 # Configurable settings with descriptions
+# Note: API keys are NOT configurable via config - use environment variables instead
 CONFIGURABLE_SETTINGS = {
     "editor": "Text editor command (e.g., code, vim, micro)",
+    "env_file": "Custom .env file path for API keys (default: .nb/.env)",
     "date_format": "Date display format (e.g., %Y-%m-%d)",
     "time_format": "Time display format (e.g., %H:%M)",
     "daily_title_format": "Daily note title format (e.g., %A, %B %d, %Y)",
@@ -1109,18 +1151,15 @@ CONFIGURABLE_SETTINGS = {
     "embeddings.provider": "Embeddings provider (ollama or openai)",
     "embeddings.model": "Embeddings model name (e.g., nomic-embed-text)",
     "embeddings.base_url": "Custom embeddings API endpoint URL",
-    "embeddings.api_key": "API key for embeddings provider (OpenAI)",
     "embeddings.chunk_size": "Max tokens per chunk (e.g., 500)",
     "embeddings.chunking_method": "Chunking method (sentences, tokens, paragraphs, sections)",
     "search.vector_weight": "Hybrid search balance: 0=keyword, 1=vector (default 0.7)",
     "search.score_threshold": "Minimum score to show search results (default 0.4)",
     "search.recency_decay_days": "Half-life in days for recency boost (default 30)",
-    "search.serper_api_key": "Serper API key for web search (uses SERPER_API_KEY env var if not set)",
     "todo.default_sort": "Default sort order (source, tag, priority, created)",
     "todo.inbox_file": "Name of inbox file in notes_root (default todo.md)",
     "todo.auto_complete_children": "Complete subtasks when parent done (true/false)",
     "recorder.mic_speaker_label": "Label for microphone speaker in transcripts (default: You)",
-    "recorder.deepgram_api_key": "Deepgram API key for transcription (uses DEEPGRAM_API_KEY env var if not set)",
     "clip.user_agent": "User-Agent header for web clipping requests",
     "clip.timeout": "Request timeout in seconds (default 30)",
     "clip.auto_tag_domain": "Auto-tag clipped content with source domain (true/false)",
@@ -1314,6 +1353,8 @@ def get_config_value(key: str) -> Any:
         # Top-level setting
         if key == "editor":
             return config.editor
+        elif key == "env_file":
+            return str(config.env_file) if config.env_file else None
         elif key == "date_format":
             return config.date_format
         elif key == "time_format":
@@ -1406,6 +1447,11 @@ def set_config_value(key: str, value: str) -> bool:
         # Top-level setting
         if key == "editor":
             config.editor = value
+        elif key == "env_file":
+            if value.lower() in ("", "none"):
+                config.env_file = None
+            else:
+                config.env_file = expand_path(value)
         elif key == "date_format":
             config.date_format = value
         elif key == "time_format":
@@ -1422,9 +1468,9 @@ def set_config_value(key: str, value: str) -> bool:
         else:
             return False
     elif parts[0] == "embeddings" and len(parts) == 2:
-        # Embeddings setting
+        # Embeddings setting (api_key not configurable - use env var)
         attr = parts[1]
-        if attr in ("provider", "model", "base_url", "api_key"):
+        if attr in ("provider", "model", "base_url"):
             setattr(config.embeddings, attr, value if value else None)
         elif attr == "chunk_size":
             try:
@@ -1481,8 +1527,6 @@ def set_config_value(key: str, value: str) -> bool:
                         f"recency_decay_days must be an integer, got '{value}'"
                     ) from None
                 raise
-        elif attr == "serper_api_key":
-            config.search.serper_api_key = value if value else None
         else:
             return False
     elif parts[0] == "todo" and len(parts) == 2:
@@ -1504,12 +1548,10 @@ def set_config_value(key: str, value: str) -> bool:
         else:
             return False
     elif parts[0] == "recorder" and len(parts) == 2:
-        # Recorder setting
+        # Recorder setting (deepgram_api_key not configurable - use env var)
         attr = parts[1]
         if attr == "mic_speaker_label":
             config.recorder.mic_speaker_label = value if value else "You"
-        elif attr == "deepgram_api_key":
-            config.recorder.deepgram_api_key = value if value else None
         else:
             return False
     elif parts[0] == "clip" and len(parts) == 2:

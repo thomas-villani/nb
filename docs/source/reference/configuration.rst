@@ -101,12 +101,14 @@ Full example:
      auto_commit: true
      commit_message_template: "Update {path}"
 
+   # Custom .env file for API keys (optional, default: .nb/.env)
+   # env_file: ~/secrets/nb.env
+
    llm:
      provider: anthropic
      models:
        smart: claude-sonnet-4-20250514
        fast: claude-haiku-3-5-20241022
-     api_key: null            # Uses ANTHROPIC_API_KEY env var if not set
      max_tokens: 4096
      temperature: 0.7
 
@@ -198,12 +200,12 @@ Embeddings options
      - Model name (e.g., ``nomic-embed-text``)
    * - ``base_url``
      - Custom endpoint URL
-   * - ``api_key``
-     - API key (for OpenAI)
    * - ``chunk_size``
      - Max tokens per chunk (default: 500)
    * - ``chunking_method``
      - ``sentences``, ``tokens``, ``paragraphs``, or ``sections``
+
+**Note:** When using ``openai`` provider, set the ``OPENAI_API_KEY`` environment variable.
 
 Search options
 --------------
@@ -289,8 +291,6 @@ Configure AI features for ``nb ask`` and other AI-powered commands.
      - Model for quality answers (default: ``claude-sonnet-4-20250514``)
    * - ``models.fast``
      - Model for quick answers (default: ``claude-haiku-3-5-20241022``)
-   * - ``api_key``
-     - API key (or use environment variable)
    * - ``base_url``
      - Custom API endpoint URL
    * - ``max_tokens``
@@ -300,12 +300,12 @@ Configure AI features for ``nb ask`` and other AI-powered commands.
    * - ``system_prompt``
      - Custom system prompt for all AI commands
 
-**Environment variables:**
-
-If ``api_key`` is not set, these environment variables are used:
+**API keys:** Set the appropriate environment variable based on provider:
 
 - ``ANTHROPIC_API_KEY`` - for Anthropic Claude models
 - ``OPENAI_API_KEY`` - for OpenAI GPT models
+
+See :ref:`api-keys` for details on configuring API keys.
 
 **Example configuration:**
 
@@ -420,7 +420,6 @@ Embeddings settings
    nb config set embeddings.provider ollama
    nb config set embeddings.model nomic-embed-text
    nb config set embeddings.base_url http://localhost:11434
-   nb config set embeddings.api_key sk-...
 
 Notebook settings
 ^^^^^^^^^^^^^^^^^
@@ -458,6 +457,76 @@ List settings
 
    nb config list
 
+.. _api-keys:
+
+API Keys
+--------
+
+API keys are **never stored in config.yaml** (which may be committed to version control).
+They are loaded exclusively from environment variables.
+
+**Priority order** (first found wins):
+
+1. Shell environment variables (already set in your terminal)
+2. Custom ``.env`` file (if ``env_file`` is set in config.yaml)
+3. Default ``.nb/.env`` file in notes_root
+
+**Supported API keys:**
+
+.. list-table::
+   :header-rows: 1
+
+   * - Variable
+     - Service
+     - Used By
+   * - ``ANTHROPIC_API_KEY``
+     - LLM (Claude)
+     - ``nb ai`` commands when ``llm.provider: anthropic``
+   * - ``OPENAI_API_KEY``
+     - LLM / Embeddings
+     - ``nb ai`` commands when ``llm.provider: openai``, embeddings when ``embeddings.provider: openai``
+   * - ``SERPER_API_KEY``
+     - Web Search
+     - ``nb ai research`` command
+   * - ``DEEPGRAM_API_KEY``
+     - Transcription
+     - ``nb transcribe`` command
+   * - ``RAINDROP_API_KEY``
+     - Inbox
+     - ``nb inbox`` command
+
+**Setting up API keys:**
+
+Create a ``.env`` file in your notes root:
+
+.. code-block:: bash
+
+   # Create .env file
+   nano ~/notes/.nb/.env
+
+Example ``.env`` file:
+
+.. code-block:: text
+
+   ANTHROPIC_API_KEY=sk-ant-api...
+   DEEPGRAM_API_KEY=...
+   SERPER_API_KEY=...
+   RAINDROP_API_KEY=...
+
+**Using a custom .env file:**
+
+.. code-block:: bash
+
+   nb config set env_file ~/secrets/nb.env
+
+**View detected API keys:**
+
+.. code-block:: bash
+
+   nb config api-keys
+
+This shows which API keys are detected and their sources (masked for security).
+
 Environment variables
 ---------------------
 
@@ -473,4 +542,10 @@ Environment variables
    * - ``ANTHROPIC_API_KEY``
      - API key for Anthropic Claude models
    * - ``OPENAI_API_KEY``
-     - API key for OpenAI GPT models
+     - API key for OpenAI GPT models / embeddings
+   * - ``SERPER_API_KEY``
+     - API key for Serper web search
+   * - ``DEEPGRAM_API_KEY``
+     - API key for Deepgram transcription
+   * - ``RAINDROP_API_KEY``
+     - API key for Raindrop.io inbox integration

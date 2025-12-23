@@ -47,6 +47,35 @@ nb/config.py    Configuration management
 - **Date-based notebooks**: Organize by week folders: `daily/2025/Nov25-Dec01/2025-11-27.md`
 - **Hybrid search**: 70% semantic (vector embeddings) + 30% keyword (FTS5)
 
+## API Key Configuration
+
+API keys are **never stored in config.yaml** (which may be committed to VCS). They are loaded exclusively from environment variables.
+
+**Priority order** (first found wins):
+1. Shell environment variables (already set in your terminal)
+2. Custom `.env` file (if `env_file` is set in config.yaml)
+3. Default `.nb/.env` file in notes_root
+
+**Supported API keys**:
+| Environment Variable | Service | Used By |
+|---------------------|---------|---------|
+| `ANTHROPIC_API_KEY` | LLM (Claude) | `nb ai` commands when `llm.provider: anthropic` |
+| `OPENAI_API_KEY` | LLM / Embeddings | `nb ai` commands when `llm.provider: openai`, or embeddings when `embeddings.provider: openai` |
+| `SERPER_API_KEY` | Web Search | `nb ai research` command |
+| `DEEPGRAM_API_KEY` | Transcription | `nb transcribe` command |
+| `RAINDROP_API_KEY` | Inbox | `nb inbox` command |
+
+**Example `.nb/.env` file**:
+```
+ANTHROPIC_API_KEY=sk-ant-...
+DEEPGRAM_API_KEY=...
+SERPER_API_KEY=...
+```
+
+**Useful commands**:
+- `nb config api-keys` - Show detected API keys (masked) and their sources
+- `nb config set env_file ~/secrets/nb.env` - Use a custom .env file path
+
 ## Testing
 
 Tests use temporary directories via pytest fixtures in `tests/conftest.py`:

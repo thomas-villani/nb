@@ -1388,8 +1388,10 @@ nb config set time_format "%H:%M"     # Time display format
 nb config set embeddings.provider ollama  # Embeddings provider
 nb config set embeddings.model nomic-embed-text  # Embeddings model
 nb config set embeddings.base_url http://localhost:11434  # Custom endpoint
-nb config set embeddings.api_key sk-...  # API key (for OpenAI)
 nb config set recorder.mic_speaker_label "Me"  # Mic speaker label in transcripts
+
+# API keys (view detected keys)
+nb config api-keys              # Show which API keys are configured
 
 # Notebook-specific settings (notebook.<name>.<setting>):
 nb config set notebook.work.color blue      # Set display color
@@ -1522,10 +1524,19 @@ git:
 
 ### Environment Variables
 
+General:
 - `NB_NOTES_ROOT` - Override notes root directory
 - `EDITOR` - Default editor
-- `RAINDROP_API_KEY` - Raindrop.io API token for inbox feature
+
+API Keys (never store in config.yaml):
+- `ANTHROPIC_API_KEY` - API key for Anthropic Claude models (AI commands)
+- `OPENAI_API_KEY` - API key for OpenAI models (AI commands, embeddings)
+- `SERPER_API_KEY` - Serper API key for web search (research command)
 - `DEEPGRAM_API_KEY` - Deepgram API key for meeting transcription
+- `RAINDROP_API_KEY` - Raindrop.io API token for inbox feature
+
+API keys can be set in environment or in a `.env` file at `~/notes/.nb/.env`.
+Use `nb config api-keys` to see which keys are detected.
 
 ## Directory Structure
 
