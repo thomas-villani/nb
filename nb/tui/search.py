@@ -415,10 +415,12 @@ def run_interactive_search(
 
         # Create a Note object for the stream viewer
         from nb.models import Note
+        from nb.utils.hashing import make_note_id
 
         full_path = config.notes_root / result.path
 
         note = Note(
+            id=make_note_id(result.path),
             path=full_path,
             title=result.title,
             notebook=result.notebook,

@@ -9,7 +9,7 @@ import click
 from nb.cli.completion import complete_notebook, complete_tag
 from nb.cli.utils import console
 from nb.config import get_config
-from nb.utils.hashing import normalize_path
+from nb.utils.hashing import make_note_id, normalize_path
 
 
 def register_search_commands(cli: click.Group) -> None:
@@ -718,6 +718,7 @@ def stream_notes(
                         pass
                 notes_list.append(
                     Note(
+                        id=make_note_id(Path(rel_path)),
                         path=Path(rel_path),
                         title=row["title"] or "",
                         date=note_date,
@@ -827,6 +828,7 @@ def stream_notes(
 
             notes.append(
                 Note(
+                    id=make_note_id(Path(row["path"])),
                     path=Path(row["path"]),
                     title=row["title"] or "",
                     date=note_date,

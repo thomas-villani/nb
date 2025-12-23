@@ -134,12 +134,12 @@ todo_exclude: true
 - [x] Add an interactive search TUI
 - [x] `nb mv`, `nb cp` to move and copy notes
 - [x] `nb export` to export notes/notebooks
-- [^] give notes a unique ID as well so they can be quick loaded and included on listings like the todos
-- [^] Need to improve the `nb list` command - should list recently modified, and show in order of modified with notebook to the right rather than grouped (allow --grouped) Should allow combining `nb list --week` and --details, etc.
-- [^] Need to allow `nb history` to show recently modified as well
-- [^] Allow pinned notes with `nb pin <NOTE>` and `nb pinned`
-- [^] Need to add options to grep and search to output source only (no content)
-- [^] Is it possible to link a whole directory and have the notes/todos get pulled in as they are created (on reindex)
+- [x] give notes a unique ID as well so they can be quick loaded and included on listings like the todos
+- [x] Need to improve the `nb list` command - should list recently modified, and show in order of modified with notebook to the right rather than grouped (allow --grouped) Should allow combining `nb list --week` and --details, etc.
+- [x] Need to allow `nb history` to show recently modified as well
+- [x] Allow pinned notes with `nb pin <NOTE>` and `nb pinned`
+- [x] Need to add options to grep and search to output source only (no content)
+- [x] Is it possible to link a whole directory and have the notes/todos get pulled in as they are created (on reindex)
 - [ ] Allow notebooks to have a special readme.md note that the AI will reference and can define fancy stuff, i.e. prompt for ask?
 - [x] Add .env file config and move the env vars to a .env file (openai, anthropic, deepgram, raindrop)
 - [x] Make ai function flags consistent (e.g. -b is for notebook for some reason)
