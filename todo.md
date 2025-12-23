@@ -146,7 +146,7 @@ todo_exclude: true
 - [x] Need to improve the `nb ask` function to handle queries like `nb ask "What still remains to be done for the wijjit project?"`
 - [ ] Add clipboard integration to various commands (e.g. nb add --paste)
 - [ ] Enhance templates by adding fancy tags like ``{{ calendar }}` and `{{ todos.overdue }}` and `{{ todos.due_today }}`
-
+- [ ] Week-based notebooks where `nb today` adds todays date in a section and notes are organized weekly.
 
 ### Phase 5: Wijjit TUI
 - [x] Full Wijjit-based todo list view with richer interactions #feature

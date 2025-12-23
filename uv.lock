@@ -1473,7 +1473,7 @@ wheels = [
 
 [[package]]
 name = "nb-cli"
-version = "0.4.0"
+version = "0.4.3"
 source = { editable = "." }
 dependencies = [
     { name = "all2md", extra = ["all"] },
@@ -1492,6 +1492,13 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "deepgram-sdk" },
+    { name = "numpy" },
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "sounddevice" },
+    { name = "soundfile" },
+]
 calendar = [
     { name = "pywin32", marker = "sys_platform == 'win32'" },
 ]
@@ -1522,12 +1529,14 @@ requires-dist = [
     { name = "all2md", extras = ["all"], specifier = ">=1.0.0" },
     { name = "black", marker = "extra == 'dev'" },
     { name = "click", specifier = ">=8.0" },
+    { name = "deepgram-sdk", marker = "extra == 'all'", specifier = ">=3.0.0" },
     { name = "deepgram-sdk", marker = "extra == 'recorder'", specifier = ">=3.0.0" },
     { name = "gitpython", specifier = ">=3.1.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "localvectordb", path = "wheels/localvectordb-1.0.0-py3-none-any.whl" },
     { name = "mypy", marker = "extra == 'dev'" },
+    { name = "numpy", marker = "extra == 'all'", specifier = ">=1.24.0" },
     { name = "numpy", marker = "extra == 'recorder'", specifier = ">=1.24.0" },
     { name = "psutil", specifier = ">=7.1.3" },
     { name = "pyperclip", specifier = ">=1.11.0" },
@@ -1536,11 +1545,14 @@ requires-dist = [
     { name = "python-dateutil", specifier = ">=2.8" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "python-frontmatter", specifier = ">=1.0" },
+    { name = "pywin32", marker = "sys_platform == 'win32' and extra == 'all'", specifier = ">=306" },
     { name = "pywin32", marker = "sys_platform == 'win32' and extra == 'calendar'", specifier = ">=306" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0" },
     { name = "ruff", marker = "extra == 'dev'" },
+    { name = "sounddevice", marker = "extra == 'all'", specifier = ">=0.4.6" },
     { name = "sounddevice", marker = "extra == 'recorder'", specifier = ">=0.4.6" },
+    { name = "soundfile", marker = "extra == 'all'", specifier = ">=0.12.0" },
     { name = "soundfile", marker = "extra == 'recorder'", specifier = ">=0.12.0" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7.0" },
     { name = "sphinx-rtd-theme", marker = "extra == 'docs'", specifier = ">=2.0" },

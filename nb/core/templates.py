@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from nb.config import get_config
+
+if TYPE_CHECKING:
+    from nb.core.calendar import CalendarEvent
+    from nb.models import Todo
 
 
 def get_templates_dir(notes_root: Path | None = None) -> Path:
@@ -145,6 +150,53 @@ def remove_template(name: str, notes_root: Path | None = None) -> bool:
     return False
 
 
+def format_todos_for_template(todos: list[Todo]) -> str:
+    """Format todos as a markdown list for template insertion.
+
+    Args:
+        todos: List of Todo objects to format.
+
+    Returns:
+        Markdown formatted string with todo references.
+        Format: "- todo text here [todo:abc123]"
+    """
+    if not todos:
+        return "_No todos_"
+
+    lines = []
+    for todo in todos:
+        # Use first 6 chars of ID for brevity (matches CLI display)
+        short_id = todo.id[:6]
+        lines.append(f"- {todo.content} [todo:{short_id}]")
+
+    return "\n".join(lines)
+
+
+def format_calendar_for_template(events: list[CalendarEvent]) -> str:
+    """Format calendar events as a markdown list for template insertion.
+
+    Args:
+        events: List of CalendarEvent objects to format.
+
+    Returns:
+        Markdown formatted string with event times and subjects.
+        Format: "- 9:00 AM - 10:00 AM: Meeting subject"
+    """
+    if not events:
+        return "_No meetings_"
+
+    lines = []
+    for event in events:
+        if event.is_all_day:
+            lines.append(f"- (All day) {event.subject}")
+        else:
+            start_time = event.start.strftime("%I:%M %p").lstrip("0")
+            end_time = event.end.strftime("%I:%M %p").lstrip("0")
+            lines.append(f"- {start_time} - {end_time}: {event.subject}")
+
+    return "\n".join(lines)
+
+
 def render_template(
     content: str,
     title: str | None = None,
@@ -158,6 +210,11 @@ def render_template(
     - {{ datetime }} - ISO datetime
     - {{ notebook }} - Notebook name
     - {{ title }} - Note title
+    - {{ todos_overdue }} - Overdue todos (dynamic, requires DB)
+    - {{ todos_due_today }} - Todos due today (dynamic, requires DB)
+    - {{ todos_due_this_week }} - Todos due this week (dynamic, requires DB)
+    - {{ todos_high_priority }} - High priority todos (dynamic, requires DB)
+    - {{ calendar }} - Today's calendar events (dynamic, requires Outlook)
 
     Args:
         content: Template content with variables
@@ -174,6 +231,7 @@ def render_template(
 
     now = datetime.now()
 
+    # Static replacements (no external dependencies)
     replacements = {
         "{{ date }}": dt.isoformat(),
         "{{ datetime }}": now.isoformat(timespec="minutes"),
@@ -185,7 +243,62 @@ def render_template(
     for var, value in replacements.items():
         result = result.replace(var, value)
 
+    # Dynamic replacements - only query if variable is present (lazy evaluation)
+    dynamic_vars = {
+        "{{ todos_overdue }}": _get_todos_overdue,
+        "{{ todos_due_today }}": lambda: _get_todos_due_today(dt),
+        "{{ todos_due_this_week }}": lambda: _get_todos_due_this_week(dt),
+        "{{ todos_high_priority }}": _get_todos_high_priority,
+        "{{ calendar }}": lambda: _get_calendar_events(dt),
+    }
+
+    for var, getter in dynamic_vars.items():
+        if var in result:
+            result = result.replace(var, getter())
+
     return result
+
+
+def _get_todos_overdue() -> str:
+    """Get formatted overdue todos."""
+    from nb.index.todos_repo import query_todos
+
+    todos = query_todos(overdue=True, completed=False)
+    return format_todos_for_template(todos)
+
+
+def _get_todos_due_today(dt: date) -> str:
+    """Get formatted todos due today."""
+    from nb.index.todos_repo import query_todos
+
+    todos = query_todos(due_start=dt, due_end=dt, completed=False)
+    return format_todos_for_template(todos)
+
+
+def _get_todos_due_this_week(dt: date) -> str:
+    """Get formatted todos due this week."""
+    from nb.index.todos_repo import query_todos
+
+    week_end = dt + timedelta(days=7)
+    todos = query_todos(due_start=dt, due_end=week_end, completed=False)
+    return format_todos_for_template(todos)
+
+
+def _get_todos_high_priority() -> str:
+    """Get formatted high priority todos."""
+    from nb.index.todos_repo import query_todos
+
+    todos = query_todos(priority=1, completed=False)
+    return format_todos_for_template(todos)
+
+
+def _get_calendar_events(dt: date) -> str:
+    """Get formatted calendar events for the given date."""
+    from nb.core.calendar import get_calendar_client
+
+    client = get_calendar_client()
+    events = client.get_events(dt, dt)
+    return format_calendar_for_template(events)
 
 
 # Default template content for new templates

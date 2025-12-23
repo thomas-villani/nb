@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -11,6 +12,7 @@ from nb import config as config_module
 from nb.config import Config, EmbeddingsConfig, NotebookConfig
 from nb.core import notebooks as notebooks_module
 from nb.core import templates as templates_module
+from nb.models import Priority, Todo, TodoSource, TodoStatus
 
 
 class TestTemplateOperations:
@@ -331,3 +333,335 @@ class TestNotebookDefaultTemplate:
         # Built-in template format
         assert "date: 2025-11-29" in content
         assert "# Saturday, November 29, 2025" in content
+
+
+class TestFormatTodosForTemplate:
+    """Tests for todo formatting in templates."""
+
+    def _make_todo(
+        self,
+        id: str,
+        content: str,
+        status: TodoStatus = TodoStatus.PENDING,
+        priority: Priority | None = None,
+    ) -> Todo:
+        """Create a test todo."""
+        return Todo(
+            id=id,
+            content=content,
+            raw_content=f"- [ ] {content}",
+            status=status,
+            source=TodoSource(type="note", path=Path("test.md")),
+            line_number=1,
+            created_date=date.today(),
+            priority=priority,
+        )
+
+    def test_empty_todos(self) -> None:
+        """Empty todo list shows placeholder."""
+        from nb.core.templates import format_todos_for_template
+
+        result = format_todos_for_template([])
+        assert result == "_No todos_"
+
+    def test_single_todo(self) -> None:
+        """Single todo formats correctly."""
+        from nb.core.templates import format_todos_for_template
+
+        todos = [self._make_todo("abc12345", "Fix the bug")]
+        result = format_todos_for_template(todos)
+
+        assert result == "- Fix the bug [todo:abc123]"
+
+    def test_multiple_todos(self) -> None:
+        """Multiple todos format as list."""
+        from nb.core.templates import format_todos_for_template
+
+        todos = [
+            self._make_todo("abc12345", "First task"),
+            self._make_todo("def67890", "Second task"),
+        ]
+        result = format_todos_for_template(todos)
+
+        lines = result.split("\n")
+        assert len(lines) == 2
+        assert lines[0] == "- First task [todo:abc123]"
+        assert lines[1] == "- Second task [todo:def678]"
+
+    def test_todo_id_truncation(self) -> None:
+        """Todo IDs are truncated to 6 chars."""
+        from nb.core.templates import format_todos_for_template
+
+        todos = [self._make_todo("abcdef123456789", "Task")]
+        result = format_todos_for_template(todos)
+
+        assert "[todo:abcdef]" in result
+        assert "123456789" not in result
+
+
+class TestFormatCalendarForTemplate:
+    """Tests for calendar event formatting in templates."""
+
+    def _make_event(
+        self,
+        subject: str,
+        start: datetime,
+        end: datetime,
+        is_all_day: bool = False,
+    ) -> MagicMock:
+        """Create a mock calendar event."""
+        event = MagicMock()
+        event.subject = subject
+        event.start = start
+        event.end = end
+        event.is_all_day = is_all_day
+        return event
+
+    def test_empty_events(self) -> None:
+        """Empty event list shows placeholder."""
+        from nb.core.templates import format_calendar_for_template
+
+        result = format_calendar_for_template([])
+        assert result == "_No meetings_"
+
+    def test_single_timed_event(self) -> None:
+        """Single timed event formats correctly."""
+        from nb.core.templates import format_calendar_for_template
+
+        events = [
+            self._make_event(
+                "Team Standup",
+                datetime(2025, 12, 23, 9, 0),
+                datetime(2025, 12, 23, 9, 30),
+            )
+        ]
+        result = format_calendar_for_template(events)
+
+        assert result == "- 9:00 AM - 9:30 AM: Team Standup"
+
+    def test_all_day_event(self) -> None:
+        """All-day event formats correctly."""
+        from nb.core.templates import format_calendar_for_template
+
+        events = [
+            self._make_event(
+                "Company Holiday",
+                datetime(2025, 12, 25, 0, 0),
+                datetime(2025, 12, 25, 23, 59),
+                is_all_day=True,
+            )
+        ]
+        result = format_calendar_for_template(events)
+
+        assert result == "- (All day) Company Holiday"
+
+    def test_multiple_events(self) -> None:
+        """Multiple events format as list."""
+        from nb.core.templates import format_calendar_for_template
+
+        events = [
+            self._make_event(
+                "Morning Standup",
+                datetime(2025, 12, 23, 9, 0),
+                datetime(2025, 12, 23, 9, 30),
+            ),
+            self._make_event(
+                "Lunch",
+                datetime(2025, 12, 23, 12, 0),
+                datetime(2025, 12, 23, 13, 0),
+            ),
+        ]
+        result = format_calendar_for_template(events)
+
+        lines = result.split("\n")
+        assert len(lines) == 2
+        assert "Morning Standup" in lines[0]
+        assert "Lunch" in lines[1]
+
+    def test_pm_time_formatting(self) -> None:
+        """PM times format correctly."""
+        from nb.core.templates import format_calendar_for_template
+
+        events = [
+            self._make_event(
+                "Afternoon Meeting",
+                datetime(2025, 12, 23, 14, 30),
+                datetime(2025, 12, 23, 15, 0),
+            )
+        ]
+        result = format_calendar_for_template(events)
+
+        assert "2:30 PM - 3:00 PM" in result
+
+
+class TestDynamicTemplateVariables:
+    """Tests for dynamic template variables (todos and calendar)."""
+
+    def test_todos_overdue_variable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """{{ todos_overdue }} renders overdue todos."""
+        from nb.core import templates
+
+        # Mock the query function
+        def mock_query_todos(**kwargs):
+            if kwargs.get("overdue"):
+                return [
+                    Todo(
+                        id="over1234",
+                        content="Overdue task",
+                        raw_content="- [ ] Overdue task",
+                        status=TodoStatus.PENDING,
+                        source=TodoSource(type="note", path=Path("test.md")),
+                        line_number=1,
+                        created_date=date.today(),
+                    )
+                ]
+            return []
+
+        # Patch at the source module (where it gets imported from)
+        monkeypatch.setattr("nb.index.todos_repo.query_todos", mock_query_todos)
+
+        content = "## Overdue\n{{ todos_overdue }}"
+        result = templates.render_template(content)
+
+        assert "- Overdue task [todo:over12]" in result
+
+    def test_todos_due_today_variable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """{{ todos_due_today }} renders todos due today."""
+        from nb.core import templates
+
+        def mock_query_todos(**kwargs):
+            if kwargs.get("due_start") and kwargs.get("due_end"):
+                return [
+                    Todo(
+                        id="today123",
+                        content="Due today task",
+                        raw_content="- [ ] Due today task",
+                        status=TodoStatus.PENDING,
+                        source=TodoSource(type="note", path=Path("test.md")),
+                        line_number=1,
+                        created_date=date.today(),
+                    )
+                ]
+            return []
+
+        import nb.index.todos_repo
+
+        monkeypatch.setattr(nb.index.todos_repo, "query_todos", mock_query_todos)
+
+        content = "## Today\n{{ todos_due_today }}"
+        result = templates.render_template(content)
+
+        assert "- Due today task [todo:today1]" in result
+
+    def test_todos_high_priority_variable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """{{ todos_high_priority }} renders priority 1 todos."""
+        from nb.core import templates
+
+        def mock_query_todos(**kwargs):
+            if kwargs.get("priority") == 1:
+                return [
+                    Todo(
+                        id="high1234",
+                        content="High priority task",
+                        raw_content="- [ ] High priority task",
+                        status=TodoStatus.PENDING,
+                        source=TodoSource(type="note", path=Path("test.md")),
+                        line_number=1,
+                        created_date=date.today(),
+                        priority=Priority.HIGH,
+                    )
+                ]
+            return []
+
+        import nb.index.todos_repo
+
+        monkeypatch.setattr(nb.index.todos_repo, "query_todos", mock_query_todos)
+
+        content = "## Priority\n{{ todos_high_priority }}"
+        result = templates.render_template(content)
+
+        assert "- High priority task [todo:high12]" in result
+
+    def test_calendar_variable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """{{ calendar }} renders today's events."""
+        from nb.core import templates
+
+        mock_event = MagicMock()
+        mock_event.subject = "Team Meeting"
+        mock_event.start = datetime(2025, 12, 23, 10, 0)
+        mock_event.end = datetime(2025, 12, 23, 11, 0)
+        mock_event.is_all_day = False
+
+        mock_client = MagicMock()
+        mock_client.get_events.return_value = [mock_event]
+
+        # Patch at the source module
+        monkeypatch.setattr("nb.core.calendar.get_calendar_client", lambda: mock_client)
+
+        content = "## Meetings\n{{ calendar }}"
+        result = templates.render_template(content)
+
+        assert "- 10:00 AM - 11:00 AM: Team Meeting" in result
+
+    def test_dynamic_variable_lazy_evaluation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Dynamic variables only query when present in template."""
+        call_count = {"todos": 0, "calendar": 0}
+
+        def mock_query_todos(**kwargs):
+            call_count["todos"] += 1
+            return []
+
+        def mock_get_calendar_client():
+            call_count["calendar"] += 1
+            client = MagicMock()
+            client.get_events.return_value = []
+            return client
+
+        # Patch at source modules
+        monkeypatch.setattr("nb.index.todos_repo.query_todos", mock_query_todos)
+        monkeypatch.setattr(
+            "nb.core.calendar.get_calendar_client", mock_get_calendar_client
+        )
+
+        from nb.core import templates
+
+        # Template without dynamic variables
+        content = "# {{ title }}\nDate: {{ date }}"
+        templates.render_template(content, title="Test")
+
+        assert call_count["todos"] == 0
+        assert call_count["calendar"] == 0
+
+    def test_empty_todos_shows_placeholder(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Empty todo results show placeholder text."""
+        monkeypatch.setattr("nb.index.todos_repo.query_todos", lambda **kwargs: [])
+
+        from nb.core import templates
+
+        content = "{{ todos_overdue }}"
+        result = templates.render_template(content)
+
+        assert result == "_No todos_"
+
+    def test_empty_calendar_shows_placeholder(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Empty calendar results show placeholder text."""
+        mock_client = MagicMock()
+        mock_client.get_events.return_value = []
+
+        # Patch at source module
+        monkeypatch.setattr("nb.core.calendar.get_calendar_client", lambda: mock_client)
+
+        from nb.core import templates
+
+        content = "{{ calendar }}"
+        result = templates.render_template(content)
+
+        assert result == "_No meetings_"

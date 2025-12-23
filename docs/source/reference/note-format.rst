@@ -111,6 +111,8 @@ Template variables
 
 Use these variables in templates - they're replaced when creating notes:
 
+**Static variables:**
+
 .. list-table::
    :header-rows: 1
 
@@ -124,6 +126,33 @@ Use these variables in templates - they're replaced when creating notes:
      - Notebook name
    * - ``{{ title }}``
      - Note title
+
+**Dynamic variables** (populated from your data):
+
+.. list-table::
+   :header-rows: 1
+
+   * - Variable
+     - Description
+   * - ``{{ todos_overdue }}``
+     - Overdue incomplete todos
+   * - ``{{ todos_due_today }}``
+     - Todos due on the note's date
+   * - ``{{ todos_due_this_week }}``
+     - Todos due within 7 days
+   * - ``{{ todos_high_priority }}``
+     - High priority (P1) incomplete todos
+   * - ``{{ calendar }}``
+     - Calendar events for the note's date (Outlook)
+
+Dynamic variables render as reference lists that don't create duplicate todos:
+
+.. code-block:: markdown
+
+   - Fix the login bug [todo:abc123]
+   - Review PR #42 [todo:def456]
+
+If no items exist, a placeholder is shown (e.g., ``_No todos_`` or ``_No meetings_``).
 
 Example template
 ^^^^^^^^^^^^^^^^
@@ -157,6 +186,32 @@ Use it when creating notes:
 .. code-block:: bash
 
    nb new standup -n work -T meeting
+
+Daily template with dynamic variables
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Create ``.nb/templates/daily.md`` to include your todos and calendar:
+
+.. code-block:: markdown
+
+   ---
+   date: {{ date }}
+   ---
+
+   # {{ title }}
+
+   ## Overdue
+   {{ todos_overdue }}
+
+   ## Due Today
+   {{ todos_due_today }}
+
+   ## Meetings
+   {{ calendar }}
+
+   ## Notes
+
+When you create a daily note with this template, it will automatically populate with your overdue todos, today's tasks, and calendar events.
 
 Default templates
 ^^^^^^^^^^^^^^^^^

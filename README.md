@@ -199,12 +199,26 @@ nb template remove meeting  # Delete a template
 
 Templates are stored in `.nb/templates/` as markdown files. Use variables that get replaced when creating notes:
 
+**Static Variables:**
+
 | Variable | Description |
 |----------|-------------|
 | `{{ date }}` | ISO date (2025-11-29) |
 | `{{ datetime }}` | ISO datetime |
 | `{{ notebook }}` | Notebook name |
 | `{{ title }}` | Note title |
+
+**Dynamic Variables** (populated from your data):
+
+| Variable | Description |
+|----------|-------------|
+| `{{ todos_overdue }}` | Overdue incomplete todos |
+| `{{ todos_due_today }}` | Todos due on the note's date |
+| `{{ todos_due_this_week }}` | Todos due within 7 days |
+| `{{ todos_high_priority }}` | High priority (P1) incomplete todos |
+| `{{ calendar }}` | Calendar events for the note's date (Outlook) |
+
+Dynamic variables render as reference lists (e.g., `- Task text [todo:abc123]`) that don't create duplicate todos.
 
 Example template (`meeting.md`):
 
@@ -228,6 +242,28 @@ date: {{ date }}
 ## Action Items
 
 - [ ]
+```
+
+Example daily template with dynamic variables (`daily.md`):
+
+```markdown
+---
+date: {{ date }}
+---
+
+# {{ title }}
+
+## Overdue
+{{ todos_overdue }}
+
+## Due Today
+{{ todos_due_today }}
+
+## Meetings
+{{ calendar }}
+
+## Notes
+
 ```
 
 #### Using Templates
