@@ -94,7 +94,7 @@ IMPORTANT GUIDELINES:
 
 CURRENT CONTEXT:
 {context}
-
+{additional_context}
 Available tools:
 {available_tools}
 """
@@ -360,6 +360,7 @@ def run_assistant_turn(
     use_smart_model: bool = True,
     max_tool_calls: int = 10,
     token_budget: int = 100000,
+    additional_context: str = "",
 ) -> str:
     """Run a single turn of the assistant conversation.
 
@@ -371,6 +372,7 @@ def run_assistant_turn(
         use_smart_model: Use smart model for better reasoning.
         max_tool_calls: Maximum tool calls per turn.
         token_budget: Maximum tokens to consume.
+        additional_context: Additional context from files, clipboard, or notes.
 
     Returns:
         Assistant's response text.
@@ -382,12 +384,18 @@ def run_assistant_turn(
     # Get tools
     tools = get_assistant_tools()
 
+    # Format additional context with section header if present
+    formatted_additional = ""
+    if additional_context:
+        formatted_additional = f"\n\n## USER-PROVIDED CONTEXT\n\n{additional_context}\n"
+
     # Build system prompt (only on first turn or if context is empty)
     if not context.messages:
         injected_context = gather_assistant_context(notebook, include_calendar)
         system_prompt = ASSISTANT_SYSTEM_PROMPT.format(
             today_date=date.today().strftime("%A, %B %d, %Y"),
             context=injected_context,
+            additional_context=formatted_additional,
             available_tools=_format_tools_for_prompt(tools),
         )
     else:
@@ -396,6 +404,7 @@ def run_assistant_turn(
         system_prompt = ASSISTANT_SYSTEM_PROMPT.format(
             today_date=date.today().strftime("%A, %B %d, %Y"),
             context=injected_context,
+            additional_context=formatted_additional,
             available_tools=_format_tools_for_prompt(tools),
         )
 
@@ -472,6 +481,7 @@ def run_assistant_turn_stream(
     use_smart_model: bool = True,
     max_tool_calls: int = 10,
     token_budget: int = 100000,
+    additional_context: str = "",
 ) -> Iterator[tuple[str, bool]]:
     """Stream a single turn of the assistant conversation.
 
@@ -490,11 +500,17 @@ def run_assistant_turn_stream(
     # Get tools
     tools = get_assistant_tools()
 
+    # Format additional context with section header if present
+    formatted_additional = ""
+    if additional_context:
+        formatted_additional = f"\n\n## USER-PROVIDED CONTEXT\n\n{additional_context}\n"
+
     # Build system prompt
     injected_context = gather_assistant_context(notebook, include_calendar)
     system_prompt = ASSISTANT_SYSTEM_PROMPT.format(
         today_date=date.today().strftime("%A, %B %d, %Y"),
         context=injected_context,
+        additional_context=formatted_additional,
         available_tools=_format_tools_for_prompt(tools),
     )
 

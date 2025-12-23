@@ -497,7 +497,18 @@ nb assistant
 An interactive AI agent that can analyze your todos and notes, and take action on your behalf.
 All write operations require confirmation before executing.
 
-**Usage:** ``nb assistant [OPTIONS]``
+**Usage:** ``nb assistant [QUERY] [OPTIONS]``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``QUERY``
+     - Optional initial query to start the conversation
 
 **Options:**
 
@@ -507,6 +518,12 @@ All write operations require confirmation before executing.
 
    * - Option
      - Description
+   * - ``-f, --file PATH``
+     - Include file(s) as context (can be repeated)
+   * - ``--paste``
+     - Include clipboard content as context
+   * - ``-N, --note TEXT``
+     - Include specific note(s) as context (notebook/note format, can be repeated)
    * - ``-n, --notebook TEXT``
      - Focus context on a specific notebook
    * - ``--no-calendar``
@@ -523,10 +540,11 @@ All write operations require confirmation before executing.
 **How it works:**
 
 1. Gathers context automatically (overdue todos, in-progress tasks, calendar, recent notes)
-2. You interact with the agent conversationally
-3. Read operations execute immediately (search, query todos, etc.)
-4. Write operations are queued for your review and confirmation
-5. You can approve all changes, select specific ones, or discard them
+2. Optionally includes additional context from files, clipboard, or specific notes
+3. You interact with the agent conversationally
+4. Read operations execute immediately (search, query todos, etc.)
+5. Write operations are queued for your review and confirmation
+6. You can approve all changes, select specific ones, or discard them
 
 **Available Tools:**
 
@@ -553,6 +571,21 @@ The assistant has access to these tools:
 
    # Start interactive assistant
    nb assistant
+
+   # Start with an initial query
+   nb assistant "add 3 todos for the quarterly review"
+
+   # Include a file as context
+   nb assistant -f plan.md "Review this plan and add todos"
+
+   # Include clipboard content
+   nb assistant --paste "Here's my plan for today"
+
+   # Include specific notes as context
+   nb assistant -N work/project "Summarize the current status"
+
+   # Include multiple notes
+   nb assistant -N work/roadmap -N daily/today "Cross-reference these"
 
    # Focus on work notebook
    nb assistant -n work

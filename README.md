@@ -1371,6 +1371,18 @@ Write operations require confirmation before executing.
 # Start interactive assistant
 nb assistant
 
+# Start with an initial query
+nb assistant "add 3 todos for the quarterly review"
+
+# Include a file as context
+nb assistant -f plan.md "Review this plan and add todos"
+
+# Include clipboard content
+nb assistant --paste "Here's my plan for today"
+
+# Include specific notes as context
+nb assistant -N work/project "Summarize the current status"
+
 # Focus on specific notebook
 nb assistant -n work
 
@@ -1387,6 +1399,8 @@ nb assistant --fast
 - **Write operations**: Create/update todos, create notes, append to notes
 - **Confirmation flow**: All write operations are queued and require explicit approval
 - **Context injection**: Automatically includes overdue todos, calendar, and recent notes
+- **File/clipboard input**: Include external files or clipboard content as context
+- **Note selection**: Include specific notes for the assistant to reference
 
 **Example interactions:**
 
@@ -1401,6 +1415,10 @@ nb assistant --fast
 
 | Option | Description |
 |--------|-------------|
+| `QUERY` | Optional initial query to start the conversation |
+| `-f, --file PATH` | Include file(s) as context (repeatable) |
+| `--paste` | Include clipboard content as context |
+| `-N, --note TEXT` | Include specific note(s) as context (repeatable) |
 | `-n, --notebook TEXT` | Focus context on specific notebook |
 | `--no-calendar` | Skip calendar integration |
 | `--smart/--fast` | Use smart model (better) or fast model (cheaper) |

@@ -369,7 +369,7 @@ def attach_orphans(delete: bool) -> None:
         console.print("\n[dim]Use --delete to remove these files.[/dim]")
 
 
-def _format_size(size: int) -> str:
+def _format_size(size: int | float) -> str:
     """Format a file size in human-readable form."""
     for unit in ["B", "KB", "MB", "GB"]:
         if size < 1024:

@@ -392,14 +392,25 @@ def todo(
         # Clean up notes/todos for files that no longer exist (e.g., moved or deleted)
         remove_deleted_notes()
 
-        # Get excluded notebooks from config (unless --all, specific notebooks, or specific notes requested)
+        # Get excluded notebooks
+        # - CLI --exclude-notebook flags always apply (user explicitly requested)
+        # - Config exclusions only apply when not using --all (--all overrides config, not CLI)
+        # - Skip all exclusions when filtering by specific notebooks or notes
         all_excluded_notebooks: list[str] | None = None
-        if not show_all and not effective_notebooks and not effective_notes:
-            config_excluded = config.excluded_notebooks() or []
-            # Merge config exclusions with CLI exclusions
-            all_excluded_notebooks = list(set(config_excluded) | set(exclude_notebook))
-            if not all_excluded_notebooks:
-                all_excluded_notebooks = None
+        if not effective_notebooks and not effective_notes:
+            if show_all:
+                # --all overrides config exclusions, but respect CLI --exclude-notebook
+                all_excluded_notebooks = (
+                    list(exclude_notebook) if exclude_notebook else None
+                )
+            else:
+                # Merge config exclusions with CLI exclusions
+                config_excluded = config.excluded_notebooks() or []
+                all_excluded_notebooks = list(
+                    set(config_excluded) | set(exclude_notebook)
+                )
+                if not all_excluded_notebooks:
+                    all_excluded_notebooks = None
 
         # Convert to list or None for query functions
         notebooks_filter = effective_notebooks if effective_notebooks else None
@@ -2482,11 +2493,11 @@ def todo_delete(todo_id: tuple[str, ...], force: bool) -> None:
     help="Review all incomplete todos",
 )
 @click.option(
-    "--no-due-date",
+    "--include-no-due-date",
     "-u",
-    "no_due_date",
+    "include_no_due_date",
     is_flag=True,
-    help="Review only todos with no due date",
+    help="Also include todos with no due date",
 )
 @click.option(
     "--priority",
@@ -2518,7 +2529,7 @@ def todo_delete(todo_id: tuple[str, ...], force: bool) -> None:
 def todo_review(
     weekly: bool,
     show_all: bool,
-    no_due_date: bool,
+    include_no_due_date: bool,
     priority: str | None,
     tag: str | None,
     notebook: tuple[str, ...],
@@ -2535,14 +2546,14 @@ def todo_review(
       (default)      Overdue + due today
       --weekly       Overdue + this week + items with no due date
       --all          All incomplete todos
-      --no-due-date  Only todos with no due date
+      -u             Add todos with no due date to current scope
 
     \b
     Actions (in TUI):
       d  Mark done         s  Start (in progress)
       t  Tomorrow          f  This Friday
       m  Next Monday       w  Next week
-      n  Next month        D  Custom date
+      n  Next month        c  Custom date
       e  Edit in editor    k  Skip (move to next)
       x  Delete            q  Quit review
 
@@ -2555,7 +2566,7 @@ def todo_review(
       nb todo review              Review overdue + due today
       nb todo review --weekly     Include this week's todos
       nb todo review --all        Review everything incomplete
-      nb todo review -u           Review todos with no due date
+      nb todo review -u           Include todos with no due date
       nb todo review -p high      Review only high priority todos
       nb todo review -t work      Review only #work tagged todos
       nb todo review -n daily     Review only from daily notebook
@@ -2567,9 +2578,7 @@ def todo_review(
     config = get_config()
 
     # Determine scope
-    if no_due_date:
-        scope = "no_due_date"
-    elif show_all:
+    if show_all:
         scope = "all"
     elif weekly:
         scope = "weekly"
@@ -2614,13 +2623,23 @@ def todo_review(
             console.print(f"[yellow]Note not found: {note_ref}[/yellow]")
             raise SystemExit(1)
 
-    # Get excluded notebooks from config if not filtering by specific notebooks
+    # Get excluded notebooks
+    # - CLI --exclude-notebook flags always apply (user explicitly requested)
+    # - Config exclusions only apply when not using --all (--all overrides config, not CLI)
+    # - Skip all exclusions when filtering by specific notebooks or notes
     all_excluded_notebooks: list[str] | None = None
     if not effective_notebooks and not effective_notes:
-        config_excluded = config.excluded_notebooks() or []
-        all_excluded_notebooks = list(set(config_excluded) | set(exclude_notebook))
-        if not all_excluded_notebooks:
-            all_excluded_notebooks = None
+        if show_all:
+            # --all overrides config exclusions, but respect CLI --exclude-notebook
+            all_excluded_notebooks = (
+                list(exclude_notebook) if exclude_notebook else None
+            )
+        else:
+            # Merge config exclusions with CLI exclusions
+            config_excluded = config.excluded_notebooks() or []
+            all_excluded_notebooks = list(set(config_excluded) | set(exclude_notebook))
+            if not all_excluded_notebooks:
+                all_excluded_notebooks = None
 
     # Convert to proper types
     notebooks_filter = effective_notebooks if effective_notebooks else None
@@ -2634,6 +2653,7 @@ def todo_review(
         notebooks=notebooks_filter,
         notes=notes_filter,
         exclude_notebooks=all_excluded_notebooks,
+        include_no_due_date=include_no_due_date,
     )
 
 

@@ -320,11 +320,6 @@ def run_note_stream(
         """Go to next note (n key)."""
         go_next_note()
 
-    @app.on_key("N")
-    def prev_note_N(event):
-        """Go to previous note (N key)."""
-        go_prev_note()
-
     @app.on_key("p")
     def prev_note_p(event):
         """Go to previous note (p key)."""
@@ -343,7 +338,7 @@ def run_note_stream(
             app.state["current_index"] = 0
             refresh_content()
 
-    @app.on_key("G")
+    @app.on_key("$")
     def last_note(event):
         """Go to last note."""
         if (
@@ -467,7 +462,7 @@ def run_note_stream(
             app.state["edit_mode"] = True
             app.state["message"] = "Editing... Press Save or Cancel when done"
 
-    @app.on_key("E")
+    @app.on_key("o")
     def edit_external(event):
         """Open in external editor."""
         if app.state.get("edit_mode"):

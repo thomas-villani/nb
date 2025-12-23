@@ -7,6 +7,7 @@ with confirmation flow for write operations.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import click
 from rich.console import Console
@@ -19,12 +20,33 @@ console = Console()
 
 
 @click.command(name="assistant")
+@click.argument("query", required=False)
 @click.option(
     "--notebook",
     "-n",
     "notebook",
     help="Focus context on specific notebook.",
     shell_complete=complete_notebook,
+)
+@click.option(
+    "--file",
+    "-f",
+    "files",
+    multiple=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Include file(s) as context (can be repeated).",
+)
+@click.option(
+    "--paste",
+    is_flag=True,
+    help="Include clipboard content as context.",
+)
+@click.option(
+    "--note",
+    "-N",
+    "notes",
+    multiple=True,
+    help="Include specific note(s) as context (notebook/note format, can be repeated).",
 )
 @click.option(
     "--no-calendar",
@@ -55,7 +77,11 @@ console = Console()
     help="Maximum tool calls per turn.",
 )
 def assistant_command(
+    query: str | None,
     notebook: str | None,
+    files: tuple[Path, ...],
+    paste: bool,
+    notes: tuple[str, ...],
     no_calendar: bool,
     use_smart: bool,
     dry_run: bool,
@@ -67,21 +93,31 @@ def assistant_command(
     An interactive agent that can analyze your todos, notes, and calendar,
     and take action on your behalf. Write operations require confirmation.
 
+    Optionally provide an initial QUERY to start the conversation.
+
     \b
     Examples:
         nb assistant
         > reschedule the todos for later this week to monday next week
 
-        nb assistant
-        > mark the API documentation todo as complete
+        nb assistant "add 3 todos for the quarterly review"
 
         nb assistant -n work
         > give me a status update on the project
+
+        nb assistant --paste "Here's my plan for today"
+
+        nb assistant -f plan.md "Review this plan and add todos to work"
+
+        nb assistant -N work/project "Summarize the current status"
 
         nb assistant --dry-run
         > add 3 todos for the quarterly review
     """
     from nb.core.llm import LLMConfigError, LLMError
+
+    # Gather additional context from files, clipboard, and notes
+    additional_context = _gather_additional_context(files, paste, notes)
 
     try:
         _run_assistant_interactive(
@@ -91,6 +127,8 @@ def assistant_command(
             dry_run=dry_run,
             token_budget=token_budget,
             max_tools=max_tools,
+            initial_query=query,
+            additional_context=additional_context,
         )
     except LLMConfigError as e:
         console.print(f"[red]Configuration error:[/red] {e}")
@@ -104,6 +142,75 @@ def assistant_command(
         sys.exit(1)
 
 
+def _gather_additional_context(
+    files: tuple[Path, ...],
+    paste: bool,
+    notes: tuple[str, ...],
+) -> str:
+    """Gather additional context from files, clipboard, and notes.
+
+    Args:
+        files: Paths to files to include as context.
+        paste: Whether to include clipboard content.
+        notes: Note references to include (notebook/note format).
+
+    Returns:
+        Formatted context string, or empty string if no additional context.
+    """
+    from nb.cli.utils import resolve_note_ref
+
+    parts: list[str] = []
+
+    # Read files
+    for file_path in files:
+        try:
+            content = file_path.read_text(encoding="utf-8")
+            parts.append(f"## FILE: {file_path.name}\n\n```\n{content}\n```")
+        except Exception as e:
+            console.print(
+                f"[yellow]Warning: Could not read file {file_path}: {e}[/yellow]"
+            )
+
+    # Read clipboard
+    if paste:
+        try:
+            import pyperclip
+
+            clipboard_content = pyperclip.paste()
+            if clipboard_content and clipboard_content.strip():
+                parts.append(f"## CLIPBOARD CONTENT\n\n```\n{clipboard_content}\n```")
+            else:
+                console.print("[yellow]Warning: Clipboard is empty.[/yellow]")
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not read clipboard: {e}[/yellow]")
+
+    # Read notes
+    for note_ref in notes:
+        try:
+            # Parse notebook/note format
+            notebook = None
+            if "/" in note_ref:
+                parts_split = note_ref.split("/", 1)
+                notebook = parts_split[0]
+                note_name = parts_split[1]
+            else:
+                note_name = note_ref
+
+            path = resolve_note_ref(note_name, notebook=notebook)
+            if path and path.exists():
+                content = path.read_text(encoding="utf-8")
+                display_name = f"{notebook}/{path.stem}" if notebook else path.stem
+                parts.append(f"## NOTE: {display_name}\n\n{content}")
+            else:
+                console.print(f"[yellow]Warning: Note not found: {note_ref}[/yellow]")
+        except Exception as e:
+            console.print(
+                f"[yellow]Warning: Could not read note {note_ref}: {e}[/yellow]"
+            )
+
+    return "\n\n".join(parts)
+
+
 def _run_assistant_interactive(
     notebook: str | None,
     include_calendar: bool,
@@ -111,8 +218,21 @@ def _run_assistant_interactive(
     dry_run: bool,
     token_budget: int,
     max_tools: int,
+    initial_query: str | None = None,
+    additional_context: str = "",
 ) -> None:
-    """Run the interactive assistant session."""
+    """Run the interactive assistant session.
+
+    Args:
+        notebook: Focus context on specific notebook.
+        include_calendar: Whether to include calendar events.
+        use_smart: Use smart model vs fast model.
+        dry_run: Show proposed changes without executing.
+        token_budget: Maximum tokens to consume per session.
+        max_tools: Maximum tool calls per turn.
+        initial_query: Optional initial query to start the conversation.
+        additional_context: Additional context from files, clipboard, or notes.
+    """
     from nb.core.ai.assistant import (
         AssistantContext,
         clear_pending_actions,
@@ -133,6 +253,11 @@ def _run_assistant_interactive(
     )
     console.print()
 
+    # Show what context was loaded
+    if additional_context:
+        console.print("[dim]Context loaded from files/clipboard/notes.[/dim]")
+        console.print()
+
     if dry_run:
         console.print(
             "[yellow]Dry-run mode: Changes will be shown but not executed.[/yellow]"
@@ -144,13 +269,23 @@ def _run_assistant_interactive(
     )
     console.print()
 
+    # Track if we have an initial query to process
+    pending_input = initial_query
+
     # Interactive loop
     while True:
-        try:
-            user_input = console.input("[bold green]You:[/bold green] ")
-        except (EOFError, KeyboardInterrupt):
-            console.print()
-            break
+        # Use pending initial query or prompt for input
+        if pending_input:
+            user_input = pending_input
+            # Display the initial query so user sees what was sent
+            console.print(f"[bold green]You:[/bold green] {user_input}")
+            pending_input = None  # Clear after use
+        else:
+            try:
+                user_input = console.input("[bold green]You:[/bold green] ")
+            except (EOFError, KeyboardInterrupt):
+                console.print()
+                break
 
         user_input = user_input.strip()
         if not user_input:
@@ -179,6 +314,7 @@ def _run_assistant_interactive(
                 use_smart_model=use_smart,
                 max_tool_calls=max_tools,
                 token_budget=token_budget,
+                additional_context=additional_context,
             )
 
         # Display response

@@ -73,6 +73,7 @@ class TestNote:
 
     def test_basic_note(self):
         note = Note(
+            id="abc12345",
             path=Path("daily/2025-11-26.md"),
             title="Daily Note",
             date=date(2025, 11, 26),
@@ -82,6 +83,7 @@ class TestNote:
             content_hash="abcd1234",
         )
 
+        assert note.id == "abc12345"
         assert note.path == Path("daily/2025-11-26.md")
         assert note.title == "Daily Note"
         assert note.date == date(2025, 11, 26)
@@ -91,8 +93,9 @@ class TestNote:
         assert note.content_hash == "abcd1234"
 
     def test_default_values(self):
-        note = Note(path=Path("note.md"), title="Simple Note", date=None)
+        note = Note(id="def12345", path=Path("note.md"), title="Simple Note", date=None)
 
+        assert note.id == "def12345"
         assert note.tags == []
         assert note.links == []
         assert note.attachments == []
@@ -102,6 +105,7 @@ class TestNote:
     def test_with_attachments(self):
         attachment = Attachment(id="a1", type="file", path="doc.pdf")
         note = Note(
+            id="ghi12345",
             path=Path("note.md"),
             title="Note with Attachments",
             date=date(2025, 11, 26),

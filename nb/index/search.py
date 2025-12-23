@@ -217,9 +217,9 @@ class NoteSearch:
         """
         try:
             self.db.delete([path])
-        except Exception:
+        except Exception as e:
             # Ignore errors if note doesn't exist in index
-            pass
+            _logger.debug("Failed to delete note %s from vector index: %s", path, e)
 
     def search(
         self,
@@ -454,7 +454,8 @@ class NoteSearch:
                 where={"tags": {"$contains": tag}},
                 limit=k,
             )
-        except Exception:
+        except Exception as e:
+            _logger.debug("Failed to filter by tag %s: %s", tag, e)
             return []
 
         return [

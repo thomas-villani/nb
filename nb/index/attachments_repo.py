@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from nb.index.db import get_db
 from nb.models import Attachment
@@ -381,6 +381,7 @@ def extract_attachments_from_content(
         title = match.group(2)  # May be None
 
         # Determine attachment type
+        attachment_type: Literal["file", "url", "conversation"]
         if is_url(path):
             attachment_type = "url"
         else:

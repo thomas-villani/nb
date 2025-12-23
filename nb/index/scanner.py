@@ -7,10 +7,15 @@ import logging
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from nb.config import get_config
+
+if TYPE_CHECKING:
+    from nb.models import Note
 from nb.core.note_parser import get_note
 from nb.core.todos import extract_todos, normalize_due_dates_in_file
 from nb.index.attachments_repo import (
@@ -38,6 +43,267 @@ _vector_lock = threading.Lock()
 
 # Logger for vector indexing issues
 _logger = logging.getLogger(__name__)
+
+
+# Type alias for link tuples: (target, display, link_type, is_external)
+LinkTuple = tuple[str, str, str, bool]
+
+
+@dataclass
+class NoteData:
+    """Data extracted from a note file for indexing.
+
+    This dataclass holds all the information extracted from a note file
+    that is needed for database operations. It's used to share logic
+    between index_note() and index_note_threadsafe().
+    """
+
+    note: Note
+    full_path: Path
+    content: str
+    mtime: float | None
+    todo_exclude: int
+    all_links: list[LinkTuple]
+    normalized_path: str
+    note_id: str
+    sections: list[str]
+
+
+def _extract_note_data(path: Path, notes_root: Path) -> NoteData | None:
+    """Extract all data from a note file needed for indexing.
+
+    This function handles the common data extraction logic shared between
+    index_note() and index_note_threadsafe().
+
+    Args:
+        path: Path to the note file.
+        notes_root: The notes root directory.
+
+    Returns:
+        NoteData if successful, None if the note couldn't be parsed.
+    """
+    # Resolve full path first
+    if path.is_absolute():
+        full_path = path
+    else:
+        full_path = notes_root / path
+
+    # Normalize relative due dates FIRST (e.g., @due(today) -> @due(2025-12-01))
+    # This must happen before reading content/hash to avoid re-indexing next time
+    normalize_due_dates_in_file(full_path)
+
+    # Now read the normalized content and compute hash
+    note = get_note(path, notes_root)
+    if not note:
+        return None
+
+    # Read the full content for storage and vector indexing
+    try:
+        content = full_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        content = ""
+
+    # Get file mtime for caching (after normalization)
+    try:
+        mtime = full_path.stat().st_mtime
+    except OSError:
+        mtime = None
+
+    # Check for todo_exclude in frontmatter and extract links
+    from nb.utils.markdown import (
+        extract_all_links,
+        extract_frontmatter_links,
+        extract_todo_exclude,
+        parse_note_file,
+    )
+
+    try:
+        meta, body = parse_note_file(full_path)
+        todo_exclude = 1 if extract_todo_exclude(meta) else 0
+        # Extract all links from body (wiki + markdown) and frontmatter
+        body_links = extract_all_links(body)
+        frontmatter_links = extract_frontmatter_links(meta)
+        all_links = body_links + frontmatter_links
+    except Exception as e:
+        _logger.warning("Failed to parse note %s: %s", path, e)
+        todo_exclude = 0
+        all_links = []
+
+    # Get sections for path-based subdirectory hierarchy
+    from nb.core.note_parser import get_sections_for_path
+
+    sections = get_sections_for_path(note.path)
+
+    # Compute normalized path and note ID
+    normalized_path = normalize_path(note.path)
+    note_id = make_note_id(note.path)
+
+    return NoteData(
+        note=note,
+        full_path=full_path,
+        content=content,
+        mtime=mtime,
+        todo_exclude=todo_exclude,
+        all_links=all_links,
+        normalized_path=normalized_path,
+        note_id=note_id,
+        sections=sections,
+    )
+
+
+def _persist_note_to_db(data: NoteData, db: Database) -> None:
+    """Persist extracted note data to the database.
+
+    This function handles the common database operations shared between
+    index_note() and index_note_threadsafe().
+
+    Args:
+        data: The extracted note data.
+        db: The database connection to use.
+    """
+    # Upsert note
+    db.execute(
+        """
+        INSERT OR REPLACE INTO notes (id, path, title, date, notebook, content_hash, content, mtime, todo_exclude, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            data.note_id,
+            data.normalized_path,
+            data.note.title,
+            data.note.date.isoformat() if data.note.date else None,
+            data.note.notebook,
+            data.note.content_hash,
+            data.content,
+            data.mtime,
+            data.todo_exclude,
+            datetime.now().isoformat(),
+        ),
+    )
+
+    # Update tags
+    db.execute("DELETE FROM note_tags WHERE note_path = ?", (data.normalized_path,))
+    if data.note.tags:
+        db.executemany(
+            "INSERT INTO note_tags (note_path, tag) VALUES (?, ?)",
+            [(data.normalized_path, tag) for tag in data.note.tags],
+        )
+
+    # Update links (using extracted links with full metadata)
+    # Use INSERT OR IGNORE to handle duplicate target links in the same note
+    db.execute("DELETE FROM note_links WHERE source_path = ?", (data.normalized_path,))
+    if data.all_links:
+        db.executemany(
+            """INSERT OR IGNORE INTO note_links
+               (source_path, target_path, display_text, link_type, is_external)
+               VALUES (?, ?, ?, ?, ?)""",
+            [
+                (
+                    data.normalized_path,
+                    target,
+                    display,
+                    link_type,
+                    1 if is_external else 0,
+                )
+                for target, display, link_type, is_external in data.all_links
+            ],
+        )
+
+    # Update sections (path-based subdirectory hierarchy)
+    db.execute("DELETE FROM note_sections WHERE note_path = ?", (data.normalized_path,))
+    if data.sections:
+        db.executemany(
+            "INSERT INTO note_sections (note_path, section, depth) VALUES (?, ?, ?)",
+            [
+                (data.normalized_path, section, depth)
+                for depth, section in enumerate(data.sections)
+            ],
+        )
+
+    db.commit()
+
+
+def _index_note_vectors(data: NoteData, use_lock: bool = False) -> None:
+    """Index a note to the vector search database.
+
+    Args:
+        data: The extracted note data.
+        use_lock: Whether to use the vector lock (for thread safety).
+    """
+    if not ENABLE_VECTOR_INDEXING or not data.content:
+        return
+
+    def do_index() -> None:
+        try:
+            from nb.index.search import get_search
+
+            search = get_search()
+            search.index_note(data.note, data.content)
+        except Exception as e:
+            _logger.debug("Vector indexing failed for %s: %s", data.full_path, e)
+
+    if use_lock:
+        with _vector_lock:
+            do_index()
+    else:
+        do_index()
+
+
+def _index_note_todos_and_attachments(
+    data: NoteData,
+    notes_root: Path,
+    db: Database | None = None,
+) -> None:
+    """Index todos and attachments from a note.
+
+    Args:
+        data: The extracted note data.
+        notes_root: The notes root directory.
+        db: Optional database connection (for thread-safe operations).
+    """
+    config = get_config()
+    inbox_path = (notes_root / config.todo.inbox_file).resolve()
+    if data.full_path.resolve() == inbox_path:
+        source_type = "inbox"
+    else:
+        source_type = "note"
+
+    # Preserve dates before deleting (so we can restore them after re-indexing)
+    if db:
+        preserved_dates = get_todo_dates_for_source(data.full_path, db=db)
+        delete_todos_for_source(data.full_path, db=db)
+    else:
+        preserved_dates = get_todo_dates_for_source(data.full_path)
+        delete_todos_for_source(data.full_path)
+
+    # Extract and index new todos (batch for performance)
+    todos = extract_todos(
+        data.full_path, source_type=source_type, notes_root=notes_root
+    )
+    if db:
+        upsert_todos_batch(todos, db=db, preserved_dates=preserved_dates)
+    else:
+        upsert_todos_batch(todos, preserved_dates=preserved_dates)
+
+    # Index attachments (delete existing first, then extract from content)
+    if db:
+        delete_attachments_for_note(data.full_path, db=db)
+    else:
+        delete_attachments_for_note(data.full_path)
+
+    if data.content:
+        # Extract note-level attachments
+        note_attachments = extract_attachments_from_content(
+            data.content,
+            parent_type="note",
+            parent_id=data.normalized_path,
+            source_path=data.full_path,
+        )
+        if note_attachments:
+            if db:
+                upsert_attachments_batch(note_attachments, db=db)
+            else:
+                upsert_attachments_batch(note_attachments)
 
 
 def _get_thread_db() -> Database:
@@ -77,8 +343,8 @@ def load_nbignore(notes_root: Path) -> list[str]:
             # Skip empty lines and comments
             if line and not line.startswith("#"):
                 patterns.append(line)
-    except Exception:
-        pass  # If we can't read the file, just ignore it
+    except Exception as e:
+        _logger.debug("Could not read .nbignore file %s: %s", ignore_file, e)
     return patterns
 
 
@@ -239,163 +505,21 @@ def index_note(
     if notes_root is None:
         notes_root = get_config().notes_root
 
-    # Resolve full path first
-    if path.is_absolute():
-        full_path = path
-    else:
-        full_path = notes_root / path
-
-    # Normalize relative due dates FIRST (e.g., @due(today) -> @due(2025-12-01))
-    # This must happen before reading content/hash to avoid re-indexing next time
-    normalize_due_dates_in_file(full_path)
-
-    # Now read the normalized content and compute hash
-    note = get_note(path, notes_root)
-    if not note:
+    # Extract all note data (handles path resolution, due date normalization, parsing)
+    data = _extract_note_data(path, notes_root)
+    if not data:
         return
 
-    # Read the full content for storage and vector indexing
-    try:
-        content = full_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        content = ""
-
-    # Get file mtime for caching (after normalization)
-    try:
-        mtime = full_path.stat().st_mtime
-    except OSError:
-        mtime = None
-
-    # Check for todo_exclude in frontmatter and extract links
-    from nb.utils.markdown import (
-        extract_all_links,
-        extract_frontmatter_links,
-        extract_todo_exclude,
-        parse_note_file,
-    )
-
-    try:
-        meta, body = parse_note_file(full_path)
-        todo_exclude = 1 if extract_todo_exclude(meta) else 0
-        # Extract all links from body (wiki + markdown) and frontmatter
-        body_links = extract_all_links(body)
-        frontmatter_links = extract_frontmatter_links(meta)
-        all_links = body_links + frontmatter_links
-    except Exception:
-        todo_exclude = 0
-        all_links = []
-
+    # Persist to database
     db = get_db()
+    _persist_note_to_db(data, db)
 
-    # Upsert note (now includes content, mtime, and todo_exclude columns)
-    # Use normalize_path for consistent path format with todos table
-    normalized_note_path = normalize_path(note.path)
-    note_id = make_note_id(note.path)
-    db.execute(
-        """
-        INSERT OR REPLACE INTO notes (id, path, title, date, notebook, content_hash, content, mtime, todo_exclude, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            note_id,
-            normalized_note_path,
-            note.title,
-            note.date.isoformat() if note.date else None,
-            note.notebook,
-            note.content_hash,
-            content,
-            mtime,
-            todo_exclude,
-            datetime.now().isoformat(),
-        ),
-    )
+    # Index to vector search (no lock needed for single-threaded operation)
+    if index_vectors:
+        _index_note_vectors(data, use_lock=False)
 
-    # Update tags
-    db.execute("DELETE FROM note_tags WHERE note_path = ?", (normalized_note_path,))
-    if note.tags:
-        db.executemany(
-            "INSERT INTO note_tags (note_path, tag) VALUES (?, ?)",
-            [(normalized_note_path, tag) for tag in note.tags],
-        )
-
-    # Update links (using extracted links with full metadata)
-    # Use INSERT OR IGNORE to handle duplicate target links in the same note
-    db.execute("DELETE FROM note_links WHERE source_path = ?", (normalized_note_path,))
-    if all_links:
-        db.executemany(
-            """INSERT OR IGNORE INTO note_links
-               (source_path, target_path, display_text, link_type, is_external)
-               VALUES (?, ?, ?, ?, ?)""",
-            [
-                (
-                    normalized_note_path,
-                    target,
-                    display,
-                    link_type,
-                    1 if is_external else 0,
-                )
-                for target, display, link_type, is_external in all_links
-            ],
-        )
-
-    # Update sections (path-based subdirectory hierarchy)
-    from nb.core.note_parser import get_sections_for_path
-
-    sections = get_sections_for_path(note.path)
-    db.execute("DELETE FROM note_sections WHERE note_path = ?", (normalized_note_path,))
-    if sections:
-        db.executemany(
-            "INSERT INTO note_sections (note_path, section, depth) VALUES (?, ?, ?)",
-            [
-                (normalized_note_path, section, depth)
-                for depth, section in enumerate(sections)
-            ],
-        )
-
-    db.commit()
-
-    # Index to localvectordb for search
-    if index_vectors and ENABLE_VECTOR_INDEXING and content:
-        try:
-            from nb.index.search import get_search
-
-            search = get_search()
-            search.index_note(note, content)
-        except Exception as e:
-            # Don't fail indexing if vector search fails
-            # (e.g., embedding service not available)
-            _logger.debug("Vector indexing failed for %s: %s", path, e)
-
-    # Index todos (file was already normalized at the start of this function)
-    config = get_config()
-    inbox_path = (notes_root / config.todo.inbox_file).resolve()
-    if full_path.resolve() == inbox_path:
-        source_type = "inbox"
-    else:
-        source_type = "note"
-
-    # Preserve dates before deleting (so we can restore them after re-indexing)
-    preserved_dates = get_todo_dates_for_source(full_path)
-
-    # Delete existing todos for this file
-    delete_todos_for_source(full_path)
-
-    # Extract and index new todos (batch for performance)
-    todos = extract_todos(full_path, source_type=source_type, notes_root=notes_root)
-    upsert_todos_batch(todos, preserved_dates=preserved_dates)
-
-    # Index attachments (delete existing first, then extract from content)
-    delete_attachments_for_note(full_path)
-    if content:
-        # Extract note-level attachments
-        note_attachments = extract_attachments_from_content(
-            content,
-            parent_type="note",
-            parent_id=normalized_note_path,
-            source_path=full_path,
-        )
-        if note_attachments:
-            upsert_attachments_batch(note_attachments)
+    # Index todos and attachments
+    _index_note_todos_and_attachments(data, notes_root)
 
 
 def count_files_to_index(
@@ -505,8 +629,8 @@ def index_all_notes(
                 count += 1
                 if on_progress:
                     on_progress(1)  # Advance by 1 (not cumulative count)
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.warning("Failed to index note %s: %s", path, e)
         return count
 
     # Parallel processing for larger batches without vector indexing
@@ -519,14 +643,14 @@ def index_all_notes(
             for path in files_to_index
         }
         for future in as_completed(futures):
+            path = futures[future]
             try:
                 future.result()
                 count += 1
                 if on_progress:
                     on_progress(1)  # Advance by 1 (not cumulative count)
-            except Exception:
-                # Log error but continue with other files
-                pass
+            except Exception as e:
+                _logger.warning("Failed to index note %s: %s", path, e)
 
     return count
 
@@ -544,163 +668,21 @@ def index_note_threadsafe(
     if notes_root is None:
         notes_root = get_config().notes_root
 
-    # Resolve full path first
-    if path.is_absolute():
-        full_path = path
-    else:
-        full_path = notes_root / path
-
-    # Normalize relative due dates FIRST (e.g., @due(today) -> @due(2025-12-01))
-    # This must happen before reading content/hash to avoid re-indexing next time
-    normalize_due_dates_in_file(full_path)
-
-    # Now read the normalized content and compute hash
-    note = get_note(path, notes_root)
-    if not note:
+    # Extract all note data (handles path resolution, due date normalization, parsing)
+    data = _extract_note_data(path, notes_root)
+    if not data:
         return
 
-    # Read the full content for storage and vector indexing
-    try:
-        content = full_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        content = ""
-
-    # Get file mtime for caching (after normalization)
-    try:
-        mtime = full_path.stat().st_mtime
-    except OSError:
-        mtime = None
-
-    # Check for todo_exclude in frontmatter and extract links
-    from nb.utils.markdown import (
-        extract_all_links,
-        extract_frontmatter_links,
-        extract_todo_exclude,
-        parse_note_file,
-    )
-
-    try:
-        meta, body = parse_note_file(full_path)
-        todo_exclude = 1 if extract_todo_exclude(meta) else 0
-        # Extract all links from body (wiki + markdown) and frontmatter
-        body_links = extract_all_links(body)
-        frontmatter_links = extract_frontmatter_links(meta)
-        all_links = body_links + frontmatter_links
-    except Exception:
-        todo_exclude = 0
-        all_links = []
-
-    # Use thread-local database connection
+    # Persist to database using thread-local connection
     db = _get_thread_db()
+    _persist_note_to_db(data, db)
 
-    # Upsert note
-    # Use normalize_path for consistent path format with todos table
-    normalized_note_path = normalize_path(note.path)
-    note_id = make_note_id(note.path)
-    db.execute(
-        """
-        INSERT OR REPLACE INTO notes (id, path, title, date, notebook, content_hash, content, mtime, todo_exclude, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            note_id,
-            normalized_note_path,
-            note.title,
-            note.date.isoformat() if note.date else None,
-            note.notebook,
-            note.content_hash,
-            content,
-            mtime,
-            todo_exclude,
-            datetime.now().isoformat(),
-        ),
-    )
+    # Index to vector search (with lock for thread safety)
+    if index_vectors:
+        _index_note_vectors(data, use_lock=True)
 
-    # Update tags
-    db.execute("DELETE FROM note_tags WHERE note_path = ?", (normalized_note_path,))
-    if note.tags:
-        db.executemany(
-            "INSERT INTO note_tags (note_path, tag) VALUES (?, ?)",
-            [(normalized_note_path, tag) for tag in note.tags],
-        )
-
-    # Update links (using extracted links with full metadata)
-    # Use INSERT OR IGNORE to handle duplicate target links in the same note
-    db.execute("DELETE FROM note_links WHERE source_path = ?", (normalized_note_path,))
-    if all_links:
-        db.executemany(
-            """INSERT OR IGNORE INTO note_links
-               (source_path, target_path, display_text, link_type, is_external)
-               VALUES (?, ?, ?, ?, ?)""",
-            [
-                (
-                    normalized_note_path,
-                    target,
-                    display,
-                    link_type,
-                    1 if is_external else 0,
-                )
-                for target, display, link_type, is_external in all_links
-            ],
-        )
-
-    # Update sections (path-based subdirectory hierarchy)
-    from nb.core.note_parser import get_sections_for_path
-
-    sections = get_sections_for_path(note.path)
-    db.execute("DELETE FROM note_sections WHERE note_path = ?", (normalized_note_path,))
-    if sections:
-        db.executemany(
-            "INSERT INTO note_sections (note_path, section, depth) VALUES (?, ?, ?)",
-            [
-                (normalized_note_path, section, depth)
-                for depth, section in enumerate(sections)
-            ],
-        )
-
-    db.commit()
-
-    # Index to localvectordb for search (with lock for thread safety)
-    if index_vectors and ENABLE_VECTOR_INDEXING and content:
-        with _vector_lock:
-            try:
-                from nb.index.search import get_search
-
-                search = get_search()
-                search.index_note(note, content)
-            except Exception as e:
-                _logger.debug("Vector indexing failed for %s: %s", path, e)
-
-    # Index todos (file was already normalized at the start of this function)
-    config = get_config()
-    inbox_path = (notes_root / config.todo.inbox_file).resolve()
-    if full_path.resolve() == inbox_path:
-        source_type = "inbox"
-    else:
-        source_type = "note"
-
-    # Preserve dates before deleting (so we can restore them after re-indexing)
-    preserved_dates = get_todo_dates_for_source(full_path, db=db)
-
-    # Delete existing todos for this file (use thread-local db for thread safety)
-    delete_todos_for_source(full_path, db=db)
-
-    # Extract and index new todos (batch for performance, use thread-local db)
-    todos = extract_todos(full_path, source_type=source_type, notes_root=notes_root)
-    upsert_todos_batch(todos, db=db, preserved_dates=preserved_dates)
-
-    # Index attachments (delete existing first, then extract from content)
-    delete_attachments_for_note(full_path, db=db)
-    if content:
-        # Extract note-level attachments
-        note_attachments = extract_attachments_from_content(
-            content,
-            parent_type="note",
-            parent_id=normalized_note_path,
-            source_path=full_path,
-        )
-        if note_attachments:
-            upsert_attachments_batch(note_attachments, db=db)
+    # Index todos and attachments (using thread-local db)
+    _index_note_todos_and_attachments(data, notes_root, db=db)
 
 
 def rebuild_search_index(
@@ -777,8 +759,8 @@ def rebuild_search_index(
                 try:
                     search.index_note(note, content)
                     indexed += 1
-                except Exception:
-                    pass
+                except Exception as e2:
+                    _logger.debug("Failed to index note %s: %s", note.path, e2)
             batch = []
             return indexed
 
@@ -916,8 +898,9 @@ def sync_search_index(
         vector_filter = {"notebook": notebook} if notebook else {}
         vector_docs = search.db.filter(where=vector_filter, limit=10000)
         vector_paths = {d.metadata.get("path") for d in vector_docs}
-    except Exception:
+    except Exception as e:
         # If VectorDB query fails, treat as empty
+        _logger.debug("VectorDB query failed, treating as empty: %s", e)
         vector_paths = set()
 
     count = 0
@@ -944,8 +927,8 @@ def sync_search_index(
                 try:
                     search.index_note(note, content)
                     indexed += 1
-                except Exception:
-                    pass
+                except Exception as e2:
+                    _logger.debug("Failed to index note %s: %s", note.path, e2)
             batch = []
             return indexed
 
@@ -1277,8 +1260,8 @@ def index_linked_note(
         body_links = extract_all_links(body)
         frontmatter_links = extract_frontmatter_links(meta)
         all_links = body_links + frontmatter_links
-    except Exception:
-        pass
+    except Exception as e:
+        _logger.debug("Failed to parse note frontmatter %s: %s", path, e)
 
     # Check notebook-level todo_exclude from config.yaml
     config = get_config()
@@ -1356,8 +1339,8 @@ def index_linked_note(
             note.path = Path(note_path)
             search = get_search()
             search.index_note(note, content)
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.debug("Vector indexing failed for %s: %s", note_path, e)
 
     # Also index todos from this file (batch for performance)
     # Preserve dates before deleting
@@ -1525,7 +1508,7 @@ def remove_linked_note_from_index(alias: str) -> int:
             search = get_search()
             for path in paths:
                 search.delete_note(path)
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.debug("Failed to remove notes from vector index: %s", e)
 
     return cursor.rowcount

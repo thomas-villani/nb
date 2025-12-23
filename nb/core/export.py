@@ -166,7 +166,7 @@ def export_notebook(
         # Create separator with note info
         if notes_root:
             try:
-                rel_path = note_path.relative_to(notes_root)
+                rel_path: str | Path = note_path.relative_to(notes_root)
             except ValueError:
                 rel_path = note_path.name
         else:

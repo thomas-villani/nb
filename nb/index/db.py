@@ -508,8 +508,8 @@ def rebuild_db(db: Database) -> None:
     for table in tables:
         try:
             db.execute(f"DROP TABLE IF EXISTS {table}")
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.debug("Failed to drop table %s: %s", table, e)
 
     db.commit()
 

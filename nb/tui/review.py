@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from wijjit import Wijjit
-from wijjit.elements.modal import TextInputDialog
+from wijjit.elements.modal import ConfirmDialog, TextInputDialog
 from wijjit.layout.bounds import Bounds
 
 from nb.config import get_config
@@ -56,17 +56,19 @@ def run_review(
     notebooks: list[str] | None = None,
     notes: list[str] | None = None,
     exclude_notebooks: list[str] | None = None,
+    include_no_due_date: bool = False,
 ) -> ReviewStats:
     """Run interactive review session.
 
     Args:
         scope: Review scope - "daily" (overdue + today), "weekly" (+ this week + no date),
-               "all", or "no_due_date" (only todos without due dates)
+               or "all" (all incomplete todos)
         tag: Filter by tag
         priority: Filter by priority (1=high, 2=medium, 3=low)
         notebooks: Filter by notebooks
         notes: Filter by note paths
         exclude_notebooks: Notebooks to exclude
+        include_no_due_date: Also include todos without a due date
 
     Returns:
         ReviewStats with session statistics.
@@ -100,18 +102,6 @@ def run_review(
             exclude_notebooks=exclude_notebooks,
             exclude_note_excluded=exclude_note_excluded,
         )
-    elif scope == "no_due_date":
-        # Only todos with no due date
-        todos = query_todos(
-            completed=False,
-            tag=tag,
-            priority=priority,
-            notebooks=notebooks,
-            notes=notes,
-            exclude_notebooks=exclude_notebooks,
-            exclude_note_excluded=exclude_note_excluded,
-        )
-        todos = [t for t in todos if t.due_date is None]
     elif scope == "weekly":
         todos = get_sorted_todos(
             completed=False,
@@ -166,6 +156,23 @@ def run_review(
         for t in today_todos:
             if t.id not in existing_ids:
                 todos.append(t)
+
+        # Optionally include no-due-date items
+        if include_no_due_date:
+            no_date_todos = query_todos(
+                completed=False,
+                tag=tag,
+                priority=priority,
+                notebooks=notebooks,
+                notes=notes,
+                exclude_notebooks=exclude_notebooks,
+                exclude_note_excluded=exclude_note_excluded,
+            )
+            no_date_todos = [t for t in no_date_todos if t.due_date is None]
+            existing_ids = {t.id for t in todos}
+            for t in no_date_todos:
+                if t.id not in existing_ids:
+                    todos.append(t)
 
     if not todos:
         console.print("[green]Nothing to review! All caught up.[/green]")
@@ -320,7 +327,7 @@ def run_review(
     {% endif %}
 
     {# Help text #}
-    {% text dim=true %}[d]one [s]tart [t]omorrow [f]riday [m]onday [w]eek [n]month [D]ate [e]dit [k]skip [x]del [q]uit{% endtext %}
+    {% text dim=true %}[d]one [s]tart [t]omorrow [f]riday [m]onday [w]eek [n]month [c]ustom [e]dit [k]skip [x]del [q]uit{% endtext %}
 
     {# Message bar #}
     {% if state.message %}
@@ -340,25 +347,55 @@ def run_review(
 
     @app.on_key("d")
     def mark_done(event):
-        """Mark current todo as done."""
+        """Mark current todo as done (with confirmation)."""
         todo = get_current_todo()
         if not todo:
             return
 
-        try:
-            actual_line = toggle_todo_in_file(
-                todo.source.path,
-                todo.line_number,
-                expected_content=todo.content,
-            )
-            if actual_line is not None:
-                update_todo_completion(todo.id, True)
-                app.state["stats_completed"] = app.state.get("stats_completed", 0) + 1
-                stats.completed += 1
-                app.state["message"] = f"Completed: {todo.content[:30]}"
-                remove_current()
-        except PermissionError as e:
-            app.state["message"] = f"Error: {e}"
+        def on_confirm():
+            try:
+                actual_line = toggle_todo_in_file(
+                    todo.source.path,
+                    todo.line_number,
+                    expected_content=todo.content,
+                )
+                if actual_line is not None:
+                    update_todo_completion(todo.id, True)
+                    app.state["stats_completed"] = (
+                        app.state.get("stats_completed", 0) + 1
+                    )
+                    stats.completed += 1
+                    app.state["message"] = f"Completed: {todo.content[:30]}"
+                    remove_current()
+            except PermissionError as e:
+                app.state["message"] = f"Error: {e}"
+            app.state["_refresh"] = True
+
+        def on_cancel():
+            app.state["message"] = "Cancelled"
+            app.state["_refresh"] = True
+
+        display_text = truncate(todo.content, 40)
+        dialog = ConfirmDialog(
+            title="Mark Done",
+            message=f'Mark as complete?\n\n"{display_text}"',
+            on_confirm=on_confirm,
+            on_cancel=on_cancel,
+            confirm_label="Done",
+            cancel_label="Cancel",
+            width=50,
+            height=11,
+        )
+
+        # Show the modal
+        overlay = app.show_modal(dialog)
+
+        # Set close callback
+        def close_dialog():
+            app.overlay_manager.pop(overlay)
+            app.state["_refresh"] = True
+
+        dialog.close_callback = close_dialog
 
     @app.on_key("s")
     def mark_started(event):
@@ -514,7 +551,7 @@ def run_review(
         except PermissionError as e:
             app.state["message"] = f"Error: {e}"
 
-    @app.on_key("D")
+    @app.on_key("c")
     def reschedule_custom_date(event):
         """Reschedule to a custom date via input dialog."""
         todo = get_current_todo()
@@ -619,25 +656,53 @@ def run_review(
 
     @app.on_key("x")
     def delete_todo(event):
-        """Delete current todo."""
+        """Delete current todo (with confirmation)."""
         todo = get_current_todo()
         if not todo:
             return
 
-        try:
-            actual_line = delete_todo_from_file(
-                todo.source.path,
-                todo.line_number,
-                expected_content=todo.content,
-            )
-            if actual_line is not None:
-                delete_todo_from_db(todo.id)
-                app.state["stats_deleted"] = app.state.get("stats_deleted", 0) + 1
-                stats.deleted += 1
-                app.state["message"] = f"Deleted: {todo.content[:30]}"
-                remove_current()
-        except PermissionError as e:
-            app.state["message"] = f"Error: {e}"
+        def on_confirm():
+            try:
+                actual_line = delete_todo_from_file(
+                    todo.source.path,
+                    todo.line_number,
+                    expected_content=todo.content,
+                )
+                if actual_line is not None:
+                    delete_todo_from_db(todo.id)
+                    app.state["stats_deleted"] = app.state.get("stats_deleted", 0) + 1
+                    stats.deleted += 1
+                    app.state["message"] = f"Deleted: {todo.content[:30]}"
+                    remove_current()
+            except PermissionError as e:
+                app.state["message"] = f"Error: {e}"
+            app.state["_refresh"] = True
+
+        def on_cancel():
+            app.state["message"] = "Cancelled"
+            app.state["_refresh"] = True
+
+        display_text = truncate(todo.content, 40)
+        dialog = ConfirmDialog(
+            title="Delete Todo",
+            message=f'Delete this todo?\n\n"{display_text}"',
+            on_confirm=on_confirm,
+            on_cancel=on_cancel,
+            confirm_label="Delete",
+            cancel_label="Cancel",
+            width=50,
+            height=11,
+        )
+
+        # Show the modal
+        overlay = app.show_modal(dialog)
+
+        # Set close callback
+        def close_dialog():
+            app.overlay_manager.pop(overlay)
+            app.state["_refresh"] = True
+
+        dialog.close_callback = close_dialog
 
     @app.on_key("q")
     def quit_app(event):

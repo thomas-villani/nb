@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 from datetime import date
 from pathlib import Path
@@ -11,6 +12,8 @@ from urllib.parse import urlparse
 from nb.config import get_config
 from nb.models import Attachment
 from nb.utils.hashing import make_attachment_id
+
+_logger = logging.getLogger(__name__)
 
 
 def get_attachments_dir() -> Path:
@@ -26,7 +29,8 @@ def is_url(path: str) -> bool:
     try:
         result = urlparse(path)
         return result.scheme in ("http", "https", "ftp", "file")
-    except Exception:
+    except Exception as e:
+        _logger.debug("Failed to parse URL %s: %s", path, e)
         return False
 
 
@@ -208,9 +212,9 @@ def attach_to_note(
         # Use normalized note path as parent_id (consistent with indexer)
         parent_id = normalize_path(note_path)
         upsert_attachment(attachment, parent_type="note", parent_id=parent_id)
-    except Exception:
+    except Exception as e:
         # Don't fail the attach operation if DB upsert fails
-        pass
+        _logger.warning("Failed to upsert attachment to DB for %s: %s", note_path, e)
 
     return attachment
 
@@ -280,9 +284,9 @@ def attach_to_todo(
         from nb.index.attachments_repo import upsert_attachment
 
         upsert_attachment(attachment, parent_type="todo", parent_id=todo_id)
-    except Exception:
+    except Exception as e:
         # Don't fail the attach operation if DB upsert fails
-        pass
+        _logger.warning("Failed to upsert attachment to DB for todo %s: %s", todo_id, e)
 
     return attachment
 
@@ -375,5 +379,6 @@ def open_attachment(attachment: Attachment) -> bool:
         else:
             subprocess.run(["xdg-open", target], check=True)
         return True
-    except Exception:
+    except Exception as e:
+        _logger.warning("Failed to open attachment %s: %s", target, e)
         return False

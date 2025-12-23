@@ -144,6 +144,8 @@ todo_exclude: true
 - [x] Add .env file config and move the env vars to a .env file (openai, anthropic, deepgram, raindrop)
 - [x] Make ai function flags consistent (e.g. -b is for notebook for some reason)
 - [x] Need to improve the `nb ask` function to handle queries like `nb ask "What still remains to be done for the wijjit project?"`
+- [ ] Add clipboard integration to various commands (e.g. nb add --paste)
+- [ ] Enhance templates by adding fancy tags like ``{{ calendar }}` and `{{ todos.overdue }}` and `{{ todos.due_today }}`
 
 
 ### Phase 5: Wijjit TUI

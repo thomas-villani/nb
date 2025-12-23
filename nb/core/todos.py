@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date, datetime
 from pathlib import Path
@@ -23,6 +24,8 @@ from nb.utils.patterns import (
     TAG_PATTERN,
     TAG_REMOVAL_PATTERN,
 )
+
+_logger = logging.getLogger(__name__)
 
 # Regex patterns for todo parsing
 # Captures: [ ] pending, [x]/[X] completed, [^] in progress
@@ -150,8 +153,9 @@ def extract_todos(
                 note_tags = [str(t).lower() for t in fm_tags]
             elif isinstance(fm_tags, str):
                 note_tags = [t.strip().lower() for t in fm_tags.split(",") if t.strip()]
-    except Exception:
-        pass  # If frontmatter parsing fails, continue without inherited tags
+    except Exception as e:
+        # If frontmatter parsing fails, continue without inherited tags
+        _logger.debug("Failed to parse frontmatter tags for %s: %s", path, e)
 
     todos: list[Todo] = []
     stack: list[tuple[int, Todo]] = []  # (indent_level, todo)

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 import click
 from click.shell_completion import CompletionItem
+
+_logger = logging.getLogger(__name__)
 
 
 def register_completion_commands(cli: click.Group) -> None:
@@ -30,7 +34,8 @@ def complete_notebook(
             for name in names
             if name.startswith(incomplete)
         ]
-    except Exception:
+    except Exception as e:
+        _logger.debug("Notebook completion failed: %s", e)
         return []
 
 
@@ -47,7 +52,8 @@ def complete_tag(
             for t in stats
             if t["tag"].startswith(incomplete)
         ]
-    except Exception:
+    except Exception as e:
+        _logger.debug("Tag completion failed: %s", e)
         return []
 
 
@@ -65,7 +71,8 @@ def complete_view(
             for name in names
             if name.startswith(incomplete)
         ]
-    except Exception:
+    except Exception as e:
+        _logger.debug("View completion failed: %s", e)
         return []
 
 

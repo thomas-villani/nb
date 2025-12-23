@@ -419,7 +419,7 @@ def run_interactive_todos(
     {% endif %}
 
     {# Help bar #}
-    {% text dim=true %}[d]one [s]tart [t]omorrow [D]ate [a]dd [e]dit [x]del [T]ag [q]uit{% endtext %}
+    {% text dim=true %}[d]one [s]tart [t]omorrow [c]ustom [a]dd [e]dit [x]del ta[g] [q]uit{% endtext %}
 
   {% endvstack %}
 {% endframe %}
@@ -540,7 +540,7 @@ def run_interactive_todos(
         except PermissionError as e:
             app.state["message"] = f"Error: {e}"
 
-    @app.on_key("D")
+    @app.on_key("c")
     def set_custom_date(event):
         """Set a custom due date via dialog."""
         if app.state.get("edit_mode"):
@@ -790,7 +790,7 @@ def run_interactive_todos(
 
     # --- Tag Filter ---
 
-    @app.on_key("T")
+    @app.on_key("g")
     def cycle_tag_filter(event):
         """Cycle through tag filters or clear."""
         if app.state.get("edit_mode"):

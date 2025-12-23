@@ -193,7 +193,7 @@ class LLMClient:
                 )
             elif m.tool_calls:
                 # Assistant message with tool calls
-                content = []
+                content: list[dict[str, Any]] = []
                 if m.content:
                     content.append({"type": "text", "text": m.content})
                 for tc in m.tool_calls:

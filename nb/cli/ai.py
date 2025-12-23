@@ -1224,8 +1224,8 @@ def _summarize_single_note(
                     notebook=note.notebook,
                 )
             ],
-            input_tokens=final_chunk.input_tokens if final_chunk else 0,
-            output_tokens=final_chunk.output_tokens if final_chunk else 0,
+            input_tokens=(final_chunk.input_tokens or 0) if final_chunk else 0,
+            output_tokens=(final_chunk.output_tokens or 0) if final_chunk else 0,
         )
     else:
         with console.status(
