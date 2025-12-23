@@ -49,6 +49,9 @@ def register_note_commands(cli: click.Group) -> None:
     cli.add_command(where_cmd)
     cli.add_command(mv_cmd)
     cli.add_command(cp_cmd)
+    cli.add_command(pin_note_cmd)
+    cli.add_command(unpin_note_cmd)
+    cli.add_command(list_pinned_cmd)
 
 
 @click.command()
@@ -175,6 +178,12 @@ def last_note(show: bool, notebook: str | None, viewed: bool) -> None:
 @click.option(
     "--open", "open_index", type=int, help="Open note at index N from history"
 )
+@click.option(
+    "--viewed",
+    "-v",
+    is_flag=True,
+    help="Show view history instead of modification history",
+)
 def history_cmd(
     limit: int,
     offset: int,
@@ -182,71 +191,97 @@ def history_cmd(
     full: bool,
     group: bool,
     open_index: int | None,
+    viewed: bool,
 ) -> None:
-    """Show recently viewed notes.
+    """Show recently modified notes.
 
-    Displays a list of notes you've recently opened with timestamps.
+    Displays a list of recently modified notes with timestamps.
     Each entry is numbered so you can quickly open one with --open.
+    Use --viewed to see view history instead.
     Use --group to organize entries by notebook.
 
     \b
     Examples:
-      nb history             # Show last 10 viewed notes (interleaved)
+      nb history             # Show last 10 modified notes
+      nb history --viewed    # Show view history instead
       nb history --open 2    # Open the 2nd note in history list
-      nb history -l 50       # Show last 50 viewed notes
+      nb history -l 50       # Show last 50 notes
       nb history -o 10       # Skip first 10, show next 10
-      nb history -n work     # Show recently viewed notes in 'work' notebook
+      nb history -n work     # Show recently modified notes in 'work' notebook
       nb history -F          # Show full paths instead of filenames
       nb history -g          # Group entries by notebook
     """
     from collections import defaultdict
 
     from nb.core.links import list_linked_notes
-    from nb.core.notes import get_recently_viewed_notes
+    from nb.core.notes import get_recently_modified_notes, get_recently_viewed_notes
 
-    # Request more views than limit+offset to account for deduplication
-    # Use higher multiplier since notes can be viewed many times
-    views = get_recently_viewed_notes(limit=(limit + offset) * 10, notebook=notebook)
-
-    if not views:
-        console.print("[dim]No view history found.[/dim]")
-        return
+    if viewed:
+        # View history mode - request more to account for deduplication
+        views = get_recently_viewed_notes(
+            limit=(limit + offset) * 10, notebook=notebook
+        )
+        if not views:
+            console.print("[dim]No view history found.[/dim]")
+            return
+        header = "Recently Viewed Notes"
+    else:
+        # Default: Recently modified notes
+        views = get_recently_modified_notes(limit=limit + offset, notebook=notebook)
+        if not views:
+            console.print("[dim]No notes found.[/dim]")
+            return
+        header = "Recently Modified Notes"
 
     config = get_config()
 
     # Get linked notes from database (not just config)
     linked_notes = list_linked_notes()
 
-    console.print("\n[bold]Recently Viewed Notes[/bold]\n")
+    console.print(f"\n[bold]{header}[/bold]\n")
 
-    # Deduplicate views by path, keeping most recent timestamp and count
-    # Use dict to track: path -> (most_recent_timestamp, view_count)
-    seen_paths: dict[Path, tuple[list, int]] = {}
-    unique_views: list[tuple[Path, list, int]] = []  # (path, [timestamps], total_count)
+    if viewed:
+        # Deduplicate views by path, keeping most recent timestamp and count
+        # Use dict to track: path -> (most_recent_timestamp, view_count)
+        seen_paths: dict[Path, tuple[list, int]] = {}
+        unique_views: list[tuple[Path, list, int]] = (
+            []
+        )  # (path, [timestamps], total_count)
 
-    for path, viewed_at in views:
-        resolved = path.resolve()
-        if resolved in seen_paths:
-            # Already seen this file - just increment count
-            seen_paths[resolved] = (
-                seen_paths[resolved][0],
-                seen_paths[resolved][1] + 1,
-            )
-        else:
-            # First time seeing this file
-            seen_paths[resolved] = ([viewed_at], 1)
-            unique_views.append((path, [viewed_at], 1))
+        for path, viewed_at in views:
+            resolved = path.resolve()
+            if resolved in seen_paths:
+                # Already seen this file - just increment count
+                seen_paths[resolved] = (
+                    seen_paths[resolved][0],
+                    seen_paths[resolved][1] + 1,
+                )
+            else:
+                # First time seeing this file
+                seen_paths[resolved] = ([viewed_at], 1)
+                unique_views.append((path, [viewed_at], 1))
 
-    # Update counts in unique_views and apply offset/limit
-    final_views = []
-    for i, (path, timestamps, _) in enumerate(unique_views):
-        if i < offset:
-            continue
-        resolved = path.resolve()
-        _, count = seen_paths[resolved]
-        final_views.append((path, timestamps, count))
-        if len(final_views) >= limit:
-            break
+        # Update counts in unique_views and apply offset/limit
+        final_views = []
+        for i, (path, timestamps, _) in enumerate(unique_views):
+            if i < offset:
+                continue
+            resolved = path.resolve()
+            _, count = seen_paths[resolved]
+            final_views.append((path, timestamps, count))
+            if len(final_views) >= limit:
+                break
+    else:
+        # Recently modified - no deduplication needed, just apply offset/limit
+        final_views = []
+        for i, (path, mtime) in enumerate(views):
+            if i < offset:
+                continue
+            final_views.append(
+                (path, [mtime], 1)
+            )  # Wrap mtime in list for consistent format
+            if len(final_views) >= limit:
+                break
 
     # Resolve notebook info for each view
     resolved_views = []
@@ -956,6 +991,13 @@ def log_to_note(
     is_flag=True,
     help="Display notes as a tree grouped by subdirectory sections",
 )
+@click.option(
+    "--limit",
+    "-l",
+    type=int,
+    default=5,
+    help="Notes to show per notebook (default 5)",
+)
 def list_notes_cmd(
     notebook: str | None,
     notebook_opt: str | None,
@@ -967,19 +1009,23 @@ def list_notes_cmd(
     section: tuple[str, ...],
     exclude_section: tuple[str, ...],
     tree: bool,
+    limit: int,
 ) -> None:
     """List notes.
 
     NOTEBOOK is an optional notebook name to filter by. You can also use -n/--notebook.
 
+    By default, shows the most recently modified notes grouped by notebook.
+
     \b
     Examples:
-      nb list                  # List latest 3 notes per notebook
+      nb list                  # List recently modified notes per notebook
       nb list work             # List notes in 'work' notebook
       nb list -n work          # Same as above (alternative syntax)
       nb list --all            # List all notes in all notebooks
       nb list --week           # List this week's daily notes
       nb list work --week      # List this week's notes in 'work' notebook
+      nb list -l 10            # Show 10 notes per notebook
 
     With --details/-d, shows extra information:
     - Todo count (incomplete todos in the note)
@@ -1297,8 +1343,8 @@ def list_notes_cmd(
             else:
                 console.print(base)
     else:
-        # Default: List latest 3 notes from each notebook
-        notes_by_notebook = get_latest_notes_per_notebook(limit=3)
+        # Default: List N most recently modified notes from each notebook
+        notes_by_notebook = get_latest_notes_per_notebook(limit=limit)
 
         if not notes_by_notebook:
             console.print("[dim]No notes found.[/dim]")
@@ -1709,3 +1755,116 @@ def cp_cmd(source_ref: str, dest_ref: str) -> None:
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
         raise SystemExit(1) from None
+
+
+@click.command("pin")
+@click.argument("note_ref")
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook containing the note",
+    shell_complete=complete_notebook,
+)
+def pin_note_cmd(note_ref: str, notebook: str | None) -> None:
+    """Pin a note for quick access.
+
+    Pinned notes can be listed with 'nb pinned' for quick access
+    to frequently used notes.
+
+    NOTE_REF can be a note path, name, alias, or date (for daily notes).
+
+    \b
+    Examples:
+      nb pin readme                  # Pin a note called readme
+      nb pin daily/friday            # Pin Friday's daily note
+      nb pin myproject -n work       # Pin work/myproject.md
+    """
+    from nb.cli.utils import get_display_path
+    from nb.core.pinned import pin_note
+
+    # Resolve the note
+    try:
+        path = resolve_note_ref(note_ref, notebook=notebook)
+    except UserCancelled:
+        console.print("[dim]Cancelled.[/dim]")
+        raise SystemExit(1) from None
+
+    if not path:
+        console.print(f"[red]Could not resolve note: {note_ref}[/red]")
+        console.print("[dim]Hint: Use 'nb stream' or 'nb search' to find notes.[/dim]")
+        raise SystemExit(1)
+
+    pin_note(path, notebook=notebook)
+    console.print(f"[green]Pinned:[/green] {get_display_path(path)}")
+
+
+@click.command("unpin")
+@click.argument("note_ref")
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook containing the note",
+    shell_complete=complete_notebook,
+)
+def unpin_note_cmd(note_ref: str, notebook: str | None) -> None:
+    """Unpin a note.
+
+    NOTE_REF can be a note path, name, alias, or date (for daily notes).
+
+    \b
+    Examples:
+      nb unpin readme
+      nb unpin myproject -n work
+    """
+    from nb.cli.utils import get_display_path
+    from nb.core.pinned import unpin_note
+
+    # Resolve the note
+    try:
+        path = resolve_note_ref(note_ref, notebook=notebook)
+    except UserCancelled:
+        console.print("[dim]Cancelled.[/dim]")
+        raise SystemExit(1) from None
+
+    if not path:
+        console.print(f"[red]Could not resolve note: {note_ref}[/red]")
+        raise SystemExit(1)
+
+    if unpin_note(path):
+        console.print(f"[green]Unpinned:[/green] {get_display_path(path)}")
+    else:
+        console.print(f"[yellow]Note was not pinned:[/yellow] {get_display_path(path)}")
+
+
+@click.command("pinned")
+@click.option(
+    "--notebook",
+    "-n",
+    help="Filter by notebook",
+    shell_complete=complete_notebook,
+)
+def list_pinned_cmd(notebook: str | None) -> None:
+    """List pinned notes.
+
+    Shows all pinned notes, optionally filtered by notebook.
+    Pinned notes are shown most recently pinned first.
+
+    \b
+    Examples:
+      nb pinned              # List all pinned notes
+      nb pinned -n work      # Only show pinned notes in work notebook
+    """
+    from nb.cli.utils import get_display_path
+    from nb.core.pinned import list_pinned_notes
+
+    pinned = list_pinned_notes(notebook=notebook)
+    if not pinned:
+        console.print("[dim]No pinned notes.[/dim]")
+        console.print("[dim]Pin a note with: nb pin <note>[/dim]")
+        return
+
+    console.print("[bold]Pinned Notes[/bold]\n")
+    for path, nb, pinned_at in pinned:
+        nb_str = f" [dim]({nb})[/dim]" if nb else ""
+        date_str = pinned_at.strftime("%Y-%m-%d")
+        console.print(f"  {get_display_path(path)}{nb_str}  [dim]{date_str}[/dim]")

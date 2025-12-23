@@ -12,7 +12,7 @@ from typing import Any
 _logger = logging.getLogger(__name__)
 
 # Current schema version
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -318,6 +318,25 @@ CREATE INDEX IF NOT EXISTS idx_inbox_items_url ON inbox_items(url);
 CREATE INDEX IF NOT EXISTS idx_inbox_items_clipped ON inbox_items(clipped_at);
 """
 
+# Phase 17 additions: note IDs and pinned notes
+SCHEMA_V17 = """
+-- Add id column to notes table for stable path-based IDs
+ALTER TABLE notes ADD COLUMN id TEXT;
+
+-- Index for note ID lookups (supports prefix matching)
+CREATE INDEX IF NOT EXISTS idx_notes_id ON notes(id);
+
+-- Pinned notes table for quick access
+CREATE TABLE IF NOT EXISTS pinned_notes (
+    note_path TEXT PRIMARY KEY,
+    notebook TEXT NOT NULL DEFAULT '',
+    pinned_at TEXT NOT NULL,
+    FOREIGN KEY (note_path) REFERENCES notes(path) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_pinned_notes_notebook ON pinned_notes(notebook);
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -336,6 +355,7 @@ MIGRATIONS: dict[int, str] = {
     14: SCHEMA_V14,
     15: SCHEMA_V15,
     16: SCHEMA_V16,
+    17: SCHEMA_V17,
 }
 
 
@@ -475,6 +495,8 @@ def rebuild_db(db: Database) -> None:
         "note_links",
         "note_views",
         "note_aliases",
+        "pinned_notes",
+        "inbox_items",
         "attachments",
         "todos",
         "notes",

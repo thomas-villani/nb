@@ -17,7 +17,7 @@ from pathlib import Path
 
 from nb.config import get_config
 from nb.models import Note
-from nb.utils.hashing import make_note_hash
+from nb.utils.hashing import make_note_hash, make_note_id
 from nb.utils.markdown import (
     extract_date,
     extract_tags,
@@ -69,6 +69,7 @@ def get_note(path: Path, notes_root: Path | None = None) -> Note | None:
     content_hash = make_note_hash(content)
 
     return Note(
+        id=make_note_id(relative_path),
         path=relative_path,
         title=title,
         date=note_date,

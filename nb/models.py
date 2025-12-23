@@ -72,6 +72,7 @@ class Attachment:
 class Note:
     """A markdown note file."""
 
+    id: str  # Stable ID based on path (SHA256(path)[:8])
     path: Path  # Relative to notes_root
     title: str
     date: date | None

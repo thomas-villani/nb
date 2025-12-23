@@ -49,6 +49,8 @@ Search notes using keyword, semantic, or hybrid search.
      - Boost recent results in ranking
    * - ``--limit N``
      - Limit number of results
+   * - ``-l, --files-only``
+     - Only output file paths (no content/metadata)
 
 Hybrid search (default) combines semantic similarity (70%) with keyword matching (30%) for best results.
 
@@ -70,6 +72,7 @@ Hybrid search (default) combines semantic similarity (70%) with keyword matching
    nb search "query" --when "last 2 weeks"
    nb search "query" --since friday
    nb search "query" --recent --limit 5
+   nb search "query" -l                 # Output file paths only
 
 Interactive search TUI
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -149,6 +152,8 @@ Search notes with regex pattern matching.
      - Show N lines before match
    * - ``-A N``
      - Show N lines after match
+   * - ``-l, --files-only``
+     - Only output file paths with matches (no content)
 
 **Examples:**
 
@@ -159,6 +164,7 @@ Search notes with regex pattern matching.
    nb grep "config" -n work        # Filter by notebook
    nb grep "setup" --note myproject
    nb grep "pattern" -C 5          # 5 lines context
+   nb grep "pattern" -l            # Output file paths only
 
 Search tips
 -----------

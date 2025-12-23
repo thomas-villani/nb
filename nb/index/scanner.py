@@ -24,7 +24,7 @@ from nb.index.todos_repo import (
     get_todo_dates_for_source,
     upsert_todos_batch,
 )
-from nb.utils.hashing import make_note_hash, normalize_path
+from nb.utils.hashing import make_note_hash, make_note_id, normalize_path
 
 # Thread-local storage for database connections
 _thread_local = threading.local()
@@ -290,12 +290,14 @@ def index_note(
     # Upsert note (now includes content, mtime, and todo_exclude columns)
     # Use normalize_path for consistent path format with todos table
     normalized_note_path = normalize_path(note.path)
+    note_id = make_note_id(note.path)
     db.execute(
         """
-        INSERT OR REPLACE INTO notes (path, title, date, notebook, content_hash, content, mtime, todo_exclude, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO notes (id, path, title, date, notebook, content_hash, content, mtime, todo_exclude, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
+            note_id,
             normalized_note_path,
             note.title,
             note.date.isoformat() if note.date else None,
@@ -594,12 +596,14 @@ def index_note_threadsafe(
     # Upsert note
     # Use normalize_path for consistent path format with todos table
     normalized_note_path = normalize_path(note.path)
+    note_id = make_note_id(note.path)
     db.execute(
         """
-        INSERT OR REPLACE INTO notes (path, title, date, notebook, content_hash, content, mtime, todo_exclude, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO notes (id, path, title, date, notebook, content_hash, content, mtime, todo_exclude, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
+            note_id,
             normalized_note_path,
             note.title,
             note.date.isoformat() if note.date else None,
@@ -783,8 +787,10 @@ def rebuild_search_index(
             continue
 
         # Build a simple note-like object for indexing
+        note_path = Path(row["path"])
         note = Note(
-            path=Path(row["path"]),
+            id=make_note_id(note_path),
+            path=note_path,
             title=row["title"] or "",
             date=None,  # Will be parsed from string if needed
             tags=[],  # We'd need to query tags separately
@@ -952,8 +958,10 @@ def sync_search_index(
             continue
 
         # Build note object
+        note_path = Path(row["path"])
         note = Note(
-            path=Path(row["path"]),
+            id=make_note_id(note_path),
+            path=note_path,
             title=row["title"] or "",
             date=None,
             tags=[],
@@ -1290,15 +1298,17 @@ def index_linked_note(
     # Use normalized path as the unique identifier for external notes
     # This ensures consistency with how todos store source_path
     note_path = normalize_path(path)
+    note_id = make_note_id(path)
 
     # Upsert note with external flag and todo_exclude
     db.execute(
         """
         INSERT OR REPLACE INTO notes
-        (path, title, date, notebook, content_hash, content, mtime, external, source_alias, todo_exclude, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, path, title, date, notebook, content_hash, content, mtime, external, source_alias, todo_exclude, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
+            note_id,
             note_path,
             note.title,
             note.date.isoformat() if note.date else None,

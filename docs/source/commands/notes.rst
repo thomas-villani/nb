@@ -190,7 +190,7 @@ Open the most recently modified (or viewed) note.
 nb history
 ----------
 
-Show recently viewed notes.
+Show recently modified notes (or view history with ``--viewed``).
 
 **Usage:** ``nb history [OPTIONS]``
 
@@ -212,12 +212,15 @@ Show recently viewed notes.
      - Show full paths instead of filenames
    * - ``-g, --group``
      - Group entries by notebook
+   * - ``-v, --viewed``
+     - Show view history instead of modification history
 
 **Examples:**
 
 .. code-block:: bash
 
-   nb history                 # Last 10 viewed
+   nb history                 # Last 10 modified notes
+   nb history --viewed        # Show view history instead
    nb history -l 50           # Last 50
    nb history -n work         # Filter by notebook
    nb history -g              # Group by notebook
@@ -351,6 +354,8 @@ List notes across notebooks.
 
    * - Option
      - Description
+   * - ``-l, --limit N``
+     - Notes to show per notebook (default: 5)
    * - ``--all``
      - List all notes (not just recent)
    * - ``--week``
@@ -370,7 +375,8 @@ List notes across notebooks.
    * - ``-xs, --exclude-section NAME``
      - Exclude notes from this section (repeatable)
 
-By default, shows title and tags. With ``--details``, also shows:
+By default, shows the most recently modified notes per notebook (grouped).
+With ``--details``, also shows:
 
 - Todo count (incomplete todos in the note)
 - Last modified time (relative, e.g., "2h ago")
@@ -381,7 +387,8 @@ By default, shows title and tags. With ``--details``, also shows:
 
 .. code-block:: bash
 
-   nb list                    # Latest 3 per notebook
+   nb list                    # Recently modified per notebook
+   nb list -l 10              # 10 notes per notebook
    nb list --all              # All notes
    nb list --week             # This week's daily notes
    nb list -n work            # Specific notebook
@@ -491,6 +498,104 @@ nb unalias
 Remove a note alias.
 
 **Usage:** ``nb unalias NAME``
+
+nb pin
+------
+
+Pin a note for quick access.
+
+**Usage:** ``nb pin [OPTIONS] NOTE_REF``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``NOTE_REF``
+     - Note path, name, alias, or date
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-n, --notebook NAME``
+     - Notebook containing the note
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb pin readme              # Pin a note
+   nb pin myproject -n work   # Pin work/myproject.md
+   nb pin daily/friday        # Pin Friday's daily note
+
+nb unpin
+--------
+
+Unpin a note.
+
+**Usage:** ``nb unpin [OPTIONS] NOTE_REF``
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``NOTE_REF``
+     - Note path, name, alias, or date
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-n, --notebook NAME``
+     - Notebook containing the note
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb unpin readme
+   nb unpin myproject -n work
+
+nb pinned
+---------
+
+List all pinned notes.
+
+**Usage:** ``nb pinned [OPTIONS]``
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-n, --notebook NAME``
+     - Filter by notebook
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb pinned                  # List all pinned notes
+   nb pinned -n work          # Only show pinned notes in work notebook
 
 nb delete
 ---------

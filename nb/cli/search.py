@@ -51,6 +51,12 @@ def register_search_commands(cli: click.Group) -> None:
     type=float,
     help="Return results above this score (default 0.4)",
 )
+@click.option(
+    "--files-only",
+    "-l",
+    is_flag=True,
+    help="Only output file paths (no content/metadata)",
+)
 def search_cmd(
     query: str | None,
     interactive: bool,
@@ -64,6 +70,7 @@ def search_cmd(
     recent: bool,
     limit: int,
     threshold: float,
+    files_only: bool,
 ) -> None:
     """Search notes by keyword, semantic similarity, or both (hybrid).
 
@@ -202,6 +209,12 @@ def search_cmd(
         console.print("[dim]No results found.[/dim]")
         return
 
+    # Files-only mode: just output paths
+    if files_only:
+        for r in results:
+            print(r.path)
+        return
+
     # Show filter info
     filter_info = []
     if date_start or date_end:
@@ -253,12 +266,19 @@ def search_cmd(
     "--notebook", "-n", help="Filter by notebook", shell_complete=complete_notebook
 )
 @click.option("--note", "-N", help="Filter by specific note (path or alias)")
+@click.option(
+    "--files-only",
+    "-l",
+    is_flag=True,
+    help="Only output file paths with matches (no content)",
+)
 def grep_cmd(
     pattern: str,
     context_lines: int,
     ignore_case: bool,
     notebook: str | None,
     note: str | None,
+    files_only: bool,
 ) -> None:
     """Search notes with regex pattern matching.
 
@@ -310,6 +330,15 @@ def grep_cmd(
 
     if not results:
         console.print("[dim]No matches found.[/dim]")
+        return
+
+    # Files-only mode: output unique file paths
+    if files_only:
+        seen_paths = set()
+        for r in results:
+            if r.path not in seen_paths:
+                print(r.path)
+                seen_paths.add(r.path)
         return
 
     console.print(f"\n[bold]Found {len(results)} matches:[/bold]\n")

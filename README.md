@@ -101,8 +101,9 @@ nb last -n work           # Last modified note in work notebook
 nb last --viewed          # Open last viewed note (instead of modified)
 nb last --viewed -n work  # Last viewed note in work notebook
 
-nb history                # Show last 10 viewed notes
-nb history -l 50          # Show last 50 viewed notes
+nb history                # Show last 10 modified notes
+nb history --viewed       # Show view history instead (notes you opened)
+nb history -l 50          # Show last 50 notes
 nb history -o 10          # Skip first 10, show next 10
 nb history -n work        # Filter by notebook
 nb history -F             # Show full paths instead of filenames
@@ -136,7 +137,8 @@ cat notes.txt | nb add                      # Pipe file content
 git diff --stat | nb add --note work/log    # Pipe command output
 pbpaste | nb add                            # Pipe clipboard (macOS)
 
-nb list                    # List latest 3 notes per notebook (with colors/tags)
+nb list                    # List recently modified notes per notebook (default 5)
+nb list -l 10              # Show 10 notes per notebook
 nb list work               # List notes in 'work' notebook
 nb list --all              # List all notes in all notebooks
 nb list --week             # List this week's daily notes
@@ -278,6 +280,23 @@ nb open daily/readme       # Also works with notebook/alias format
 nb show readme             # Show aliased note in console
 nb todo --note readme      # Filter todos by aliased note
 ```
+
+### Pinned Notes
+
+Pin frequently accessed notes for quick access:
+
+```bash
+nb pin readme              # Pin a note
+nb pin myproject -n work   # Pin work/myproject.md
+nb pin daily/friday        # Pin Friday's daily note
+
+nb pinned                  # List all pinned notes
+nb pinned -n work          # List pinned notes in work notebook
+
+nb unpin readme            # Unpin a note
+```
+
+Pinned notes are stored in the database for quick retrieval.
 
 ### Notebook Management
 
@@ -589,11 +608,13 @@ nb search "query" --since friday         # From a date onwards
 nb search "query" --until "nov 20"       # Up to a date
 nb search "query" --recent               # Boost recent results
 nb search "query" --limit 5              # Limit number of results
+nb search "query" -l              # Output file paths only (no content)
 
 nb grep "pattern"       # Regex search
 nb grep "TODO.*urgent" -C 5  # With context lines
 nb grep "config" -n work     # Filter by notebook
 nb grep "setup" --note myproject  # Filter by specific note
+nb grep "pattern" -l         # Output file paths only (no context)
 ```
 
 #### Interactive Search

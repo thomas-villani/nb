@@ -59,6 +59,20 @@ def make_note_hash(content: str) -> str:
     return hash_content(content)
 
 
+def make_note_id(path: Path) -> str:
+    """Generate a stable ID for a note based on its path.
+
+    Unlike todo IDs which include content, note IDs are based only
+    on the normalized path. This means the ID remains stable across
+    content edits but will change if the file is moved/renamed.
+
+    This is intentional: notes are identified by their location,
+    while todos are identified by their content within a file.
+    """
+    normalized = normalize_path(path)
+    return hash_content(normalized)
+
+
 def make_attachment_id(path: str, parent_type: str, parent_id: str) -> str:
     """Generate a stable ID for an attachment.
 

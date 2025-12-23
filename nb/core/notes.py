@@ -137,6 +137,49 @@ def create_note(
     return full_path
 
 
+def get_note_by_id(
+    note_id: str,
+    notebook: str | None = None,
+    notes_root: Path | None = None,
+) -> Path | None:
+    """Get a note by its ID (supports prefix matching like git).
+
+    Args:
+        note_id: Full or partial note ID (minimum 4 characters recommended)
+        notebook: Optional notebook filter
+        notes_root: Override notes root directory
+
+    Returns:
+        Path to the note, or None if not found or ambiguous.
+
+    """
+    from nb.index.db import get_db
+
+    if notes_root is None:
+        notes_root = get_config().notes_root
+
+    db = get_db()
+
+    # Support prefix matching
+    if notebook:
+        row = db.fetchone(
+            "SELECT path FROM notes WHERE id LIKE ? AND notebook = ? LIMIT 1",
+            (note_id + "%", notebook),
+        )
+    else:
+        row = db.fetchone(
+            "SELECT path FROM notes WHERE id LIKE ? LIMIT 1",
+            (note_id + "%",),
+        )
+
+    if row:
+        path = Path(row["path"])
+        if path.is_absolute():
+            return path
+        return notes_root / path
+    return None
+
+
 def get_last_modified_note(
     notebook: str | None = None,
     notes_root: Path | None = None,
