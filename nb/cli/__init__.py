@@ -98,7 +98,7 @@ class AliasedGroup(click.Group):
         return super().resolve_command(ctx, args)
 
 
-_nb_art = """
+_nb_art = f"""
 [blue]
                █████
               ░░███
@@ -107,7 +107,7 @@ _nb_art = """
     ░███ ░███  ░███ ░███
     ░███ ░███  ░███ ░███
     ████ █████ ████████
-   ░░░░ ░░░░░ ░░░░░░░░
+   ░░░░ ░░░░░ ░░░░░░░░      v{__version__}
 [/blue]
 [bright_green]Copyright (c) 2025, Tom Villani, Ph.D.[/bright_green]
 
