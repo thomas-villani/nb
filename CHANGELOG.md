@@ -1,3 +1,24 @@
+# v0.4.5 - 2025-12-24
+
+Patch release to prevent runtime errors with models that disallow custom temperature and to tidy CLI help/summary behavior.
+
+## Bug Fixes
+
+- Fix handling of temperature for models that disallow custom temperature
+  - Added MODELS_NO_CUSTOM_TEMPERATURE and _supports_custom_temperature in nb/core/llm.py
+  - Only include the temperature parameter in API requests when the selected model supports it, avoiding rejected parameters and API errors (prevents runtime failures when using models that require the default temperature)
+
+## Internal / Maintenance
+
+- Refactor CLI summarize/tldr options
+  - Extracted _base_summarize_options
+  - Made `summarize` default to `smart` and `tldr` default to `fast` for clearer UX and consistent behavior
+- Improve Click help formatting across CLI commands
+  - Add explicit literal block markers and reorder examples to produce more stable, readable help text
+- Minor test formatting tweak
+  - Adjusted warning message formatting in tests/conftest.py
+- Version bump to v0.4.5
+
 # v0.4.4 - 2025-12-24
 
 Patch release focused on test additions, internal refactors for todos/config, assistant/context improvements, and developer tooling to enable reliable contract testing and golden-file validation. No breaking changes.
