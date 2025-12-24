@@ -28,6 +28,25 @@ ANTHROPIC_VERSION = "2023-06-01"
 # Default timeout for API calls (seconds)
 DEFAULT_TIMEOUT = 120.0
 
+# Models that don't support custom temperature settings
+# These models only accept temperature=1.0 (the default)
+MODELS_NO_CUSTOM_TEMPERATURE = {
+    "o1",
+    "o1-mini",
+    "o1-preview",
+    "o3-mini",
+    "gpt-5-mini",
+}
+
+
+def _supports_custom_temperature(model: str) -> bool:
+    """Check if a model supports custom temperature settings."""
+    model_lower = model.lower()
+    for pattern in MODELS_NO_CUSTOM_TEMPERATURE:
+        if pattern in model_lower:
+            return False
+    return True
+
 
 class LLMError(Exception):
     """Base exception for LLM-related errors."""
@@ -308,10 +327,12 @@ class LLMClient:
             "messages": openai_messages,
         }
 
-        if temperature is not None:
-            body["temperature"] = temperature
-        elif self.config.temperature is not None:
-            body["temperature"] = self.config.temperature
+        # Only set temperature for models that support it
+        if _supports_custom_temperature(model):
+            if temperature is not None:
+                body["temperature"] = temperature
+            elif self.config.temperature is not None:
+                body["temperature"] = self.config.temperature
 
         if stream:
             body["stream"] = True

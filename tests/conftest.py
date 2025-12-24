@@ -42,7 +42,9 @@ if _env_file:
     else:
         import warnings
 
-        warnings.warn(f"NB_TEST_ENV_FILE set but file not found: {_env_path}", stacklevel=2)
+        warnings.warn(
+            f"NB_TEST_ENV_FILE set but file not found: {_env_path}", stacklevel=2
+        )
 
 
 # =============================================================================

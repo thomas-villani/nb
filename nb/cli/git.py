@@ -31,10 +31,9 @@ def git_init(remote: str | None) -> None:
     Creates a git repository and .gitignore file.
     Optionally adds a remote origin.
 
+    \b
     Examples:
-
         nb git init
-
         nb git init --remote git@github.com:user/notes.git
     """
     from nb.core.git import create_gitignore, init_repo, is_git_repo
@@ -129,10 +128,9 @@ def git_status(verbose: bool) -> None:
 def git_commit(message: str | None, commit_all_flag: bool) -> None:
     """Manually commit changes.
 
+    \b
     Examples:
-
         nb git commit "Weekly review complete"
-
         nb git commit --all
     """
     from nb.core.git import commit_all, is_git_repo
@@ -162,10 +160,9 @@ def git_commit(message: str | None, commit_all_flag: bool) -> None:
 def git_push(remote: str, force: bool) -> None:
     """Push commits to remote repository.
 
+    \b
     Example:
-
         nb git push
-
         nb git push --remote upstream
     """
     from nb.core.git import has_remote, is_git_repo, push
@@ -270,10 +267,9 @@ def git_sync() -> None:
 def git_log(limit: int, oneline: bool) -> None:
     """Show commit history.
 
+    \b
     Example:
-
         nb git log
-
         nb git log --limit 20 --oneline
     """
     from nb.core.git import get_log, is_git_repo
@@ -316,12 +312,10 @@ def git_log(limit: int, oneline: bool) -> None:
 def git_remote(url: str | None, add: bool, remove: bool) -> None:
     """Manage remote repository.
 
+    \b
     Examples:
-
         nb git remote
-
         nb git remote --add git@github.com:user/notes.git
-
         nb git remote --remove
     """
     from nb.core.git import get_repo, is_git_repo

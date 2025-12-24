@@ -33,16 +33,12 @@ def plan_group():
     and recent notes. Plans can be refined interactively and saved
     to notes.
 
+    \b
     Examples:
-
         nb plan week                     # Plan the upcoming week
-
         nb plan today                    # Plan or replan today
-
         nb plan week -n work             # Filter to work notebook todos
-
         nb plan week -o work             # Save plan to work notebook
-
         nb plan week --interactive       # Refine plan interactively
     """
     pass
@@ -114,16 +110,12 @@ def plan_week_command(
     Gathers incomplete todos, calendar events, and recent notes to
     generate a weekly plan with day-by-day breakdown.
 
+    \b
     Examples:
-
         nb plan week
-
         nb plan week --notebook work --no-calendar
-
         nb plan week --interactive -o today
-
         nb plan week -o work                 # Save to new note in work
-
         nb plan week --prompt "Focus on urgent items only"
     """
     _run_planning(
@@ -205,14 +197,11 @@ def plan_today_command(
     Focuses on what can realistically be accomplished today based on
     your todos, calendar, and availability.
 
+    \b
     Examples:
-
         nb plan today
-
         nb plan today --interactive
-
         nb plan today -o today --prompt "I have a meeting at 2pm"
-
         nb plan today -o work              # Save to new note in work
     """
     _run_planning(
@@ -602,18 +591,13 @@ def ask_command(
     Use --agentic for complex queries that need to query todos or search
     multiple times.
 
+    \b
     Examples:
-
         nb ask "what did we decide about the API design?"
-
         nb ask "summarize project X" --notebook work
-
         nb ask "what server version?" -N work/deploy-notes
-
         nb ask "who owns deployment?" --tag infrastructure
-
         nb ask "what remains to be done for the widget project?" --agentic
-
         nb ask "what are my overdue tasks?" --agentic
     """
     from nb.core.llm import LLMConfigError, LLMError
@@ -912,15 +896,9 @@ def _ask_agentic_non_streaming(
 # ============================================================================
 
 
-def summarize_options(f):
-    """Shared options for summarize and tldr commands."""
+def _base_summarize_options(f):
+    """Base options for summarize and tldr commands (without model selection)."""
     # Apply options in reverse order (Click decorator stacking)
-    f = click.option(
-        "--smart/--fast",
-        "use_smart",
-        default=True,
-        help="Use smart model (better) or fast model (cheaper). Default: smart.",
-    )(f)
     f = click.option(
         "--stream/--no-stream",
         default=True,
@@ -969,6 +947,30 @@ def summarize_options(f):
     return f
 
 
+def summarize_options(f):
+    """Options for summarize command (uses smart model by default)."""
+    f = click.option(
+        "--smart/--fast",
+        "use_smart",
+        default=True,
+        help="Use smart model (better) or fast model (cheaper). Default: smart.",
+    )(f)
+    f = _base_summarize_options(f)
+    return f
+
+
+def tldr_options(f):
+    """Options for tldr command (uses fast model by default)."""
+    f = click.option(
+        "--smart/--fast",
+        "use_smart",
+        default=False,
+        help="Use smart model (better) or fast model (cheaper). Default: fast.",
+    )(f)
+    f = _base_summarize_options(f)
+    return f
+
+
 @click.command(name="summarize")
 @summarize_options
 def summarize_command(
@@ -986,24 +988,16 @@ def summarize_command(
 
     Generates a comprehensive summary of one or more notes.
 
+    \b
     Examples:
-
         nb summarize                      # Summarize today's note
-
         nb summarize yesterday            # Summarize yesterday's note
-
         nb summarize work                 # Summarize all notes in work notebook
-
         nb summarize work/meeting-notes   # Summarize specific note
-
         nb summarize --tag project-x      # Summarize notes with tag
-
         nb summarize work --days 7        # Week summary for notebook
-
         nb summarize -o today             # Save to today's note
-
         nb summarize -o work              # Save to new note in work notebook
-
         nb summarize --front-matter       # Store in source's frontmatter
     """
     _run_summarize(
@@ -1021,7 +1015,7 @@ def summarize_command(
 
 
 @click.command(name="tldr")
-@summarize_options
+@tldr_options
 def tldr_command(
     target: str | None,
     notebook: str | None,
@@ -1036,15 +1030,13 @@ def tldr_command(
     """Quick 1-2 sentence summary of notes.
 
     Like 'summarize' but produces ultra-brief summaries.
+    Uses the fast model by default (use --smart to override).
 
+    \b
     Examples:
-
         nb tldr                           # TLDR today's note
-
         nb tldr work --days 7             # Week TLDR for work
-
         nb tldr --tag meeting             # TLDR meeting notes
-
         nb tldr -o work                   # Save TLDR to new note in work
     """
     _run_summarize(
@@ -1368,16 +1360,12 @@ def research_command(
 
     Requires SERPER_API_KEY environment variable for web search.
 
+    \b
     Examples:
-
         nb research "CoolCo 2025 Q4 financial results"
-
         nb research "AI trends 2025" -o today
-
         nb research "climate change policies" -o work
-
         nb research "machine learning" --search scholar --use-vectordb
-
         nb research "market analysis" --strategy depth --token-budget 200000
     """
     from nb.core.llm import LLMConfigError, LLMError
@@ -1592,14 +1580,11 @@ def review_group():
     Generate reflective reviews of your completed work, items carrying over,
     wins, and areas for improvement.
 
+    \b
     Examples:
-
         nb review day                     # End of day review
-
         nb review week                    # End of week review
-
         nb review week -o today           # Save to today's note
-
         nb review day -n work             # Filter to work notebook
     """
     pass
@@ -1658,12 +1643,10 @@ def review_day_command(
     Reflects on what was completed today, what's carrying over,
     and any wins worth noting.
 
+    \b
     Examples:
-
         nb review day
-
         nb review day --notebook work
-
         nb review day -o today
     """
     _run_review(
@@ -1730,12 +1713,10 @@ def review_week_command(
     Reflects on what was completed this week, what's carrying over,
     wins, and suggestions for improvement.
 
+    \b
     Examples:
-
         nb review week
-
         nb review week --notebook work
-
         nb review week -o work/weekly-reviews
     """
     _run_review(
@@ -1965,14 +1946,11 @@ def standup_command(
     Shows yesterday's completed work, today's calendar, and items
     needing attention. Helps prioritize the day ahead.
 
+    \b
     Examples:
-
         nb standup                        # Morning briefing
-
         nb standup -o today               # Save to today's note
-
         nb standup --notebook work        # Filter to work notebook
-
         nb standup --no-calendar          # Skip calendar integration
     """
     from datetime import date

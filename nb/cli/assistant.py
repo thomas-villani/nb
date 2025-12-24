@@ -99,18 +99,12 @@ def assistant_command(
     Examples:
         nb assistant
         > reschedule the todos for later this week to monday next week
-
-        nb assistant "add 3 todos for the quarterly review"
-
         nb assistant -n work
         > give me a status update on the project
-
+        nb assistant "add 3 todos for the quarterly review"
         nb assistant --paste "Here's my plan for today"
-
         nb assistant -f plan.md "Review this plan and add todos to work"
-
         nb assistant -N work/project "Summarize the current status"
-
         nb assistant --dry-run
         > add 3 todos for the quarterly review
     """
