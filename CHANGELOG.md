@@ -1,3 +1,59 @@
+# v0.4.4 - 2025-12-24
+
+Patch release focused on test additions, internal refactors for todos/config, assistant/context improvements, and developer tooling to enable reliable contract testing and golden-file validation. No breaking changes.
+
+## New Features
+
+- [aabf9e9] Add contract & golden-file testing infrastructure
+  - Contract integration tests for LLMs, embeddings, and Serper web search (tests/test_contract_*.py)
+  - Golden-file fixtures for Anthropic, OpenAI, and Serper responses (tests/fixtures/*) and streaming fixture examples to validate streaming parsing
+  - scripts/capture_api_responses.py to fetch real API responses and refresh golden files
+  - pytest markers and configuration for contract/vectorized/slow tests; NB_TEST_ENV_FILE support via tests/conftest.py
+  - Purpose: enable reproducible contract testing against real APIs and golden-file validation of parsing/response handling
+
+- [55e79d3] Dynamic template variables for todos and calendar
+  - Add runtime template variables: {{ todos_overdue }}, {{ todos_due_today }}, {{ todos_due_this_week }}, {{ todos_high_priority }}, and {{ calendar }}
+  - Implement format_todos_for_template and format_calendar_for_template helpers and lazy evaluation in render_template to avoid unnecessary DB/calendar queries
+  - Internal getters query nb.index.todos_repo and the calendar client only when templates require them
+  - Docs and tests updated (tests/test_core_templates.py) to cover formatting, lazy evaluation, and edge cases
+
+- [086b7a2] Assistant: include file/clipboard/note context and CLI options
+  - New assistant CLI flags: --file / -f, --paste, -N / --note to include additional context in LLM calls
+  - _gather_additional_context reads files, clipboard, and notes and injects additional_context into single-turn and streaming assistant flows
+  - System prompt now receives user-provided context when present; interactive UX surfaces when extra context is loaded
+  - Docs and README updated with usage examples
+
+## Refactorings
+
+- [6adcd3d] Modularize todos CLI and configuration
+  - Split monolithic nb/cli/todos.py into nb/cli/todos/{display.py,formatters.py,views.py,__init__.py} to separate listing, formatting, and view management
+  - Replace single-file nb/config.py with nb/config package (models.py, parsers.py, io.py, utils.py) and re-export public APIs from nb/config/__init__.py to preserve backwards compatibility
+  - Purpose: improve readability, testability, and prepare for future features (kanban, views). No intended behavioral changes; callers relying on old imports should continue to work but may update imports for clarity
+
+- [086b7a2] Indexing refactor and robustness improvements
+  - Introduce NoteData and helper functions: _extract_note_data, _persist_note_to_db, _index_note_vectors, _index_note_todos_and_attachments to centralize persistence and indexing logic
+  - Improve thread-safe indexing using a vector lock and surface better logging and error handling across attachments, todos, db, search, and completion modules
+  - Minor typing improvements and defensive token handling
+
+## Testing & QA
+
+- [aabf9e9] Expand tests and CI support for contract/vectorized scenarios
+  - Add unit/integration tests and parsing checks for real-like responses (tests/test_llm.py, tests/test_ai_ask.py updates)
+  - Guidance in README.md and CLAUDE.md on running contract tests and using NB_TEST_ENV_FILE or env vars with real API keys
+  - Note: some real-search tests remain skipped pending singleton reset work
+
+- [55e79d3], [086b7a2] Test updates for new features
+  - Expand tests for template formatting, calendar formatting, lazy evaluation, assistant context, and indexing changes; tests updated to use stable note IDs where needed
+
+## Maintenance
+
+- [dc94e34] Bump version: 0.4.3 → 0.4.4
+- [aabf9e9] Bump numpy requirement to 2.4.0 and update uv.lock accordingly
+- [55e79d3] Update uv.lock: bump nb-cli to 0.4.3 and adjust optional extras (deepgram-sdk, numpy, sounddevice/soundfile, pywin32)
+- Misc: small CLI/TUI UX tweaks (confirm dialogs, key remaps), README/docs updates, and minor TODO.md adjustments
+
+No breaking changes in this release.
+
 # v0.4.3 - 2025-12-23
 
 Patch release that introduces AI-powered daily/weekly reviews and morning standups, plus stable note IDs for faster lookups. Includes CLI/TUI wiring, docs, and tests.
