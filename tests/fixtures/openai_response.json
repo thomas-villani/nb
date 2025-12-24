@@ -1,0 +1,30 @@
+{
+  "id": "chatcmpl-9vKrZ1234567890abcdefg",
+  "object": "chat.completion",
+  "created": 1703462400,
+  "model": "gpt-4o-2024-08-06",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello! I'm an AI assistant powered by GPT-4. How can I help you today?",
+        "refusal": null
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 15,
+    "completion_tokens": 18,
+    "total_tokens": 33,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    }
+  },
+  "system_fingerprint": "fp_6b68a8204b"
+}

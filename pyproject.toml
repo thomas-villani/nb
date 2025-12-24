@@ -52,7 +52,7 @@ calendar = [
 all = [
     "sounddevice>=0.4.6",
     "soundfile>=0.12.0",
-    "numpy>=1.24.0",
+    "numpy>=2.4.0",
     "deepgram-sdk>=3.0.0",
     "pywin32>=306; sys_platform == 'win32'"
 ]
@@ -80,6 +80,11 @@ python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
 filterwarnings = ["ignore::DeprecationWarning"]
+markers = [
+    "contract: tests requiring real API keys (run with pytest -m contract)",
+    "vectorized: tests requiring vector indexing and embeddings API",
+    "slow: slow-running tests",
+]
 
 [tool.coverage.run]
 source = ["nb"]

@@ -57,7 +57,15 @@ Alternatively, use OpenAI embeddings:
 .. code-block:: bash
 
    nb config set embeddings.provider openai
-   nb config set embeddings.api_key sk-your-key-here
+
+   # Set your API key via environment variable (never in config.yaml)
+   export OPENAI_API_KEY=sk-your-key-here
+
+   # Or add to your .env file at ~/notes/.nb/.env
+   # OPENAI_API_KEY=sk-your-key-here
+
+   # Verify your API key is detected
+   nb config api-keys
 
 Setting up meeting recording
 ----------------------------

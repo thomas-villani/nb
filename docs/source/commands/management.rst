@@ -957,6 +957,8 @@ Help
 nb help
 ^^^^^^^
 
-Display the README in rich formatting.
+Open the documentation in your web browser.
 
 **Usage:** ``nb help``
+
+Opens the local HTML documentation (if built) or displays an error with build instructions.

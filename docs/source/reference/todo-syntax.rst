@@ -61,17 +61,29 @@ Use ``@due(...)`` with flexible date formats:
    - [ ] Task @due(next week)
    - [ ] Task @due(2025-12-01)
    - [ ] Task @due(dec 15)
+   - [ ] Task @due(+7)           # 7 days from now
+   - [ ] Task @due(+1)           # tomorrow (alternative syntax)
+
+The ``+N`` syntax sets the due date to N days from today.
 
 Priority
 ^^^^^^^^
 
-Use ``@priority(1|2|3)``:
+Use ``@priority(...)`` with numeric or named values:
 
 .. code-block:: markdown
 
+   # Numeric syntax
    - [ ] High priority @priority(1)
    - [ ] Medium priority @priority(2)
    - [ ] Low priority @priority(3)
+
+   # Named syntax (case-insensitive)
+   - [ ] High priority @priority(high)
+   - [ ] Medium priority @priority(medium)
+   - [ ] Low priority @priority(low)
+
+Both syntaxes are equivalent: ``@priority(1)`` = ``@priority(high)``, etc.
 
 Tags
 ^^^^

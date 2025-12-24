@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Generator
 from datetime import date
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from dotenv import load_dotenv
 
 from nb import config as config_module
 from nb.cli import cli
@@ -20,6 +22,48 @@ from nb.core.ai import summarize as summarize_module
 from nb.index import scanner as scanner_module
 from nb.index.db import reset_db
 from nb.index.search import reset_search
+
+# =============================================================================
+# Load API keys from .env file for contract tests
+# =============================================================================
+# Set NB_TEST_ENV_FILE to the path of your .env file containing API keys.
+# Example: NB_TEST_ENV_FILE=~/.nb/.env pytest -m contract
+#
+# The .env file should contain:
+#   ANTHROPIC_API_KEY=sk-ant-...
+#   OPENAI_API_KEY=sk-...
+#   SERPER_API_KEY=...
+
+_env_file = os.getenv("NB_TEST_ENV_FILE")
+if _env_file:
+    _env_path = Path(_env_file).expanduser()
+    if _env_path.exists():
+        load_dotenv(_env_path)
+    else:
+        import warnings
+
+        warnings.warn(f"NB_TEST_ENV_FILE set but file not found: {_env_path}", stacklevel=2)
+
+
+# =============================================================================
+# Contract Test Skip Conditions
+# =============================================================================
+
+# These can be used with @pytest.mark.skipif for contract tests
+requires_anthropic_key = pytest.mark.skipif(
+    not os.getenv("ANTHROPIC_API_KEY"),
+    reason="requires ANTHROPIC_API_KEY environment variable",
+)
+
+requires_openai_key = pytest.mark.skipif(
+    not os.getenv("OPENAI_API_KEY"),
+    reason="requires OPENAI_API_KEY environment variable",
+)
+
+requires_serper_key = pytest.mark.skipif(
+    not os.getenv("SERPER_API_KEY"),
+    reason="requires SERPER_API_KEY environment variable",
+)
 
 
 @pytest.fixture
@@ -318,3 +362,70 @@ def get_todo_id(cli_runner: CliRunner) -> Callable[[str], str | None]:
         return None
 
     return _get_id
+
+
+# =============================================================================
+# Vector/Integration Test Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def vectorized_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Generator[Config]:
+    """Config with vector indexing ENABLED for integration tests.
+
+    Use this fixture for tests that need to verify actual vector embeddings
+    and semantic search functionality. Requires OPENAI_API_KEY for embeddings.
+
+    Usage:
+        @pytest.mark.vectorized
+        @requires_openai_key
+        def test_semantic_search(vectorized_config):
+            # Test with real vector embeddings
+    """
+    notes_root = tmp_path / "notes"
+    notes_root.mkdir()
+    nb_dir = notes_root / ".nb"
+    nb_dir.mkdir()
+
+    cfg = Config(
+        notes_root=notes_root,
+        editor="echo",
+        notebooks=[
+            NotebookConfig(name="daily", date_based=True),
+            NotebookConfig(name="projects", date_based=False),
+            NotebookConfig(name="work", date_based=False),
+        ],
+        embeddings=EmbeddingsConfig(
+            provider="openai",
+            model="text-embedding-3-small",
+        ),
+        date_format="%Y-%m-%d",
+        time_format="%H:%M",
+    )
+
+    # Create notebook directories
+    for nb in cfg.notebooks:
+        if not nb.is_external:
+            (notes_root / nb.name).mkdir(exist_ok=True)
+
+    # ENABLE vector indexing (opposite of cli_config)
+    scanner_module.ENABLE_VECTOR_INDEXING = True
+
+    # Patch get_config globally
+    monkeypatch.setattr(config_module, "_config", cfg)
+    monkeypatch.setattr(config_module, "get_config", lambda: cfg)
+    monkeypatch.setattr(cli_utils_module, "get_config", lambda: cfg)
+    monkeypatch.setattr(templates_module, "get_config", lambda: cfg)
+    monkeypatch.setattr(notebooks_module, "get_config", lambda: cfg)
+    monkeypatch.setattr(note_links_module, "get_config", lambda: cfg)
+    monkeypatch.setattr(summarize_module, "get_config", lambda: cfg)
+
+    yield cfg
+
+    # Cleanup
+    scanner_module.ENABLE_VECTOR_INDEXING = True  # Restore default
+    reset_search()
+    config_module.reset_config()
+    reset_db()

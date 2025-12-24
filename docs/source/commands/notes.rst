@@ -314,6 +314,114 @@ Supports stdin piping:
    git diff --stat | nb add --note work/log
    pbpaste | nb add                          # macOS clipboard
 
+nb log
+------
+
+Append timestamped content to a note.
+
+**Usage:** ``nb log [OPTIONS] [TEXT]``
+
+Prepends a timestamp using your configured ``date_format`` and ``time_format`` settings.
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``TEXT``
+     - Content to log (optional if piping from stdin)
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``--note, -N NAME``
+     - Log to specific note instead of today's
+   * - ``-n, --notebook NAME``
+     - Notebook context for resolving note
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb log "Started working on feature X"     # Today's daily note
+   nb log "Meeting notes" --note work/log    # Specific note
+   nb log "Entry" -N proj                    # Using alias
+
+Supports stdin piping:
+
+.. code-block:: bash
+
+   git diff --stat | nb log --note work/changes
+   echo "Completed task" | nb log
+
+nb clip
+-------
+
+Clip content from a URL or file to a note.
+
+**Usage:** ``nb clip [OPTIONS] SOURCE``
+
+Fetches content from a URL or converts a local file to markdown and saves it.
+By default appends to today's daily note.
+
+**Arguments:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Argument
+     - Description
+   * - ``SOURCE``
+     - URL or local file path
+
+**Supported file types:** PDF, DOCX, DOC, PPTX, XLSX, ODT, EPUB, RTF, HTML, and more.
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-n, --notebook NAME``
+     - Create new note in this notebook
+   * - ``--to NAME``
+     - Append to specific note (path, alias, or notebook/note format)
+   * - ``-t, --tag NAME``
+     - Add tags (repeatable)
+   * - ``-s, --section NAME``
+     - Extract only this section from the page (supports wildcards)
+   * - ``-T, --title NAME``
+     - Custom title (overrides extracted title)
+   * - ``--no-domain-tag``
+     - Don't auto-tag with source domain
+
+**Examples:**
+
+.. code-block:: bash
+
+   # Web clipping
+   nb clip https://example.com/article              # Append to today
+   nb clip https://example.com/article -n bookmarks # New note in notebook
+   nb clip https://example.com/article --to research.md  # Append to note
+   nb clip https://example.com/article --tag python --tag tutorial
+   nb clip https://docs.python.org --section "Installation"
+
+   # Local file conversion
+   nb clip ~/Documents/report.pdf
+   nb clip ./meeting-notes.docx -n work
+   nb clip presentation.pptx --title "Q4 Presentation"
+
 nb edit
 -------
 
@@ -774,3 +882,25 @@ Command aliases
      - ``last``
    * - ``o``
      - ``open``
+   * - ``s``
+     - ``search``
+   * - ``ss``
+     - ``search --semantic``
+   * - ``ls``
+     - ``list``
+   * - ``nbs``
+     - ``notebooks``
+   * - ``td``
+     - ``todo``
+   * - ``ta``
+     - ``todo add``
+   * - ``tdd``
+     - ``todo done``
+   * - ``now``
+     - ``todo --today``
+   * - ``rec``
+     - ``record``
+   * - ``c``
+     - ``clip``
+
+Additionally, ``nbt`` is a standalone executable that works exactly like ``nb todo``.

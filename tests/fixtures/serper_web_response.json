@@ -1,0 +1,29 @@
+{
+  "searchParameters": {
+    "q": "python pytest best practices",
+    "type": "search",
+    "num": 10,
+    "page": 1
+  },
+  "organic": [
+    {
+      "title": "Best Practices for Testing Python Code",
+      "link": "https://example.com/python-testing",
+      "snippet": "Learn the best practices for writing effective Python tests using pytest framework.",
+      "position": 1
+    },
+    {
+      "title": "Pytest Documentation - Fixtures",
+      "link": "https://docs.pytest.org/en/stable/fixture.html",
+      "snippet": "Fixtures provide a fixed baseline for tests to reliably and repeatedly execute.",
+      "position": 2
+    },
+    {
+      "title": "Advanced Pytest Patterns",
+      "link": "https://example.com/advanced-pytest",
+      "snippet": "Explore advanced testing patterns including parametrization, markers, and plugins.",
+      "position": 3
+    }
+  ],
+  "credits": 1
+}

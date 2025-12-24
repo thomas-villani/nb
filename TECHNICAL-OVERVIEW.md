@@ -34,7 +34,7 @@ The `nb` CLI is a note-taking and task management tool built with Python. It fol
 │    nb/cli/  (notes, todos, search, record, web, config...)  │
 ├─────────────────────────────────────────────────────────────┤
 │              TUI Layer (rich)    |    Web Layer (HTTP)      │
-│         nb/tui/todos.py, review.py   |   nb/web.py          │
+│         nb/tui/todos.py, review.py   |   nb/web/            │
 ├─────────────────────────────────────────────────────────────┤
 │                    Core Business Logic                      │
 │  nb/core/notes.py | todos.py | links.py | templates.py | aliases.py │
@@ -69,7 +69,7 @@ nb-cli/
 ├── nb/                          # Main application package
 │   ├── config.py                # Configuration management
 │   ├── models.py                # Data models (Note, Todo, TodoStatus, etc.)
-│   ├── web.py                   # Web interface (HTTP server + UI)
+│   ├── web/                     # Web interface (HTTP server + UI)
 │   ├── cli/                     # CLI commands (Click framework)
 │   │   ├── __init__.py          # Main CLI entry point & aliases
 │   │   ├── notes.py             # Note commands (today, new, edit, list)
@@ -93,7 +93,7 @@ nb-cli/
 │   │   ├── attachments.py       # Attachment management
 │   │   └── links.py             # Linked files management
 │   ├── index/                   # Indexing & search
-│   │   ├── db.py                # SQLite database layer (schema v12)
+│   │   ├── db.py                # SQLite database layer (schema v17)
 │   │   ├── scanner.py           # File scanning & indexing
 │   │   ├── search.py            # Search engine (vector + FTS)
 │   │   └── todos_repo.py        # Todo database queries
@@ -570,7 +570,7 @@ IDs are stable across sessions but change if content or location changes.
 
 **Location:** `nb/index/db.py`
 
-### Schema Version: 12
+### Schema Version: 17
 
 Auto-migrates on startup; backward compatible. Migration history:
 - v5: Added `mtime` column for fast change detection
@@ -582,6 +582,10 @@ Auto-migrates on startup; backward compatible. Migration history:
 - v11: Added `note_aliases` table for quick note access
 - v12: Added `completed_date` column for activity tracking
 - v13: Per-notebook alias uniqueness (composite primary keys for aliases)
+- v14: Added `attachments` table for file/URL attachments
+- v15: Added `pinned_notes` table for quick access
+- v16: Added `inbox_items` table for Raindrop.io integration
+- v17: Added `excluded_notes` table for per-note todo exclusion
 
 ### Tables
 
@@ -948,7 +952,7 @@ Interactive todo review for weekly/daily reviews. Presents todos one at a time w
 
 ## Web Interface
 
-**Location:** `nb/web.py`
+**Location:** `nb/web/`
 
 ### Overview
 

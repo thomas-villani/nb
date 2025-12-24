@@ -1,0 +1,29 @@
+{
+  "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "I'll search for that information in your notes."
+    },
+    {
+      "type": "tool_use",
+      "id": "toolu_01A09q90qw90lq917835lq9",
+      "name": "search_notes",
+      "input": {
+        "query": "budget meeting",
+        "max_results": 5
+      }
+    }
+  ],
+  "model": "claude-sonnet-4-20250514",
+  "stop_reason": "tool_use",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 150,
+    "output_tokens": 45,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0
+  }
+}

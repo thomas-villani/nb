@@ -97,7 +97,7 @@ On Windows, the plan command can read your Outlook calendar to:
 - Calculate available time blocks
 - Avoid scheduling conflicts
 
-Install the optional dependency: ``pip install nb-cli[outlook]``
+Install the optional dependency: ``uv sync --extra calendar`` or ``pip install nb-cli[calendar]``
 
 nb review
 ---------

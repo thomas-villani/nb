@@ -1872,6 +1872,90 @@ mypy nb/
 ruff check nb/
 ```
 
+### Testing
+
+The test suite has several categories designed to balance fast feedback with thorough validation:
+
+```bash
+# Fast tests (no API keys required) - default for CI
+pytest
+
+# Exclude contract tests (same as above, explicit)
+pytest -m "not contract and not vectorized"
+
+# Run contract tests (requires API keys)
+pytest -m contract
+
+# Run vector/embeddings tests (requires OPENAI_API_KEY)
+pytest -m vectorized
+
+# Run a specific test file
+pytest tests/test_cli.py -v
+```
+
+#### Test Categories
+
+| Marker | Description | API Keys Required |
+|--------|-------------|-------------------|
+| (none) | Fast unit/integration tests | None |
+| `contract` | Tests against real LLM/search APIs | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `SERPER_API_KEY` |
+| `vectorized` | Tests with real vector embeddings | `OPENAI_API_KEY` |
+| `slow` | Long-running tests | Varies |
+
+#### Setting Up API Keys for Contract Tests
+
+Contract tests require real API keys. You can provide them via environment variables or a `.env` file:
+
+**Option 1: Environment variables**
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
+export SERPER_API_KEY=...
+pytest -m contract
+```
+
+**Option 2: Use `NB_TEST_ENV_FILE`** (recommended)
+```bash
+# Point to your existing .env file
+NB_TEST_ENV_FILE=~/.nb/.env pytest -m contract
+
+# Or create a dedicated test env file
+NB_TEST_ENV_FILE=~/secrets/test.env pytest -m contract
+```
+
+The `.env` file should contain:
+```
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+SERPER_API_KEY=...
+```
+
+#### Handling Non-Determinacy in Contract Tests
+
+AI responses can vary even with `temperature=0.0`. Contract tests are designed to be resilient by:
+
+1. **Using `temperature=0.0`** for maximum determinism
+2. **Using simple, constrained prompts** that limit possible responses
+3. **Asserting on structure, not exact content** (e.g., "has content", "has tokens")
+4. **Flexible content assertions** (e.g., `"hello" in response.lower()`)
+5. **Allowing alternative valid responses** (e.g., tool call OR text response)
+
+If a contract test fails intermittently, make the assertion more flexible rather than removing the test.
+
+#### Golden File Tests
+
+API response parsing is tested against captured real responses in `tests/fixtures/`. These ensure our parsing code stays compatible with actual API formats:
+
+- `anthropic_response.json` - Standard Claude response
+- `anthropic_tool_response.json` - Tool-calling response
+- `openai_response.json` - Standard GPT response
+- `serper_web_response.json` - Web search results
+
+To refresh golden files when APIs change:
+```bash
+python scripts/capture_api_responses.py
+```
+
 ## License
 
 MIT

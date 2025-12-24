@@ -32,17 +32,8 @@ Full example:
        path: ~/Documents/Obsidian/vault
        date_based: false
 
-   linked_notes:
-     - path: ~/docs/wiki
-       alias: wiki
-       notebook: "@wiki"
-       recursive: true
-       todo_exclude: false
-       sync: true
-     - path: ~/code/project/TODO.md
-       alias: project
-       notebook: "@project"
-       sync: true
+   # Note: linked_notes are managed via 'nb link' command and stored in the database
+   # The example below is for illustration only - use 'nb link add' to add links
 
    date_format: "%Y-%m-%d"
    time_format: "%H:%M"
@@ -144,26 +135,37 @@ Use emoji directly or these aliases:
 ``star``, ``check``, ``pin``, ``flag``, ``work``, ``home``, ``code``,
 ``rocket``, ``target``, ``brain``
 
-Linked notes options
---------------------
+Linked notes
+------------
+
+Linked notes are **stored in the database**, not in config.yaml. Use the ``nb link`` command to manage them:
+
+.. code-block:: bash
+
+   nb link add ~/docs/wiki --alias wiki          # Link a directory
+   nb link add ~/code/TODO.md --alias project    # Link a file
+   nb link list                                   # List all links
+   nb link remove wiki                            # Remove a link
+
+**Link options** (specified via command flags):
 
 .. list-table::
    :header-rows: 1
 
    * - Option
      - Description
-   * - ``path``
-     - Path to file or directory (required)
-   * - ``alias``
+   * - ``--alias, -a``
      - Short name for the link
-   * - ``notebook``
+   * - ``--notebook, -n``
      - Virtual notebook name (default: ``@alias``)
-   * - ``recursive``
+   * - ``--recursive / --no-recursive``
      - Scan subdirectories (for directories)
-   * - ``todo_exclude``
+   * - ``--todo-exclude``
      - Hide todos from ``nb todo``
-   * - ``sync``
+   * - ``--sync / --no-sync``
      - Sync completions back to source file
+
+See :doc:`../commands/linked-files` for full documentation.
 
 Global options
 --------------
@@ -481,13 +483,13 @@ They are loaded exclusively from environment variables.
      - Used By
    * - ``ANTHROPIC_API_KEY``
      - LLM (Claude)
-     - ``nb ai`` commands when ``llm.provider: anthropic``
+     - AI commands (``nb ask``, ``nb assistant``, etc.) when ``llm.provider: anthropic``
    * - ``OPENAI_API_KEY``
      - LLM / Embeddings
-     - ``nb ai`` commands when ``llm.provider: openai``, embeddings when ``embeddings.provider: openai``
+     - AI commands when ``llm.provider: openai``, embeddings when ``embeddings.provider: openai``
    * - ``SERPER_API_KEY``
      - Web Search
-     - ``nb ai research`` command
+     - ``nb research`` command
    * - ``DEEPGRAM_API_KEY``
      - Transcription
      - ``nb transcribe`` command

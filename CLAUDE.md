@@ -59,9 +59,9 @@ API keys are **never stored in config.yaml** (which may be committed to VCS). Th
 **Supported API keys**:
 | Environment Variable | Service | Used By |
 |---------------------|---------|---------|
-| `ANTHROPIC_API_KEY` | LLM (Claude) | `nb ai` commands when `llm.provider: anthropic` |
-| `OPENAI_API_KEY` | LLM / Embeddings | `nb ai` commands when `llm.provider: openai`, or embeddings when `embeddings.provider: openai` |
-| `SERPER_API_KEY` | Web Search | `nb ai research` command |
+| `ANTHROPIC_API_KEY` | LLM (Claude) | AI commands (`nb ask`, `nb assistant`, etc.) when `llm.provider: anthropic` |
+| `OPENAI_API_KEY` | LLM / Embeddings | AI commands when `llm.provider: openai`, or embeddings when `embeddings.provider: openai` |
+| `SERPER_API_KEY` | Web Search | `nb research` command |
 | `DEEPGRAM_API_KEY` | Transcription | `nb transcribe` command |
 | `RAINDROP_API_KEY` | Inbox | `nb inbox` command |
 
@@ -78,12 +78,64 @@ SERPER_API_KEY=...
 
 ## Testing
 
-Tests use temporary directories via pytest fixtures in `tests/conftest.py`:
+### Running Tests
+
+```bash
+# Fast tests (no API keys required) - default for CI
+.venv/Scripts/python.exe -m pytest
+
+# Contract tests (requires API keys in .env)
+.venv/Scripts/python.exe -m pytest -m contract
+
+# Vector/embeddings tests (requires OPENAI_API_KEY)
+.venv/Scripts/python.exe -m pytest -m vectorized
+
+# Exclude slow tests
+.venv/Scripts/python.exe -m pytest -m "not contract and not vectorized"
+
+# Run specific test file
+.venv/Scripts/python.exe -m pytest tests/test_cli.py -v
+```
+
+### Test Categories
+
+| Marker | Description | API Keys Required |
+|--------|-------------|-------------------|
+| (none) | Fast unit/integration tests | None |
+| `contract` | Tests against real APIs | ANTHROPIC_API_KEY, OPENAI_API_KEY, SERPER_API_KEY |
+| `vectorized` | Tests with real embeddings | OPENAI_API_KEY |
+| `slow` | Long-running tests | Varies |
+
+### Key Fixtures (`tests/conftest.py`)
+
 - `temp_notes_root` - Creates temp directory with `.nb` folder
 - `temp_config` - Config with 3 test notebooks (daily, projects, work)
 - `mock_config` - Patches `get_config()` to return temp config
+- `mock_cli_config` - Like mock_config but with vector indexing disabled (faster)
 - `create_note` - Factory for creating test notes
+- `indexed_note` - Factory that creates AND indexes a note
 - `fixed_today` - Fixes `date.today()` to 2025-11-28 for deterministic tests
+- `vectorized_config` - Config with vector indexing enabled (for contract tests)
+
+### Skip Decorators
+
+```python
+from conftest import requires_anthropic_key, requires_openai_key, requires_serper_key
+
+@pytest.mark.contract
+@requires_anthropic_key
+def test_real_llm_call():
+    # Skipped if ANTHROPIC_API_KEY not set
+    ...
+```
+
+### Golden File Tests
+
+API response parsing is tested against real captured responses in `tests/fixtures/`:
+- `anthropic_response.json` - Standard Claude response
+- `anthropic_tool_response.json` - Tool-calling response
+- `openai_response.json` - Standard GPT response
+- `serper_web_response.json` - Web search results
 
 ## Code Style
 

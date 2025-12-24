@@ -315,3 +315,99 @@ class TestLLMClientBaseURL:
         client = LLMClient(config)
 
         assert client._get_base_url() == "https://custom.api.com"
+
+
+# =============================================================================
+# Golden File Tests - Verify parsing against real API response formats
+# =============================================================================
+
+
+class TestGoldenFileAnthropicParsing:
+    """Tests that verify Anthropic response parsing matches real API format.
+
+    These tests use captured real API responses to ensure our parsing logic
+    stays in sync with actual API behavior.
+    """
+
+    @pytest.fixture
+    def client(self):
+        config = LLMConfig(provider="anthropic", api_key="test-key")
+        return LLMClient(config)
+
+    @pytest.fixture
+    def fixtures_path(self):
+        from pathlib import Path
+
+        return Path(__file__).parent / "fixtures"
+
+    def test_parse_real_anthropic_response(self, client, fixtures_path):
+        """Verify parsing of a real Anthropic API response."""
+        import json
+
+        with open(fixtures_path / "anthropic_response.json") as f:
+            data = json.load(f)
+
+        response = client._parse_anthropic_response(data)
+
+        assert (
+            response.content
+            == "Hello! I'm Claude, an AI assistant. How can I help you today?"
+        )
+        assert response.model == "claude-sonnet-4-20250514"
+        assert response.input_tokens == 12
+        assert response.output_tokens == 19
+        assert response.stop_reason == "end_turn"
+
+    def test_parse_real_anthropic_tool_response(self, client, fixtures_path):
+        """Verify parsing of a real Anthropic tool-use response."""
+        import json
+
+        with open(fixtures_path / "anthropic_tool_response.json") as f:
+            data = json.load(f)
+
+        response = client._parse_anthropic_response(data)
+
+        # Should extract text content
+        assert "search for that information" in response.content
+        assert response.stop_reason == "tool_use"
+        assert response.input_tokens == 150
+        assert response.output_tokens == 45
+
+        # Should extract tool calls
+        assert response.tool_calls is not None
+        assert len(response.tool_calls) == 1
+        assert response.tool_calls[0].name == "search_notes"
+        assert response.tool_calls[0].arguments["query"] == "budget meeting"
+
+
+class TestGoldenFileOpenAIParsing:
+    """Tests that verify OpenAI response parsing matches real API format."""
+
+    @pytest.fixture
+    def client(self):
+        config = LLMConfig(provider="openai", api_key="test-key")
+        return LLMClient(config)
+
+    @pytest.fixture
+    def fixtures_path(self):
+        from pathlib import Path
+
+        return Path(__file__).parent / "fixtures"
+
+    def test_parse_real_openai_response(self, client, fixtures_path):
+        """Verify parsing of a real OpenAI API response."""
+        import json
+
+        with open(fixtures_path / "openai_response.json") as f:
+            data = json.load(f)
+
+        response = client._parse_openai_response(data)
+
+        assert (
+            response.content
+            == "Hello! I'm an AI assistant powered by GPT-4. How can I help you today?"
+        )
+        assert response.model == "gpt-4o-2024-08-06"
+        assert response.input_tokens == 15
+        assert response.output_tokens == 18
+        assert response.stop_reason == "stop"
