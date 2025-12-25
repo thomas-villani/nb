@@ -1,3 +1,20 @@
+# v0.4.6 - 2025-12-25
+
+Patch release adding a background indexing daemon with CLI management plus small UI and packaging updates.
+
+## New Features
+
+- Add a full-featured background daemon (nb/daemon.py) that watches notes, external notebooks and linked files and keeps the index up-to-date. Includes debounce handling, state/pid file management and graceful shutdown.
+- Add CLI management commands to control the daemon: nb daemon start|stop|status|restart|log. Implement helper auto_index_if_needed in nb/cli/daemon.py and register commands in nb/cli/__init__.py.
+- Provide nb-daemon entry point and an optional "daemon" extra (watchdog) in pyproject.toml; update uv.lock to include watchdog. The daemon integration causes on-demand indexing to be skipped when the daemon is running to provide near-instant command responses (watchdog required for full daemon functionality).
+- Documentation and README updates: docs/source/commands/daemon.rst and README.md added and included in the docs index.
+- Update todo.md (mark template enhancement done).
+
+## Miscellaneous
+
+- Add application version to the About screen.
+- Bump package version to 0.4.6.
+
 # v0.4.5 - 2025-12-24
 
 Patch release to prevent runtime errors with models that disallow custom temperature and to tidy CLI help/summary behavior.
