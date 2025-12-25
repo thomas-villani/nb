@@ -145,7 +145,7 @@ todo_exclude: true
 - [x] Make ai function flags consistent (e.g. -b is for notebook for some reason)
 - [x] Need to improve the `nb ask` function to handle queries like `nb ask "What still remains to be done for the wijjit project?"`
 - [ ] Add clipboard integration to various commands (e.g. nb add --paste)
-- [ ] Enhance templates by adding fancy tags like ``{{ calendar }}` and `{{ todos.overdue }}` and `{{ todos.due_today }}`
+- [x] Enhance templates by adding fancy tags like ``{{ calendar }}` and `{{ todos.overdue }}` and `{{ todos.due_today }}`
 - [ ] Week-based notebooks where `nb today` adds todays date in a section and notes are organized weekly.
 
 ### Phase 5: Wijjit TUI
@@ -162,7 +162,7 @@ todo_exclude: true
 ### Phase 6: Future Enhancements
 - [ ] Recurring todos (`@recur(weekly)`) #feature
 - [ ] Contextual views - e.g. set time windows when `nbt` shows certain notebooks (e.g. work notebooks from 9-5p)
-- [ ] Auto TL;DR generation and stash in frontmatter, especially for `inbox` feature
+- [x] Auto TL;DR generation and stash in frontmatter, especially for `inbox` feature
 - [x] Export to various formats (HTML, PDF) #feature
 - [ ] Calendar view for due dates #feature
 - [ ] Due date reminders (optional notifications) #feature
@@ -171,7 +171,7 @@ todo_exclude: true
 - [x] Web clipper via integration with raindrop
 
 ### AI Ideas:
-- [ ] Generate narrative of what was completed in the week
+- [x] Generate narrative of what was completed in the week
 - [x] Summarize notes, generate TL;DR
 - [x] Weekly/daily planner
   - [x] Need to allow filtering by notebook to make a plan for specific notebook(s)

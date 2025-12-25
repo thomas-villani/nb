@@ -1140,6 +1140,164 @@ The `.gitignore` created by `nb git init` excludes:
 - `.nb/` directory (database, vectors, config)
 - Common temporary files (`.DS_Store`, `*.swp`, etc.)
 
+### Background Daemon
+
+The optional background daemon watches for file changes and keeps the index updated automatically, making CLI commands near-instant.
+
+**Requires optional dependency:**
+
+```bash
+uv sync --extra daemon
+# or: uv pip install watchdog
+```
+
+#### Commands
+
+```bash
+nb daemon start           # Start background watcher (daemonized)
+nb daemon start -f        # Run in foreground (useful for debugging)
+nb daemon stop            # Stop the daemon
+nb daemon status          # Check if running, show stats
+nb daemon restart         # Restart the daemon
+nb daemon log             # View daemon log
+nb daemon log -f          # Follow log output (like tail -f)
+```
+
+#### What Gets Watched
+
+- All notebooks under `notes_root`
+- External notebook paths
+- Linked todo files
+- Linked note files/directories
+
+When the daemon is running, commands like `nb todo` and `nb search` skip the indexing step, making them significantly faster.
+
+#### Running as a System Service
+
+The daemon automatically loads configuration from `~/notes/.nb/config.yaml` when run without arguments.
+
+**Finding the executable path:**
+
+If you installed nb with `uv`, find the executable path:
+
+```bash
+# If installed as a tool
+uv tool run --from nb-cli which nb-daemon
+
+# If installed in a project
+uv run which nb-daemon   # Unix/macOS
+uv run where nb-daemon   # Windows
+```
+
+**Windows (Task Scheduler):**
+
+1. Open Task Scheduler and create a new task
+2. Set trigger: "At log on"
+3. Set action: Start a program
+   - Program: Full path to `nb-daemon.exe` (e.g., `C:\Users\yourname\.local\bin\nb-daemon.exe`)
+   - Or use `pythonw.exe` with arguments: `-m nb.daemon`
+4. Under Settings, check "Run task as soon as possible after a scheduled start is missed"
+
+Or import this XML (save as `nb-daemon.xml`, update the path):
+
+```xml
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+  </Triggers>
+  <Actions>
+    <Exec>
+      <Command>C:\Users\yourname\.local\bin\nb-daemon.exe</Command>
+    </Exec>
+  </Actions>
+  <Settings>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+  </Settings>
+</Task>
+```
+
+Then import: `schtasks /create /tn "nb-daemon" /xml nb-daemon.xml`
+
+**macOS (launchd):**
+
+Create `~/Library/LaunchAgents/com.nb.daemon.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.nb.daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/yourname/.local/bin/nb-daemon</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/nb-daemon.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/nb-daemon.err</string>
+</dict>
+</plist>
+```
+
+Load the service:
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.nb.daemon.plist
+```
+
+To unload:
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.nb.daemon.plist
+```
+
+**Linux (systemd user service):**
+
+Create `~/.config/systemd/user/nb-daemon.service`:
+
+```ini
+[Unit]
+Description=nb indexing daemon
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/home/yourname/.local/bin/nb-daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+```
+
+Enable and start:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable nb-daemon
+systemctl --user start nb-daemon
+```
+
+Check status:
+
+```bash
+systemctl --user status nb-daemon
+journalctl --user -u nb-daemon -f  # Follow logs
+```
+
+**Custom config:** If your config is not at `~/notes/.nb/config.yaml`, pass the path: `nb-daemon /path/to/config.yaml`
+
 ### Attachments
 
 Attach files and URLs to notes and todos. Attachments are indexed in the database for fast queries.

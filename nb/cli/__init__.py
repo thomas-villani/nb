@@ -23,6 +23,7 @@ from nb.cli.completion import (
     register_completion_commands,
 )
 from nb.cli.config_cmd import register_config_commands
+from nb.cli.daemon import register_daemon_commands
 from nb.cli.export import register_export_commands
 from nb.cli.git import register_git_commands
 from nb.cli.graph import register_graph_commands
@@ -227,6 +228,7 @@ register_inbox_commands(cli)
 register_git_commands(cli)
 register_ai_commands(cli)
 register_assistant_command(cli)
+register_daemon_commands(cli)
 
 
 def main() -> None:

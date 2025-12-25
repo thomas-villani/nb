@@ -38,6 +38,7 @@ dependencies = [
 [project.scripts]
 nb = "nb.cli:main"
 nbt = "nb.cli:main_todo"
+nb-daemon = "nb.daemon:main"
 
 [project.optional-dependencies]
 recorder = [
@@ -49,12 +50,16 @@ recorder = [
 calendar = [
     "pywin32>=306; sys_platform == 'win32'",
 ]
+daemon = [
+    "watchdog>=4.0.0",
+]
 all = [
     "sounddevice>=0.4.6",
     "soundfile>=0.12.0",
     "numpy>=2.4.0",
     "deepgram-sdk>=3.0.0",
-    "pywin32>=306; sys_platform == 'win32'"
+    "pywin32>=306; sys_platform == 'win32'",
+    "watchdog>=4.0.0",
 ]
 dev = [
     "pytest>=7.0",
@@ -144,6 +149,8 @@ module = [
     "pywintypes",
     "all2md",
     "all2md.*",
+    "watchdog",
+    "watchdog.*",
 ]
 ignore_missing_imports = true
 

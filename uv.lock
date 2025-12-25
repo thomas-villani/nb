@@ -1473,7 +1473,7 @@ wheels = [
 
 [[package]]
 name = "nb-cli"
-version = "0.4.3"
+version = "0.4.5"
 source = { editable = "." }
 dependencies = [
     { name = "all2md", extra = ["all"] },
@@ -1498,9 +1498,13 @@ all = [
     { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "sounddevice" },
     { name = "soundfile" },
+    { name = "watchdog" },
 ]
 calendar = [
     { name = "pywin32", marker = "sys_platform == 'win32'" },
+]
+daemon = [
+    { name = "watchdog" },
 ]
 dev = [
     { name = "black" },
@@ -1559,6 +1563,8 @@ requires-dist = [
     { name = "types-pyperclip", marker = "extra == 'dev'", specifier = ">=1.9.0.20250801" },
     { name = "types-python-dateutil", marker = "extra == 'dev'", specifier = ">=2.9.0.20251115" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12.20250915" },
+    { name = "watchdog", marker = "extra == 'all'", specifier = ">=4.0.0" },
+    { name = "watchdog", marker = "extra == 'daemon'", specifier = ">=4.0.0" },
     { name = "wijjit", path = "wheels/wijjit-0.1.0a0-py3-none-any.whl" },
 ]
 

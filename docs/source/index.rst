@@ -30,6 +30,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
    commands/inbox
    commands/recording
    commands/git
+   commands/daemon
    commands/management
 
 .. toctree::
