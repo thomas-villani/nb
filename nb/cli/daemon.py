@@ -97,11 +97,12 @@ def register_daemon_commands(cli: click.Group) -> None:
                 pythonw_exe = python_exe.replace("python.exe", "pythonw.exe")
 
                 # Use the daemon module as the entry point
+                # Pass config file path as single argument
+                config_path = config.nb_dir / "config.yaml"
                 args = [
                     "-m",
                     "nb.daemon",
-                    str(config.notes_root),
-                    str(config.nb_dir),
+                    str(config_path),
                 ]
 
                 try:
