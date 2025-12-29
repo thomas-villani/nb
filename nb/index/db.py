@@ -12,7 +12,7 @@ from typing import Any
 _logger = logging.getLogger(__name__)
 
 # Current schema version
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -337,6 +337,18 @@ CREATE TABLE IF NOT EXISTS pinned_notes (
 CREATE INDEX IF NOT EXISTS idx_pinned_notes_notebook ON pinned_notes(notebook);
 """
 
+# Phase 18 additions: inbox sync support (tags, notes, collections)
+SCHEMA_V18 = """
+-- Add columns for tracking Raindrop sync metadata
+ALTER TABLE inbox_items ADD COLUMN raindrop_tags TEXT;      -- JSON array of original Raindrop tags
+ALTER TABLE inbox_items ADD COLUMN raindrop_note TEXT;      -- Original Raindrop note content
+ALTER TABLE inbox_items ADD COLUMN collection_name TEXT;    -- Source collection name
+ALTER TABLE inbox_items ADD COLUMN last_synced_at TEXT;     -- When tags/note were last synced
+
+-- Index for collection-based queries
+CREATE INDEX IF NOT EXISTS idx_inbox_items_collection ON inbox_items(collection_name);
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -356,6 +368,7 @@ MIGRATIONS: dict[int, str] = {
     15: SCHEMA_V15,
     16: SCHEMA_V16,
     17: SCHEMA_V17,
+    18: SCHEMA_V18,
 }
 
 

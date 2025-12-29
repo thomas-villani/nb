@@ -214,6 +214,8 @@ Show recently modified notes (or view history with ``--viewed``).
      - Group entries by notebook
    * - ``-v, --viewed``
      - Show view history instead of modification history
+   * - ``-C, --copy``
+     - Copy history list to clipboard
 
 **Examples:**
 
@@ -224,6 +226,7 @@ Show recently modified notes (or view history with ``--viewed``).
    nb history -l 50           # Last 50
    nb history -n work         # Filter by notebook
    nb history -g              # Group by notebook
+   nb history -C              # Copy to clipboard
 
 nb new
 ------
@@ -297,6 +300,8 @@ Append content to a note.
      - Append to specific note instead of today's
    * - ``-n, --notebook NAME``
      - Notebook for today's note
+   * - ``-p, --paste``
+     - Read content from clipboard
 
 **Examples:**
 
@@ -305,6 +310,8 @@ Append content to a note.
    nb add "Quick thought"                    # Append to today
    nb add "Note" --note myproject            # Append to named note
    nb add "Note" --note work/myproject       # Notebook/note format
+   nb add --paste                            # Append clipboard to today
+   nb add --paste --note work/project        # Paste to specific note
 
 Supports stdin piping:
 
@@ -346,6 +353,8 @@ Prepends a timestamp using your configured ``date_format`` and ``time_format`` s
      - Log to specific note instead of today's
    * - ``-n, --notebook NAME``
      - Notebook context for resolving note
+   * - ``-p, --paste``
+     - Read content from clipboard
 
 **Examples:**
 
@@ -354,6 +363,7 @@ Prepends a timestamp using your configured ``date_format`` and ``time_format`` s
    nb log "Started working on feature X"     # Today's daily note
    nb log "Meeting notes" --note work/log    # Specific note
    nb log "Entry" -N proj                    # Using alias
+   nb log --paste                            # Log clipboard with timestamp
 
 Supports stdin piping:
 

@@ -113,15 +113,63 @@ class ClipConfig:
 
 
 @dataclass
+class RaindropCollectionConfig:
+    """Configuration for a single Raindrop collection mapping.
+
+    Maps a Raindrop collection to a specific notebook with optional settings.
+    """
+
+    name: str  # Collection name in Raindrop
+    notebook: str  # Target notebook in nb
+    auto_archive: bool = True  # Archive after clipping
+    extra_tags: list[str] = field(default_factory=list)  # Additional tags to add
+
+
+@dataclass
 class RaindropConfig:
     """Configuration for Raindrop.io integration.
 
     API token is loaded from RAINDROP_API_KEY environment variable.
+
+    Supports both legacy single-collection config and new multi-collection mapping.
     """
 
+    # Legacy single collection (backwards compatibility)
     collection: str = "nb-inbox"  # Collection to pull from
     auto_archive: bool = True  # Move to archive after clipping
     api_token: str | None = None  # Loaded from RAINDROP_API_KEY env var (not config)
+
+    # Multi-collection support
+    collections: list[RaindropCollectionConfig] = field(default_factory=list)
+
+    # Sync settings
+    sync_tags: bool = True  # Sync tag changes from Raindrop to notes
+    sync_notes: bool = True  # Sync note changes from Raindrop to notes
+
+    def get_all_collections(
+        self, default_notebook: str = "bookmarks"
+    ) -> list[RaindropCollectionConfig]:
+        """Get all configured collections, including legacy single collection.
+
+        If `collections` list is defined, returns it.
+        Otherwise, synthesizes a list from the legacy single-collection config.
+
+        Args:
+            default_notebook: Fallback notebook for legacy config (from InboxConfig)
+
+        Returns:
+            List of collection configurations
+        """
+        if self.collections:
+            return self.collections
+        # Backwards compatibility: convert single collection to list format
+        return [
+            RaindropCollectionConfig(
+                name=self.collection,
+                notebook=default_notebook,
+                auto_archive=self.auto_archive,
+            )
+        ]
 
 
 @dataclass

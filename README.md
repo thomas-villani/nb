@@ -110,6 +110,7 @@ nb history -o 10          # Skip first 10, show next 10
 nb history -n work        # Filter by notebook
 nb history -F             # Show full paths instead of filenames
 nb history -g             # Group entries by notebook
+nb history -C             # Copy history list to clipboard
 ```
 
 Date-based notebooks organize notes by work week:
@@ -129,9 +130,12 @@ nb add "Quick thought"     # Append text to today's note
 nb add "Note" --note myproject       # Append to specific note
 nb add "Note" --note work/myproject  # Notebook/note format
 nb add "Note" -N proj                # Using alias
+nb add --paste                       # Append clipboard content to today's note
+nb add --paste --note work/project   # Append clipboard to specific note
 
 nb log "Started feature X"           # Append with timestamp to today's note
 nb log "Meeting notes" -N project    # Timestamp + content to specific note
+nb log --paste                       # Log clipboard content with timestamp
 
 # Stdin piping support
 echo "random thought" | nb add              # Pipe to today's note
@@ -381,6 +385,7 @@ Todos are extracted from markdown files using GitHub-style checkboxes:
 
 ```bash
 nb todo                 # List all open todos (grouped by status and due date)
+nb todo -C              # Copy todo list to clipboard
 nb todo -f              # Focus mode: hide "due later" and "no date" sections
 nb todo -a              # Include todos from all sources (even excluded notebooks)
 nb todo -c              # Include completed todos
@@ -427,11 +432,17 @@ echo "Review PR" | nb todo add               # Pipe to inbox
 pbpaste | nb todo add --today                # Pipe clipboard to daily note
 echo "Task @due(friday)" | nb todo add       # Pipe with metadata
 
+# Clipboard integration
+nb todo add --paste                          # Add todos from clipboard
+nb todo add --paste --note work/project      # Paste to specific note
+nb todo add --paste --today                  # Paste to today's note
+
 nb todo done abc123     # Mark complete (by ID prefix)
 nb todo undone abc123   # Mark incomplete
 nb todo start abc123    # Mark as in-progress ([ ] -> [^])
 nb todo pause abc123    # Pause in-progress todo ([^] -> [ ])
 nb todo show abc123     # Show todo details
+nb todo show abc123 -C  # Copy todo details to clipboard
 nb todo edit abc123     # Open source file at todo line
 nb todo delete abc123   # Delete todo from source file
 nb todo delete abc -f   # Delete without confirmation
@@ -1611,7 +1622,7 @@ nb assistant --fast
 |--------|-------------|
 | `QUERY` | Optional initial query to start the conversation |
 | `-f, --file PATH` | Include file(s) as context (repeatable) |
-| `--paste` | Include clipboard content as context |
+| `-p, --paste` | Include clipboard content as context |
 | `-N, --note TEXT` | Include specific note(s) as context (repeatable) |
 | `-n, --notebook TEXT` | Focus context on specific notebook |
 | `--no-calendar` | Skip calendar integration |

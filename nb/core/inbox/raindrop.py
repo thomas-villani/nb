@@ -272,6 +272,27 @@ class RaindropClient:
         )
         return True
 
+    def get_item(self, item_id: int) -> RaindropItem | None:
+        """Get a single item by ID.
+
+        Args:
+            item_id: The raindrop ID to fetch
+
+        Returns:
+            RaindropItem or None if not found
+        """
+        try:
+            data = self._request("GET", f"/raindrop/{item_id}")
+            if "item" in data:
+                item = RaindropItem.from_api_response(data["item"])
+                # Fill in collection name
+                collections = self.get_collections()
+                item.collection_name = collections.get(item.collection_id)
+                return item
+        except RaindropAPIError:
+            return None
+        return None
+
 
 # Convenience functions using default client
 def list_inbox_items(
@@ -376,6 +397,9 @@ def record_clipped_item(
     source: str = "raindrop",
     archived: bool = False,
     skipped: bool = False,
+    raindrop_tags: list[str] | None = None,
+    raindrop_note: str | None = None,
+    collection_name: str | None = None,
 ) -> None:
     """Record that an item has been clipped.
 
@@ -387,7 +411,11 @@ def record_clipped_item(
         source: Source service name
         archived: Whether the item was archived in the source service
         skipped: Whether the item was skipped
+        raindrop_tags: Original tags from Raindrop (for sync detection)
+        raindrop_note: Original note from Raindrop (for sync detection)
+        collection_name: Source collection name
     """
+    import json
     from datetime import datetime
 
     db = _get_db()
@@ -397,8 +425,9 @@ def record_clipped_item(
         # Use INSERT OR REPLACE to update if exists
         db.execute(
             """INSERT OR REPLACE INTO inbox_items
-               (id, source, url, title, clipped_at, note_path, archived, skipped, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, source, url, title, clipped_at, note_path, archived, skipped, created_at,
+                raindrop_tags, raindrop_note, collection_name, last_synced_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 str(item_id),
                 source,
@@ -408,6 +437,10 @@ def record_clipped_item(
                 note_path,
                 1 if archived else 0,
                 1 if skipped else 0,
+                now,
+                json.dumps(raindrop_tags) if raindrop_tags else None,
+                raindrop_note,
+                collection_name,
                 now,
             ),
         )
@@ -463,3 +496,69 @@ def get_duplicate_warning(url: str, source: str = "raindrop") -> str | None:
         note = row["note_path"] or "unknown note"
         return f"Already clipped to {note} on {row['clipped_at'][:10]}"
     return None
+
+
+def get_items_needing_sync(
+    source: str = "raindrop",
+    limit: int = 100,
+) -> list[dict]:
+    """Get clipped items that may need tag/note sync.
+
+    Returns items that:
+    - Were successfully clipped (not skipped)
+    - Have a note_path (local note exists)
+
+    Args:
+        source: Source service name
+        limit: Maximum items to return
+
+    Returns:
+        List of dicts with item info for sync
+    """
+    db = _get_db()
+    rows = db.fetchall(
+        """SELECT id, url, note_path, raindrop_tags, raindrop_note, collection_name
+           FROM inbox_items
+           WHERE source = ?
+             AND skipped = 0
+             AND note_path IS NOT NULL
+           ORDER BY last_synced_at ASC
+           LIMIT ?""",
+        (source, limit),
+    )
+    return [dict(row) for row in rows]
+
+
+def update_sync_metadata(
+    item_id: int | str,
+    raindrop_tags: list[str] | None,
+    raindrop_note: str | None,
+    source: str = "raindrop",
+) -> None:
+    """Update the sync metadata for an item after sync.
+
+    Args:
+        item_id: External service item ID
+        raindrop_tags: Current tags from Raindrop
+        raindrop_note: Current note from Raindrop
+        source: Source service name
+    """
+    import json
+    from datetime import datetime
+
+    db = _get_db()
+    now = datetime.now().isoformat()
+
+    db.execute(
+        """UPDATE inbox_items
+           SET raindrop_tags = ?, raindrop_note = ?, last_synced_at = ?
+           WHERE id = ? AND source = ?""",
+        (
+            json.dumps(raindrop_tags) if raindrop_tags else None,
+            raindrop_note,
+            now,
+            str(item_id),
+            source,
+        ),
+    )
+    db.commit()

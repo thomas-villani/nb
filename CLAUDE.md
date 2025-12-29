@@ -137,6 +137,59 @@ API response parsing is tested against real captured responses in `tests/fixture
 - `openai_response.json` - Standard GPT response
 - `serper_web_response.json` - Web search results
 
+## Inbox (Raindrop.io Integration)
+
+The `nb inbox` command pulls bookmarks from Raindrop.io and clips them as notes.
+
+### Multi-Collection Support
+
+Configure multiple Raindrop collections, each mapping to a specific notebook:
+
+```yaml
+inbox:
+  default_notebook: bookmarks
+  auto_summarize: true
+  raindrop:
+    sync_tags: true        # Sync tag changes from Raindrop to notes
+    sync_notes: true       # Sync note changes from Raindrop to notes
+    collections:
+      - name: nb-inbox
+        notebook: bookmarks
+      - name: research
+        notebook: research
+        auto_archive: false
+      - name: work-reading
+        notebook: work
+        extra_tags: [work]
+```
+
+When running `nb inbox pull`, all configured collections are processed automatically.
+
+### Syncing Changes
+
+The `nb inbox sync` command checks previously-clipped items for changes in Raindrop:
+
+- **Tag sync**: Updates note frontmatter tags (preserves user-added tags)
+- **Note sync**: Updates the Raindrop note section in the note content
+
+```bash
+nb inbox sync              # Sync up to 50 items
+nb inbox sync -l 100       # Sync up to 100 items
+nb inbox sync --dry-run    # Preview changes without applying
+```
+
+### Key Commands
+
+```bash
+nb inbox list              # Show pending items from all collections
+nb inbox pull              # Interactive: clip from all collections
+nb inbox pull --auto       # Clip all without prompting
+nb inbox pull -c research  # Only pull from 'research' collection
+nb inbox sync              # Sync tag/note changes from Raindrop
+nb inbox clear             # Archive all without clipping
+nb inbox history           # Show clipping history
+```
+
 ## Code Style
 
 - Line length: 120 (configured in pyproject.toml)

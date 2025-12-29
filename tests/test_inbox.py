@@ -9,6 +9,7 @@ from click.testing import CliRunner
 
 from nb.cli import cli
 from nb.config import Config, InboxConfig, RaindropConfig
+from nb.config.models import RaindropCollectionConfig
 
 
 class TestInboxConfig:
@@ -497,3 +498,449 @@ class TestInboxAutoSummarizeConfig:
             cli, ["config", "set", "inbox.auto_summarize", "true"]
         )
         assert result.exit_code == 0
+
+
+class TestRaindropCollectionConfig:
+    """Test RaindropCollectionConfig and multi-collection support."""
+
+    def test_collection_config_defaults(self):
+        """Test RaindropCollectionConfig default values."""
+        config = RaindropCollectionConfig(name="test", notebook="notes")
+        assert config.name == "test"
+        assert config.notebook == "notes"
+        assert config.auto_archive is True
+        assert config.extra_tags == []
+
+    def test_collection_config_with_extras(self):
+        """Test RaindropCollectionConfig with extra options."""
+        config = RaindropCollectionConfig(
+            name="research",
+            notebook="research",
+            auto_archive=False,
+            extra_tags=["research", "reading"],
+        )
+        assert config.name == "research"
+        assert config.notebook == "research"
+        assert config.auto_archive is False
+        assert config.extra_tags == ["research", "reading"]
+
+    def test_raindrop_config_get_all_collections_legacy(self):
+        """Test get_all_collections with legacy single-collection config."""
+        config = RaindropConfig(
+            collection="my-inbox",
+            auto_archive=True,
+        )
+        collections = config.get_all_collections("bookmarks")
+        assert len(collections) == 1
+        assert collections[0].name == "my-inbox"
+        assert collections[0].notebook == "bookmarks"
+        assert collections[0].auto_archive is True
+
+    def test_raindrop_config_get_all_collections_multi(self):
+        """Test get_all_collections with multiple collections."""
+        config = RaindropConfig(
+            collections=[
+                RaindropCollectionConfig(name="inbox", notebook="bookmarks"),
+                RaindropCollectionConfig(
+                    name="research", notebook="research", auto_archive=False
+                ),
+            ],
+        )
+        collections = config.get_all_collections("default")
+        assert len(collections) == 2
+        assert collections[0].name == "inbox"
+        assert collections[1].name == "research"
+        assert collections[1].auto_archive is False
+
+    def test_raindrop_config_sync_defaults(self):
+        """Test that sync settings default to True."""
+        config = RaindropConfig()
+        assert config.sync_tags is True
+        assert config.sync_notes is True
+
+
+class TestCollectionConfigParsing:
+    """Test parsing of collection configuration from YAML."""
+
+    def test_parse_collections_list(self):
+        """Test parsing a collections list."""
+        from nb.config.parsers import _parse_raindrop_config
+
+        data = {
+            "sync_tags": True,
+            "sync_notes": False,
+            "collections": [
+                {"name": "inbox", "notebook": "bookmarks"},
+                {"name": "research", "notebook": "research", "auto_archive": False},
+                {"name": "work", "notebook": "work", "extra_tags": ["work", "todo"]},
+            ],
+        }
+        config = _parse_raindrop_config(data)
+        assert len(config.collections) == 3
+        assert config.collections[0].name == "inbox"
+        assert config.collections[0].notebook == "bookmarks"
+        assert config.collections[1].auto_archive is False
+        assert config.collections[2].extra_tags == ["work", "todo"]
+        assert config.sync_tags is True
+        assert config.sync_notes is False
+
+    def test_parse_collections_backwards_compatible(self):
+        """Test that legacy single-collection config still works."""
+        from nb.config.parsers import _parse_raindrop_config
+
+        data = {
+            "collection": "my-inbox",
+            "auto_archive": False,
+        }
+        config = _parse_raindrop_config(data)
+        assert config.collection == "my-inbox"
+        assert config.auto_archive is False
+        assert len(config.collections) == 0  # No collections list defined
+
+
+class TestSyncHelperFunctions:
+    """Test sync-related database functions."""
+
+    def test_record_clipped_with_sync_metadata(
+        self, mock_cli_config: Config, cli_runner: CliRunner
+    ):
+        """Test recording clipped items with sync metadata."""
+        from nb.core.inbox.raindrop import get_items_needing_sync, record_clipped_item
+
+        cli_runner.invoke(cli, ["index"])
+
+        record_clipped_item(
+            item_id=99999,
+            url="https://example.com/sync-test",
+            title="Sync Test",
+            note_path="bookmarks/sync-test.md",
+            archived=True,
+            raindrop_tags=["tag1", "tag2"],
+            raindrop_note="My original note",
+            collection_name="test-collection",
+        )
+
+        # Get items needing sync
+        items = get_items_needing_sync(limit=10)
+        assert len(items) >= 1
+
+        # Find our item
+        our_item = next((i for i in items if i["id"] == "99999"), None)
+        assert our_item is not None
+        assert our_item["note_path"] == "bookmarks/sync-test.md"
+        assert our_item["collection_name"] == "test-collection"
+
+    def test_update_sync_metadata(self, mock_cli_config: Config, cli_runner: CliRunner):
+        """Test updating sync metadata."""
+        import json
+
+        from nb.core.inbox.raindrop import (
+            record_clipped_item,
+            update_sync_metadata,
+        )
+
+        cli_runner.invoke(cli, ["index"])
+
+        # First record an item
+        record_clipped_item(
+            item_id=88888,
+            url="https://example.com/update-test",
+            title="Update Test",
+            note_path="bookmarks/update-test.md",
+            archived=True,
+            raindrop_tags=["old_tag"],
+            raindrop_note="Old note",
+            collection_name="test",
+        )
+
+        # Update the sync metadata
+        update_sync_metadata(
+            item_id=88888,
+            raindrop_tags=["new_tag1", "new_tag2"],
+            raindrop_note="New note content",
+        )
+
+        # Verify the update (need to query directly since get_clipped_item doesn't return sync fields)
+        from nb.index.db import get_db
+
+        db = get_db()
+        row = db.fetchone(
+            "SELECT raindrop_tags, raindrop_note FROM inbox_items WHERE id = ?",
+            ("88888",),
+        )
+        assert row is not None
+        tags = json.loads(row["raindrop_tags"])
+        assert "new_tag1" in tags
+        assert "new_tag2" in tags
+        assert row["raindrop_note"] == "New note content"
+
+
+class TestSyncTagLogic:
+    """Test tag sync logic."""
+
+    def test_sync_item_tags_add_new_tag(self, tmp_path):
+        """Test adding new tags from Raindrop."""
+        import frontmatter
+
+        from nb.core.inbox.sync import sync_item_tags
+
+        # Create a test note
+        note_path = tmp_path / "test-note.md"
+        note_content = """---
+title: Test Note
+tags: [clipped, old_tag]
+---
+
+# Test Note
+
+Content here.
+"""
+        note_path.write_text(note_content)
+
+        # Sync: add new_tag
+        result = sync_item_tags(
+            note_path,
+            old_raindrop_tags=["old_tag"],
+            new_raindrop_tags=["old_tag", "new_tag"],
+        )
+
+        assert result is True
+
+        # Verify the note was updated
+        post = frontmatter.load(note_path)
+        assert "new_tag" in post.metadata["tags"]
+        assert "old_tag" in post.metadata["tags"]
+        assert "clipped" in post.metadata["tags"]
+
+    def test_sync_item_tags_remove_tag(self, tmp_path):
+        """Test removing tags from Raindrop."""
+        import frontmatter
+
+        from nb.core.inbox.sync import sync_item_tags
+
+        note_path = tmp_path / "test-note.md"
+        note_content = """---
+title: Test Note
+tags: [clipped, old_tag, removed_tag]
+---
+
+# Test Note
+"""
+        note_path.write_text(note_content)
+
+        # Sync: removed_tag was removed in Raindrop
+        result = sync_item_tags(
+            note_path,
+            old_raindrop_tags=["old_tag", "removed_tag"],
+            new_raindrop_tags=["old_tag"],
+        )
+
+        assert result is True
+
+        post = frontmatter.load(note_path)
+        assert "removed_tag" not in post.metadata["tags"]
+        assert "old_tag" in post.metadata["tags"]
+        assert "clipped" in post.metadata["tags"]
+
+    def test_sync_item_tags_preserves_user_tags(self, tmp_path):
+        """Test that user-added tags are preserved."""
+        import frontmatter
+
+        from nb.core.inbox.sync import sync_item_tags
+
+        note_path = tmp_path / "test-note.md"
+        note_content = """---
+title: Test Note
+tags: [clipped, raindrop_tag, user_added_tag]
+---
+
+# Test Note
+"""
+        note_path.write_text(note_content)
+
+        # Sync: raindrop_tag was removed, but user_added_tag should stay
+        result = sync_item_tags(
+            note_path,
+            old_raindrop_tags=["raindrop_tag"],
+            new_raindrop_tags=[],
+        )
+
+        assert result is True
+
+        post = frontmatter.load(note_path)
+        assert "user_added_tag" in post.metadata["tags"]
+        assert "clipped" in post.metadata["tags"]
+        assert "raindrop_tag" not in post.metadata["tags"]
+
+    def test_sync_item_tags_no_change(self, tmp_path):
+        """Test that no changes are made when tags are the same."""
+        from nb.core.inbox.sync import sync_item_tags
+
+        note_path = tmp_path / "test-note.md"
+        note_content = """---
+title: Test Note
+tags: [clipped, tag1]
+---
+
+# Test Note
+"""
+        note_path.write_text(note_content)
+
+        result = sync_item_tags(
+            note_path,
+            old_raindrop_tags=["tag1"],
+            new_raindrop_tags=["tag1"],
+        )
+
+        assert result is False  # No changes needed
+
+
+class TestSyncNoteLogic:
+    """Test Raindrop note sync logic."""
+
+    def test_sync_item_note_add_note(self, tmp_path):
+        """Test adding a new Raindrop note."""
+        from nb.core.inbox.sync import sync_item_note
+
+        note_path = tmp_path / "test-note.md"
+        note_content = """---
+title: Test Note
+---
+
+# Test Note
+
+[Original source](https://example.com)
+
+Article content here.
+"""
+        note_path.write_text(note_content)
+
+        result = sync_item_note(
+            note_path,
+            old_note=None,
+            new_note="This is my new note from Raindrop",
+        )
+
+        assert result is True
+
+        content = note_path.read_text()
+        assert "<!-- raindrop-note-start -->" in content
+        assert "This is my new note from Raindrop" in content
+        assert "<!-- raindrop-note-end -->" in content
+
+    def test_sync_item_note_update_note(self, tmp_path):
+        """Test updating an existing Raindrop note."""
+        from nb.core.inbox.sync import sync_item_note
+
+        note_path = tmp_path / "test-note.md"
+        note_content = """---
+title: Test Note
+---
+
+# Test Note
+
+[Original source](https://example.com)
+
+<!-- raindrop-note-start -->
+
+> **Raindrop Note:** Old note content
+
+<!-- raindrop-note-end -->
+
+Article content.
+"""
+        note_path.write_text(note_content)
+
+        result = sync_item_note(
+            note_path,
+            old_note="Old note content",
+            new_note="Updated note content",
+        )
+
+        assert result is True
+
+        content = note_path.read_text()
+        assert "Updated note content" in content
+        assert "Old note content" not in content
+
+    def test_sync_item_note_remove_note(self, tmp_path):
+        """Test removing a Raindrop note."""
+        from nb.core.inbox.sync import sync_item_note
+
+        note_path = tmp_path / "test-note.md"
+        note_content = """---
+title: Test Note
+---
+
+# Test Note
+
+[Original source](https://example.com)
+
+<!-- raindrop-note-start -->
+
+> **Raindrop Note:** Note to remove
+
+<!-- raindrop-note-end -->
+
+Article content.
+"""
+        note_path.write_text(note_content)
+
+        result = sync_item_note(
+            note_path,
+            old_note="Note to remove",
+            new_note=None,
+        )
+
+        assert result is True
+
+        content = note_path.read_text()
+        assert "<!-- raindrop-note-start -->" not in content
+        assert "Note to remove" not in content
+
+    def test_sync_item_note_no_change(self, tmp_path):
+        """Test that no changes are made when note is the same."""
+        from nb.core.inbox.sync import sync_item_note
+
+        note_path = tmp_path / "test-note.md"
+        note_content = "# Test Note\n\nContent."
+        note_path.write_text(note_content)
+
+        result = sync_item_note(
+            note_path,
+            old_note="Same note",
+            new_note="Same note",
+        )
+
+        assert result is False
+
+
+class TestInboxSyncCLI:
+    """Test nb inbox sync CLI command."""
+
+    def test_inbox_sync_no_items(self, mock_cli_config: Config, cli_runner: CliRunner):
+        """Test that sync handles no items gracefully."""
+        cli_runner.invoke(cli, ["index"])
+
+        # Without a token but with sync disabled in config, or no items, it may succeed
+        # The key is that it should either fail with auth error or succeed with no items
+        result = cli_runner.invoke(cli, ["inbox", "sync"])
+        # Either auth error (exit 1) or no items to sync (exit 0)
+        assert result.exit_code in (0, 1)
+        if result.exit_code == 1:
+            assert (
+                "Authentication error" in result.output
+                or "RAINDROP_API_KEY" in result.output
+            )
+        else:
+            assert (
+                "No items to sync" in result.output
+                or "Syncing from Raindrop" in result.output
+            )
+
+    def test_inbox_sync_help(self, cli_runner: CliRunner):
+        """Test inbox sync help text."""
+        result = cli_runner.invoke(cli, ["inbox", "sync", "--help"])
+        assert result.exit_code == 0
+        assert "Sync tag and note changes" in result.output
+        assert "--dry-run" in result.output

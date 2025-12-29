@@ -12,6 +12,41 @@ from nb.index.todos_repo import get_todo_children
 TODO_ID_DISPLAY_LEN = 6
 
 
+def format_todo_as_checkbox(t) -> str:
+    """Format a todo as a plain text checkbox line for clipboard.
+
+    Returns a string like: - [ ] Task content @due(2025-01-15) #tag1 #tag2
+    """
+    # Checkbox marker
+    if t.completed:
+        checkbox = "- [x]"
+    elif t.in_progress:
+        checkbox = "- [^]"
+    else:
+        checkbox = "- [ ]"
+
+    # Build metadata parts
+    parts = [checkbox, t.content]
+
+    # Add due date
+    if t.due_date:
+        if t.has_due_time:
+            due_str = t.due_date.strftime("%Y-%m-%d %H:%M")
+        else:
+            due_str = t.due_date.strftime("%Y-%m-%d")
+        parts.append(f"@due({due_str})")
+
+    # Add priority
+    if t.priority:
+        parts.append(f"@priority({t.priority.value})")
+
+    # Add tags
+    for tag in t.tags:
+        parts.append(f"#{tag}")
+
+    return " ".join(parts)
+
+
 def _get_todo_source_parts(t) -> dict[str, str]:
     """Extract source parts (notebook, note, section) from a todo.
 

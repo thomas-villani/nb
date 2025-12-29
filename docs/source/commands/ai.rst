@@ -39,6 +39,8 @@ Generate AI-assisted daily or weekly plans based on your todos, calendar, and re
      - Save plan to note. Use NOTEBOOK/NOTE for specific note, NOTEBOOK for new note, or 'today'
    * - ``-p, --prompt TEXT``
      - Add custom instructions for the plan
+   * - ``--paste``
+     - Include clipboard content as additional context
    * - ``--no-calendar``
      - Skip Outlook calendar integration
    * - ``-i, --interactive``
@@ -80,6 +82,9 @@ Generate AI-assisted daily or weekly plans based on your todos, calendar, and re
 
    # Skip calendar integration (faster, or for non-Windows)
    nb plan today --no-calendar
+
+   # Include clipboard content as context
+   nb plan week --paste
 
 **Interactive Mode:**
 
@@ -285,6 +290,8 @@ Ask questions about your notes using AI-powered retrieval augmented generation (
      - Ask about a specific note instead of searching
    * - ``-t, --tag TEXT``
      - Filter to notes with this tag
+   * - ``-p, --paste``
+     - Include clipboard content as additional context
    * - ``--stream / --no-stream``
      - Stream the response in real-time (default: stream)
    * - ``--show-sources / --no-sources``
@@ -333,6 +340,9 @@ Ask questions about your notes using AI-powered retrieval augmented generation (
 
    # Use agentic mode for complex queries involving todos
    nb ask "what are my overdue tasks?" --agentic
+
+   # Include clipboard content as context
+   nb ask "explain this code" --paste
 
 Configuration
 -------------

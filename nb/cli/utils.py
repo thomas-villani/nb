@@ -76,6 +76,46 @@ def get_stdin_content() -> str | None:
     return stripped if stripped else None
 
 
+def get_clipboard_content() -> str | None:
+    """Read content from the system clipboard.
+
+    Returns:
+        Content from clipboard stripped of leading/trailing whitespace,
+        or None if clipboard is empty or unavailable.
+    """
+    try:
+        import pyperclip
+
+        content = pyperclip.paste()
+        if not content:
+            return None
+
+        stripped = content.strip()
+        return stripped if stripped else None
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not read clipboard: {e}[/yellow]")
+        return None
+
+
+def copy_to_clipboard(text: str) -> bool:
+    """Copy text to the system clipboard.
+
+    Args:
+        text: The text to copy to clipboard.
+
+    Returns:
+        True if successful, False otherwise.
+    """
+    try:
+        import pyperclip
+
+        pyperclip.copy(text)
+        return True
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not copy to clipboard: {e}[/yellow]")
+        return False
+
+
 @contextmanager
 def spinner(description: str) -> Iterator[Callable[[str], None]]:
     """Context manager for a spinner with status updates.

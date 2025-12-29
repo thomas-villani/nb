@@ -11,6 +11,7 @@ from nb.cli.completion import complete_notebook, complete_tag, complete_view
 from nb.cli.utils import (
     console,
     find_todo,
+    get_clipboard_content,
     get_display_path,
     get_notebook_display_info,
     get_stdin_content,
@@ -147,6 +148,13 @@ def register_todo_commands(cli: click.Group) -> None:
     default="default",
     help="Kanban board name to use (default: 'default')",
 )
+@click.option(
+    "--copy",
+    "-C",
+    "copy_to_clip",
+    is_flag=True,
+    help="Copy todo list to clipboard (as checkbox format)",
+)
 @click.pass_context
 def todo(
     ctx: click.Context,
@@ -179,6 +187,7 @@ def todo(
     expand: bool,
     kanban: bool,
     board: str,
+    copy_to_clip: bool,
 ) -> None:
     """Manage todos.
 
@@ -213,6 +222,7 @@ def todo(
       nb todo -x              Expanded view (more content, less metadata)
       nb todo -k              Display as kanban board
       nb todo -k -b sprint    Use custom board config
+      nb todo -C              Copy todo list to clipboard
     """
     # If invoking a subcommand, skip the listing logic
     if ctx.invoked_subcommand is not None:
@@ -380,6 +390,7 @@ def todo(
         limit=limit,
         offset=offset,
         expand=expand,
+        copy=copy_to_clip,
     )
 
 
@@ -464,10 +475,19 @@ def _delete_todo_with_children(t, force: bool = False) -> int:
     "target_note",
     help="Add to specific note (path or path::section)",
 )
-def todo_add(text: str | None, add_today: bool, target_note: str | None) -> None:
+@click.option(
+    "--paste",
+    "-p",
+    is_flag=True,
+    help="Read todo(s) from clipboard",
+)
+def todo_add(
+    text: str | None, add_today: bool, target_note: str | None, paste: bool
+) -> None:
     """Add a new todo to the inbox (or today's note with --today).
 
-    Accepts todo text as an argument or from stdin (piped input).
+    Accepts todo text as an argument, from stdin (piped input), or from
+    clipboard (--paste). All sources are combined if multiple are provided.
     TEXT can include inline metadata:
 
     \b
@@ -485,20 +505,67 @@ def todo_add(text: str | None, add_today: bool, target_note: str | None) -> None
       nb todo add --note work/project::Tasks "New task"
 
     \b
+    Clipboard examples:
+      nb todo add --paste                          # Add from clipboard
+      nb todo add --paste --today                  # Clipboard to daily note
+      nb todo add --paste --note work/project      # Clipboard to specific note
+
+    \b
     Piping examples:
       echo "Review PR" | nb todo add               # Pipe to inbox
-      pbpaste | nb todo add --today                # Pipe clipboard to daily note
       echo "Task @due(friday)" | nb todo add       # Pipe with metadata
+
+    \b
+    Multi-line clipboard:
+      If clipboard contains checkbox lines (- [ ], - [x], - [^]),
+      each line is added as a separate todo.
     """
-    # Check stdin first, then use argument
-    content = get_stdin_content() or text
+    # Gather content from all sources (clipboard, stdin, argument)
+    parts = []
+
+    if paste:
+        clipboard = get_clipboard_content()
+        if clipboard:
+            parts.append(clipboard)
+        else:
+            console.print("[yellow]Warning: Clipboard is empty.[/yellow]")
+
+    stdin = get_stdin_content()
+    if stdin:
+        parts.append(stdin)
+
+    if text:
+        parts.append(text)
+
+    content = "\n".join(parts).strip() if parts else None
 
     if not content:
         console.print("[red]No todo text provided.[/red]")
-        console.print(
-            '[dim]Usage: nb todo add "text" or echo "text" | nb todo add[/dim]'
-        )
+        console.print('[dim]Usage: nb todo add "text" or nb todo add --paste[/dim]')
         raise SystemExit(1)
+
+    # Parse content for checkbox lines (multi-todo support)
+    # If content contains checkbox lines, extract each as a separate todo
+    import re
+
+    checkbox_pattern = re.compile(r"^\s*-\s*\[[ x^]\]\s*", re.IGNORECASE)
+    lines = content.split("\n")
+
+    # Check if any line looks like a checkbox
+    has_checkboxes = any(checkbox_pattern.match(line) for line in lines)
+
+    if has_checkboxes:
+        # Extract todo text from each checkbox line
+        todo_texts = []
+        for line in lines:
+            match = checkbox_pattern.match(line)
+            if match:
+                todo_text = line[match.end() :].strip()
+                if todo_text:
+                    todo_texts.append(todo_text)
+    else:
+        # Treat the whole content as a single todo
+        todo_texts = [content]
     from nb.core.todos import add_todo_to_note
 
     if target_note:
@@ -563,26 +630,67 @@ def todo_add(text: str | None, add_today: bool, target_note: str | None) -> None
                     section = matches[int(choice) - 1][1]
 
         try:
-            t = add_todo_to_note(content, resolved_path, section=section)
-            if t.section:
-                # Use t.section which has the actual matched section name
-                console.print(
-                    f"[green]Added to {resolved_path.name}::{t.section}:[/green] {t.content}"
-                )
+            added_todos = []
+            for todo_text in todo_texts:
+                t = add_todo_to_note(todo_text, resolved_path, section=section)
+                added_todos.append(t)
+
+            # Display results
+            if len(added_todos) == 1:
+                t = added_todos[0]
+                if t.section:
+                    console.print(
+                        f"[green]Added to {resolved_path.name}::{t.section}:[/green] {t.content}"
+                    )
+                else:
+                    console.print(
+                        f"[green]Added to {resolved_path.name}:[/green] {t.content}"
+                    )
+                console.print(f"[dim]ID: {t.id[:TODO_ID_DISPLAY_LEN]}[/dim]")
             else:
-                console.print(
-                    f"[green]Added to {resolved_path.name}:[/green] {t.content}"
+                section_str = (
+                    f"::{added_todos[0].section}" if added_todos[0].section else ""
                 )
+                console.print(
+                    f"[green]Added {len(added_todos)} todos to {resolved_path.name}{section_str}[/green]"
+                )
+                for t in added_todos:
+                    console.print(
+                        f"  [dim]{t.id[:TODO_ID_DISPLAY_LEN]}[/dim] {t.content}"
+                    )
         except FileNotFoundError as e:
             console.print(f"[red]{e}[/red]")
             raise SystemExit(1) from None
     elif add_today:
-        t = add_todo_to_daily_note(content)
-        console.print(f"[green]Added to today's note:[/green] {t.content}")
+        added_todos = []
+        for todo_text in todo_texts:
+            t = add_todo_to_daily_note(todo_text)
+            added_todos.append(t)
+
+        if len(added_todos) == 1:
+            console.print(
+                f"[green]Added to today's note:[/green] {added_todos[0].content}"
+            )
+            console.print(f"[dim]ID: {added_todos[0].id[:TODO_ID_DISPLAY_LEN]}[/dim]")
+        else:
+            console.print(
+                f"[green]Added {len(added_todos)} todos to today's note[/green]"
+            )
+            for t in added_todos:
+                console.print(f"  [dim]{t.id[:TODO_ID_DISPLAY_LEN]}[/dim] {t.content}")
     else:
-        t = add_todo_to_inbox(content)
-        console.print(f"[green]Added to inbox:[/green] {t.content}")
-    console.print(f"[dim]ID: {t.id[:TODO_ID_DISPLAY_LEN]}[/dim]")
+        added_todos = []
+        for todo_text in todo_texts:
+            t = add_todo_to_inbox(todo_text)
+            added_todos.append(t)
+
+        if len(added_todos) == 1:
+            console.print(f"[green]Added to inbox:[/green] {added_todos[0].content}")
+            console.print(f"[dim]ID: {added_todos[0].id[:TODO_ID_DISPLAY_LEN]}[/dim]")
+        else:
+            console.print(f"[green]Added {len(added_todos)} todos to inbox[/green]")
+            for t in added_todos:
+                console.print(f"  [dim]{t.id[:TODO_ID_DISPLAY_LEN]}[/dim] {t.content}")
 
 
 @todo.command("done")
@@ -919,7 +1027,14 @@ def todo_due(todo_id: tuple[str, ...], date_expr: str) -> None:
 
 @todo.command("show")
 @click.argument("todo_id")
-def todo_show(todo_id: str) -> None:
+@click.option(
+    "--copy",
+    "-C",
+    "copy_to_clip",
+    is_flag=True,
+    help="Copy todo details to clipboard",
+)
+def todo_show(todo_id: str, copy_to_clip: bool) -> None:
     """Show detailed information about a todo.
 
     Displays the todo's content, status, source file, due date,
@@ -928,7 +1043,11 @@ def todo_show(todo_id: str) -> None:
     \b
     Examples:
       nb todo show abc123
+      nb todo show abc123 --copy    # Copy details to clipboard
     """
+    from nb.cli.todos.formatters import format_todo_as_checkbox
+    from nb.cli.utils import copy_to_clipboard
+
     t = find_todo(todo_id)
     if not t:
         console.print(f"[red]Todo not found: {todo_id}[/red]")
@@ -965,6 +1084,16 @@ def todo_show(todo_id: str) -> None:
         for child in children:
             checkbox = "x" if child.completed else "o"
             console.print(f"  {checkbox} {child.content}")
+
+    # Copy to clipboard if requested
+    if copy_to_clip:
+        lines = [format_todo_as_checkbox(t)]
+        if children:
+            for child in children:
+                lines.append("  " + format_todo_as_checkbox(child))
+        clipboard_text = "\n".join(lines)
+        if copy_to_clipboard(clipboard_text):
+            console.print("\n[dim]Copied to clipboard.[/dim]")
 
 
 @todo.command("edit")

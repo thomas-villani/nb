@@ -17,6 +17,7 @@ from .models import (
     LLMConfig,
     LLMModelConfig,
     NotebookConfig,
+    RaindropCollectionConfig,
     RaindropConfig,
     RecorderConfig,
     SearchConfig,
@@ -204,18 +205,57 @@ def _parse_clip_config(data: dict[str, Any] | None) -> ClipConfig:
     )
 
 
+def _parse_raindrop_collection_config(data: dict[str, Any]) -> RaindropCollectionConfig:
+    """Parse a single Raindrop collection configuration."""
+    return RaindropCollectionConfig(
+        name=data["name"],
+        notebook=data.get("notebook", "bookmarks"),
+        auto_archive=data.get("auto_archive", True),
+        extra_tags=data.get("extra_tags", []),
+    )
+
+
 def _parse_raindrop_config(data: dict[str, Any] | None) -> RaindropConfig:
     """Parse Raindrop configuration.
 
     API token is loaded from RAINDROP_API_KEY environment variable.
+
+    Supports both legacy single-collection config and new multi-collection mapping:
+
+    Legacy format:
+        raindrop:
+          collection: nb-inbox
+          auto_archive: true
+
+    New format:
+        raindrop:
+          sync_tags: true
+          sync_notes: true
+          collections:
+            - name: nb-inbox
+              notebook: bookmarks
+            - name: research
+              notebook: research
+              auto_archive: false
+              extra_tags: [research]
     """
     if data is None:
         data = {}
+
+    # Parse collections list if present
+    collections: list[RaindropCollectionConfig] = []
+    if "collections" in data:
+        collections = [
+            _parse_raindrop_collection_config(c) for c in data["collections"]
+        ]
 
     return RaindropConfig(
         collection=data.get("collection", "nb-inbox"),
         auto_archive=data.get("auto_archive", True),
         api_token=os.environ.get("RAINDROP_API_KEY"),
+        collections=collections,
+        sync_tags=data.get("sync_tags", True),
+        sync_notes=data.get("sync_notes", True),
     )
 
 

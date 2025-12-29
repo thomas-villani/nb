@@ -10,6 +10,8 @@ import click
 from nb.cli.completion import complete_notebook
 from nb.cli.utils import (
     console,
+    copy_to_clipboard,
+    get_clipboard_content,
     get_notebook_display_info,
     get_stdin_content,
     open_or_show_note,
@@ -184,6 +186,13 @@ def last_note(show: bool, notebook: str | None, viewed: bool) -> None:
     is_flag=True,
     help="Show view history instead of modification history",
 )
+@click.option(
+    "--copy",
+    "-C",
+    "copy_to_clip",
+    is_flag=True,
+    help="Copy history list to clipboard",
+)
 def history_cmd(
     limit: int,
     offset: int,
@@ -192,6 +201,7 @@ def history_cmd(
     group: bool,
     open_index: int | None,
     viewed: bool,
+    copy_to_clip: bool,
 ) -> None:
     """Show recently modified notes.
 
@@ -199,6 +209,7 @@ def history_cmd(
     Each entry is numbered so you can quickly open one with --open.
     Use --viewed to see view history instead.
     Use --group to organize entries by notebook.
+    Use --copy to copy the list to clipboard.
 
     \b
     Examples:
@@ -210,6 +221,7 @@ def history_cmd(
       nb history -n work     # Show recently modified notes in 'work' notebook
       nb history -F          # Show full paths instead of filenames
       nb history -g          # Group entries by notebook
+      nb history -C          # Copy history list to clipboard
     """
     from collections import defaultdict
 
@@ -463,6 +475,30 @@ def history_cmd(
             console.print(
                 f"{idx_str}  [dim]{time_str}[/dim]  {nb_display}  {display_path}{alias_str}{count_str}"
             )
+
+    # Copy to clipboard if requested
+    if copy_to_clip:
+        lines = []
+        for (
+            _path,
+            rel_path,
+            timestamps,
+            _view_count,
+            _linked_alias,
+            nb_name,
+        ) in resolved_views:
+            time_str = timestamps[0].strftime(
+                f"{config.date_format} {config.time_format}"
+            )
+            display_path = str(rel_path) if full else rel_path.name
+            if nb_name and nb_name != "@external" and nb_name != "":
+                lines.append(f"{time_str}  {nb_name}/{display_path}")
+            else:
+                lines.append(f"{time_str}  {display_path}")
+
+        clipboard_text = "\n".join(lines)
+        if copy_to_clipboard(clipboard_text):
+            console.print(f"\n[dim]Copied {len(lines)} entries to clipboard.[/dim]")
 
 
 @click.command("open")
@@ -821,12 +857,19 @@ def edit_note(path: str) -> None:
     "-n",
     help="Notebook to search for note (used with --note)",
 )
+@click.option(
+    "--paste",
+    "-p",
+    is_flag=True,
+    help="Read content from clipboard",
+)
 def add_to_note(
-    text: str | None, target_note: str | None, notebook: str | None
+    text: str | None, target_note: str | None, notebook: str | None, paste: bool
 ) -> None:
     """Append content to a note (defaults to today's daily note).
 
-    Accepts text as an argument or from stdin (piped input).
+    Accepts text as an argument, from stdin (piped input), or from
+    clipboard (--paste). All sources are combined if multiple are provided.
 
     \b
     Examples:
@@ -837,18 +880,38 @@ def add_to_note(
       nb add "Note text" -N proj                   # Using alias
 
     \b
+    Clipboard examples:
+      nb add --paste                               # Clipboard to today's note
+      nb add --paste --note work/project           # Clipboard to specific note
+
+    \b
     Piping examples:
       echo "random thought" | nb add               # Pipe to today's note
       cat notes.txt | nb add                       # Pipe file content
       git diff --stat | nb add --note work/log     # Pipe command output
-      pbpaste | nb add                             # Pipe clipboard (macOS)
     """
-    # Check stdin first, then use argument
-    content = get_stdin_content() or text
+    # Gather content from all sources (clipboard, stdin, argument)
+    parts = []
+
+    if paste:
+        clipboard = get_clipboard_content()
+        if clipboard:
+            parts.append(clipboard)
+        else:
+            console.print("[yellow]Warning: Clipboard is empty.[/yellow]")
+
+    stdin = get_stdin_content()
+    if stdin:
+        parts.append(stdin)
+
+    if text:
+        parts.append(text)
+
+    content = "\n".join(parts).strip() if parts else None
 
     if not content:
         console.print("[red]No content provided.[/red]")
-        console.print('[dim]Usage: nb add "text" or echo "text" | nb add[/dim]')
+        console.print('[dim]Usage: nb add "text" or nb add --paste[/dim]')
         raise SystemExit(1)
 
     if target_note:
@@ -892,13 +955,20 @@ def add_to_note(
     "-n",
     help="Notebook to search for note (used with --note)",
 )
+@click.option(
+    "--paste",
+    "-p",
+    is_flag=True,
+    help="Read content from clipboard",
+)
 def log_to_note(
-    text: str | None, target_note: str | None, notebook: str | None
+    text: str | None, target_note: str | None, notebook: str | None, paste: bool
 ) -> None:
     """Log timestamped content to a note (defaults to today's daily note).
 
     Prepends a timestamp using configured date_format and time_format.
-    Accepts text as an argument or from stdin (piped input).
+    Accepts text as an argument, from stdin (piped input), or from
+    clipboard (--paste). All sources are combined if multiple are provided.
 
     \b
     Examples:
@@ -908,18 +978,39 @@ def log_to_note(
       nb log "Entry" -N proj                             # Using alias
 
     \b
+    Clipboard examples:
+      nb log --paste                                     # Log clipboard to today's note
+      nb log --paste --note work/project                 # Log clipboard to specific note
+
+    \b
     Piping examples:
       git diff --stat | nb log --note work/changes      # Log git changes
       echo "Completed task" | nb log                     # Log via pipe
     """
     config = get_config()
 
-    # Check stdin first, then use argument
-    content = get_stdin_content() or text
+    # Gather content from all sources (clipboard, stdin, argument)
+    parts = []
+
+    if paste:
+        clipboard = get_clipboard_content()
+        if clipboard:
+            parts.append(clipboard)
+        else:
+            console.print("[yellow]Warning: Clipboard is empty.[/yellow]")
+
+    stdin = get_stdin_content()
+    if stdin:
+        parts.append(stdin)
+
+    if text:
+        parts.append(text)
+
+    content = "\n".join(parts).strip() if parts else None
 
     if not content:
         console.print("[red]No content provided.[/red]")
-        console.print('[dim]Usage: nb log "text" or echo "text" | nb log[/dim]')
+        console.print('[dim]Usage: nb log "text" or nb log --paste[/dim]')
         raise SystemExit(1)
 
     # Prepend timestamp using config formats

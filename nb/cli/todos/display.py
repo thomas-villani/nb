@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from nb.cli.utils import console
+from nb.cli.utils import console, copy_to_clipboard
 from nb.index.todos_repo import get_sorted_todos, query_todos
 from nb.utils.dates import get_week_range
 
-from .formatters import _calculate_column_widths, _print_todo
+from .formatters import _calculate_column_widths, _print_todo, format_todo_as_checkbox
 
 
 def _list_todos(
@@ -35,6 +35,7 @@ def _list_todos(
     limit: int | None = None,
     offset: int = 0,
     expand: bool = False,
+    copy: bool = False,
 ) -> None:
     """List todos with optional filters."""
     # Determine completion filter
@@ -276,3 +277,20 @@ def _list_todos(
 
         for t in group_todos:
             _print_todo(t, indent=0, widths=widths)
+
+    # Copy to clipboard if requested
+    if copy:
+        lines = []
+        for group_name, group_todos in groups.items():
+            if not group_todos:
+                continue
+            lines.append(f"## {group_name}")
+            for t in group_todos:
+                lines.append(format_todo_as_checkbox(t))
+            lines.append("")  # Blank line between groups
+
+        clipboard_text = "\n".join(lines).strip()
+        if copy_to_clipboard(clipboard_text):
+            console.print(
+                f"\n[dim]Copied {len(all_visible_todos)} todos to clipboard.[/dim]"
+            )

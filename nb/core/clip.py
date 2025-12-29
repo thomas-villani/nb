@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -28,16 +29,20 @@ class ClippedContent:
         self,
         extra_tags: list[str] | None = None,
         include_domain_tag: bool = True,
+        raindrop_note: str | None = None,
     ) -> str:
         """Generate markdown note content with frontmatter.
 
         Args:
             extra_tags: Additional tags to include
             include_domain_tag: Whether to auto-tag with source domain
+            raindrop_note: Optional note from Raindrop to include
 
         Returns:
             Complete markdown content with frontmatter
         """
+        import yaml
+
         tags = ["clipped"]
         if include_domain_tag:
             # Clean domain for use as tag (remove www. prefix)
@@ -46,25 +51,24 @@ class ClippedContent:
         if extra_tags:
             tags.extend(extra_tags)
 
-        # Build frontmatter
-        frontmatter_lines = [
-            "---",
-            f'title: "{self.title}"',
-            f"date: {self.fetched_at.strftime('%Y-%m-%d')}",
-            f"source: {self.url}",
-            f"captured: {self.fetched_at.isoformat()}",
-            f"tags: [{', '.join(tags)}]",
-        ]
+        # Build frontmatter as a dictionary for proper YAML serialization
+        frontmatter: dict[str, Any] = {
+            "title": self.title,
+            "date": self.fetched_at.strftime("%Y-%m-%d"),
+            "source": self.url,
+            "captured": self.fetched_at.isoformat(),
+            "tags": tags,
+        }
 
         # Add document metadata if present
         if self.document_metadata:
-            frontmatter_lines.append("document_metadata:")
-            for key, value in self.document_metadata.items():
-                # Escape quotes in values
-                escaped_value = value.replace('"', '\\"')
-                frontmatter_lines.append(f'  {key}: "{escaped_value}"')
+            frontmatter["document_metadata"] = self.document_metadata
 
-        frontmatter_lines.append("---")
+        # Serialize with yaml.safe_dump for proper escaping of special characters
+        yaml_str = yaml.safe_dump(
+            frontmatter, default_flow_style=False, sort_keys=False, allow_unicode=True
+        )
+        frontmatter_str = f"---\n{yaml_str}---"
 
         # Build content
         content_lines = [
@@ -72,11 +76,29 @@ class ClippedContent:
             f"# {self.title}",
             "",
             f"[Original source]({self.url})",
-            "",
-            self.markdown,
         ]
 
-        return "\n".join(frontmatter_lines + content_lines)
+        # Add Raindrop note if present
+        if raindrop_note and raindrop_note.strip():
+            content_lines.extend(
+                [
+                    "",
+                    "<!-- raindrop-note-start -->",
+                    "",
+                    f"> **Raindrop Note:** {raindrop_note.strip()}",
+                    "",
+                    "<!-- raindrop-note-end -->",
+                ]
+            )
+
+        content_lines.extend(
+            [
+                "",
+                self.markdown,
+            ]
+        )
+
+        return frontmatter_str + "\n".join(content_lines)
 
 
 def fetch_url(url: str) -> str:
@@ -420,6 +442,7 @@ def save_clipped_note(
     notebook: str | None = None,
     target_note: Path | None = None,
     extra_tags: list[str] | None = None,
+    raindrop_note: str | None = None,
 ) -> Path:
     """Save clipped content as a note or append to existing note.
 
@@ -428,6 +451,7 @@ def save_clipped_note(
         notebook: Notebook to create new note in (if target_note not specified)
         target_note: Existing note to append to (absolute path)
         extra_tags: Additional tags to include
+        raindrop_note: Optional note from Raindrop to include
 
     Returns:
         Path to the created/modified note
@@ -443,6 +467,7 @@ def save_clipped_note(
         note_content = clipped.to_note_content(
             extra_tags=extra_tags,
             include_domain_tag=include_domain_tag,
+            raindrop_note=raindrop_note,
         )
 
         # Strip frontmatter for appending (keep just the content)
@@ -489,6 +514,7 @@ def save_clipped_note(
         content = clipped.to_note_content(
             extra_tags=extra_tags,
             include_domain_tag=include_domain_tag,
+            raindrop_note=raindrop_note,
         )
         full_path.write_text(content, encoding="utf-8")
 
@@ -503,6 +529,7 @@ def save_clipped_note(
         note_content = clipped.to_note_content(
             extra_tags=extra_tags,
             include_domain_tag=include_domain_tag,
+            raindrop_note=raindrop_note,
         )
 
         # Strip frontmatter for appending

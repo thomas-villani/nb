@@ -95,6 +95,11 @@ def plan_group():
     default=True,
     help="Use smart model (better) or fast model (cheaper). Default: smart.",
 )
+@click.option(
+    "--paste",
+    is_flag=True,
+    help="Include clipboard content as additional context.",
+)
 def plan_week_command(
     notebook: str | None,
     tag: str | None,
@@ -104,11 +109,15 @@ def plan_week_command(
     interactive: bool,
     stream: bool,
     use_smart: bool,
+    paste: bool,
 ) -> None:
     """Plan the upcoming week.
 
     Gathers incomplete todos, calendar events, and recent notes to
     generate a weekly plan with day-by-day breakdown.
+
+    Use --paste to include clipboard content as additional context
+    (e.g., an email with requirements, a meeting agenda, etc.).
 
     \b
     Examples:
@@ -117,13 +126,27 @@ def plan_week_command(
         nb plan week --interactive -o today
         nb plan week -o work                 # Save to new note in work
         nb plan week --prompt "Focus on urgent items only"
+        nb plan week --paste                 # Include clipboard as context
     """
+    from nb.cli.utils import get_clipboard_content
+
+    # Include clipboard content in custom prompt if --paste is specified
+    effective_prompt = custom_prompt
+    if paste:
+        clipboard = get_clipboard_content()
+        if clipboard:
+            clipboard_context = f"\n\nADDITIONAL CONTEXT FROM CLIPBOARD:\n{clipboard}"
+            effective_prompt = (custom_prompt or "") + clipboard_context
+            console.print("[dim]Including clipboard content as context...[/dim]")
+        else:
+            console.print("[yellow]Warning: Clipboard is empty.[/yellow]")
+
     _run_planning(
         horizon="week",
         notebook=notebook,
         tag=tag,
         output=output,
-        custom_prompt=custom_prompt,
+        custom_prompt=effective_prompt,
         include_calendar=not no_calendar,
         interactive=interactive,
         stream=stream,
@@ -182,6 +205,11 @@ def plan_week_command(
     default=True,
     help="Use smart model (better) or fast model (cheaper). Default: smart.",
 )
+@click.option(
+    "--paste",
+    is_flag=True,
+    help="Include clipboard content as additional context.",
+)
 def plan_today_command(
     notebook: str | None,
     tag: str | None,
@@ -191,11 +219,14 @@ def plan_today_command(
     interactive: bool,
     stream: bool,
     use_smart: bool,
+    paste: bool,
 ) -> None:
     """Plan or replan today.
 
     Focuses on what can realistically be accomplished today based on
     your todos, calendar, and availability.
+
+    Use --paste to include clipboard content as additional context.
 
     \b
     Examples:
@@ -203,13 +234,27 @@ def plan_today_command(
         nb plan today --interactive
         nb plan today -o today --prompt "I have a meeting at 2pm"
         nb plan today -o work              # Save to new note in work
+        nb plan today --paste              # Include clipboard as context
     """
+    from nb.cli.utils import get_clipboard_content
+
+    # Include clipboard content in custom prompt if --paste is specified
+    effective_prompt = custom_prompt
+    if paste:
+        clipboard = get_clipboard_content()
+        if clipboard:
+            clipboard_context = f"\n\nADDITIONAL CONTEXT FROM CLIPBOARD:\n{clipboard}"
+            effective_prompt = (custom_prompt or "") + clipboard_context
+            console.print("[dim]Including clipboard content as context...[/dim]")
+        else:
+            console.print("[yellow]Warning: Clipboard is empty.[/yellow]")
+
     _run_planning(
         horizon="day",
         notebook=notebook,
         tag=tag,
         output=output,
-        custom_prompt=custom_prompt,
+        custom_prompt=effective_prompt,
         include_calendar=not no_calendar,
         interactive=interactive,
         stream=stream,
@@ -570,6 +615,12 @@ def _run_interactive_planning(
     type=int,
     help="Maximum tool calls in agentic mode (default: 5).",
 )
+@click.option(
+    "--paste",
+    "-p",
+    is_flag=True,
+    help="Include clipboard content as additional context.",
+)
 def ask_command(
     question: str,
     notebook: str | None,
@@ -582,6 +633,7 @@ def ask_command(
     context_window: int,
     agentic: bool,
     max_tool_calls: int,
+    paste: bool,
 ) -> None:
     """Ask a question about your notes using AI.
 
@@ -591,6 +643,9 @@ def ask_command(
     Use --agentic for complex queries that need to query todos or search
     multiple times.
 
+    Use --paste to include clipboard content as additional context for
+    your question.
+
     \b
     Examples:
         nb ask "what did we decide about the API design?"
@@ -599,15 +654,27 @@ def ask_command(
         nb ask "who owns deployment?" --tag infrastructure
         nb ask "what remains to be done for the widget project?" --agentic
         nb ask "what are my overdue tasks?" --agentic
+        nb ask "summarize this article" --paste      # Include clipboard
     """
+    from nb.cli.utils import get_clipboard_content
     from nb.core.llm import LLMConfigError, LLMError
+
+    # Include clipboard content if --paste is specified
+    effective_question = question
+    if paste:
+        clipboard = get_clipboard_content()
+        if clipboard:
+            effective_question = f"{question}\n\n---\nCLIPBOARD CONTENT:\n{clipboard}"
+            console.print("[dim]Including clipboard content as context...[/dim]")
+        else:
+            console.print("[yellow]Warning: Clipboard is empty.[/yellow]")
 
     try:
         if agentic:
             # Use agentic mode with tool-calling
             if stream:
                 _ask_agentic_streaming(
-                    question=question,
+                    question=effective_question,
                     notebook=notebook,
                     tag=tag,
                     show_sources=show_sources,
@@ -617,7 +684,7 @@ def ask_command(
                 )
             else:
                 _ask_agentic_non_streaming(
-                    question=question,
+                    question=effective_question,
                     notebook=notebook,
                     tag=tag,
                     show_sources=show_sources,
@@ -627,7 +694,7 @@ def ask_command(
                 )
         elif stream:
             _ask_streaming(
-                question=question,
+                question=effective_question,
                 notebook=notebook,
                 note_path=note_path,
                 tag=tag,
@@ -638,7 +705,7 @@ def ask_command(
             )
         else:
             _ask_non_streaming(
-                question=question,
+                question=effective_question,
                 notebook=notebook,
                 note_path=note_path,
                 tag=tag,

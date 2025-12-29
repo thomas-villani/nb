@@ -70,6 +70,8 @@ List all open todos grouped by status and due date.
      - Display todos in kanban board columns
    * - ``-b, --board NAME``
      - Kanban board name to use (default: 'default')
+   * - ``-C, --copy``
+     - Copy todo list to clipboard as checkbox format
    * - ``-S, --section NAME``
      - Filter by path section/subdirectory (repeatable)
    * - ``-xs, --exclude-section NAME``
@@ -119,6 +121,8 @@ Add a new todo to the inbox, today's note, or a specific note.
      - Add to today's daily note instead of inbox
    * - ``--note, -N PATH``
      - Add to specific note (supports ``note::Section`` syntax)
+   * - ``-p, --paste``
+     - Read content from clipboard (parses multiple checkbox lines)
 
 **Examples:**
 
@@ -129,6 +133,8 @@ Add a new todo to the inbox, today's note, or a specific note.
    nb todo add --note work/project "Task"    # Add to specific note
    nb todo add --note proj::Tasks "Task"     # Add under section
    echo "Review PR" | nb todo add            # Pipe from stdin
+   nb todo add --paste                       # Add from clipboard
+   nb todo add --paste --note work/project   # Paste to specific note
 
 The ``ta`` alias provides a shortcut:
 
@@ -205,13 +211,25 @@ nb todo show
 
 Show todo details including multi-line content.
 
-**Usage:** ``nb todo show ID``
+**Usage:** ``nb todo show [OPTIONS] ID``
 
-**Example:**
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-C, --copy``
+     - Copy todo details to clipboard
+
+**Examples:**
 
 .. code-block:: bash
 
    nb todo show abc123
+   nb todo show abc123 -C     # Copy to clipboard
 
 Output:
 
