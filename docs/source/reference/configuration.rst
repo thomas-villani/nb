@@ -165,8 +165,6 @@ Linked notes are **stored in the database**, not in config.yaml. Use the ``nb li
    * - ``--sync / --no-sync``
      - Sync completions back to source file
 
-See :doc:`../commands/linked-files` for full documentation.
-
 Global options
 --------------
 
