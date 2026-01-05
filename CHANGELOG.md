@@ -1,3 +1,35 @@
+# v0.4.7 - 2026-01-05
+
+Patch release delivering Raindrop multi-collection inbox and clipboard support, a daemon CLI invocation change, a DB schema bump, and a few compatibility fixes and test additions. Includes a breaking change: database schema version bumped to v18 (see Migration notes).
+
+## New Features
+
+- [1775438] Add Raindrop multi-collection inbox and clipboard support (Thomas.Villani)
+  - Multi-collection Raindrop.io support via RaindropCollectionConfig and parser updates; the inbox CLI processes configured collections and supports targeting a specific collection. Per-collection settings supported: notebook, auto_archive, extra_tags.
+  - Persist Raindrop metadata for clipped items and bump DB schema to v18 to track raindrop_tags, raindrop_note, collection_name and last_synced_at.
+  - Implement inbox sync workflow: new nb inbox sync command and nb/core/inbox/sync.py detect and apply tag and note changes from Raindrop while preserving user tags; supports dry-run and reports per-item changes.
+  - Clipboard utilities and CLI integration: get_clipboard_content / copy_to_clipboard helpers; --paste / -p to read clipboard for ai/plan/ask, notes add/log, todo add; --copy / -C to copy todo lists, todo details and history to clipboard. Added formatting helper to export todos as checkbox lines.
+  - Clip output improvements: include Raindrop note section in saved notes and generate YAML frontmatter via yaml.safe_dump for correct escaping.
+  - Tests added/expanded for collection parsing, DB sync metadata, tag/note sync logic, and CLI behaviors for sync and clipboard features.
+
+## Other Changes
+
+- [9c35cde] Pass config file path to daemon CLI instead of dirs (Thomas.Villani)
+  - The daemon entrypoint now expects a single argument pointing to the config file (e.g., config.nb_dir/config.yaml) instead of separate notes_root and nb_dir arguments. External scripts or service units invoking python -m nb.daemon must be updated to pass the config file path.
+- [077f4de] Fixed pyproject.toml numpy version mismatch (Thomas.Villani)
+  - Align pyproject dependencies to avoid numpy version mismatch during packaging / CI.
+- [aa7bd11] Bump version: 0.4.6 → 0.4.7 (Thomas.Villani)
+
+## Breaking Changes & Migration
+
+- [1775438] Database schema version bumped to 18.
+  - Impact: The inbox sync features and persisted Raindrop metadata require an upgraded schema. Existing local databases must be migrated before using inbox sync.
+  - Migration steps:
+    1. Backup your nb database.
+    2. Run nb index (or the index/migration command) to apply migrations and upgrade the DB schema to v18.
+    3. Restart any running nb daemons or services after migration.
+  - Note: If you rely on external automation that calls the daemon, update invocations to pass the single config file path (see Other Changes) to avoid startup failures.
+
 # v0.4.6 - 2025-12-25
 
 Patch release adding a background indexing daemon with CLI management plus small UI and packaging updates.

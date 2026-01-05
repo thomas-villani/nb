@@ -147,10 +147,11 @@ todo_exclude: true
 - [ ] Add clipboard integration to various commands (e.g. nb add --paste)
 - [x] Enhance templates by adding fancy tags like `{{ calendar }}` and `{{ todos.overdue }}` and `{{ todos.due_today }}`
 - [ ] Week-based notebooks where `nb today` adds todays date in a section and notes are organized weekly.
-- [ ] Need to make sure the `nb inbox` command supports when tags are changed in raindrop - should sync the changes in flags.
+- [x] Need to make sure the `nb inbox` command supports when tags are changed in raindrop - should sync the changes in flags.
    Also, should have a way to directly tag notebooks, e.g. a collection with the same name?
 - [ ] Make sure 'nb todo add; handles relative due dates
 - [ ] Make sure to properly use pyyaml to generate frontmatter for the notes for the `clip` command
+- [ ] Add `--copy` to `nb plan ...` commands and other ai commands that give output
 
 ### Phase 5: Wijjit TUI
 - [x] Full Wijjit-based todo list view with richer interactions #feature

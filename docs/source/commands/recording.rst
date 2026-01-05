@@ -219,6 +219,39 @@ for system audio loopback (WASAPI).
 Use the device index with ``--mic`` and ``--loopback`` options in
 ``nb record start``.
 
+nb record test
+--------------
+
+Test audio devices and find the best configuration.
+
+Scans all audio devices, tests which ones actually work, and shows
+the recommended configuration for meeting recording.
+
+**Usage:** ``nb record test [OPTIONS]``
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-s, --save``
+     - Save working devices to config
+
+For meeting recording (Teams/Zoom), you typically need:
+
+- **Microphone**: captures your voice
+- **System audio (Stereo Mix/Loopback)**: captures other participants
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb record test           # Test devices and show recommendations
+   nb record test --save    # Test and save working config
+
 nb record purge
 ---------------
 

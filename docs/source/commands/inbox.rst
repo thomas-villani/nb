@@ -87,19 +87,21 @@ By default runs interactively, prompting for each item. Already-clipped items ar
    * - Option
      - Description
    * - ``-n, --notebook TEXT``
-     - Notebook to clip items to
+     - Notebook to clip items to (overrides collection mapping)
    * - ``--auto``
      - Clip all items without prompting
    * - ``-a, --all``
      - Include already-clipped items
    * - ``-l, --limit INTEGER``
-     - Maximum items to process (default: 10)
+     - Maximum items to process per collection (default: 10)
    * - ``-c, --collection TEXT``
-     - Raindrop collection name
+     - Specific Raindrop collection (default: all configured)
    * - ``-t, --tag TEXT``
      - Additional tags (repeatable)
    * - ``--no-archive``
      - Don't archive items after clipping
+   * - ``--ai / --no-ai``
+     - Generate AI summary for clipped content (default: from config ``inbox.auto_summarize``)
 
 **Interactive Mode Commands:**
 
@@ -128,12 +130,14 @@ When running without ``--auto``, you can use these commands at each prompt:
 
 .. code-block:: bash
 
-   nb inbox pull                    # Interactive mode
-   nb inbox pull --auto             # Clip all to default notebook
-   nb inbox pull -n bookmarks       # Clip all to 'bookmarks'
-   nb inbox pull -l 5               # Process only 5 items
+   nb inbox pull                    # Interactive mode, all collections
+   nb inbox pull --auto             # Clip all to configured notebooks
+   nb inbox pull -n bookmarks       # Clip all to 'bookmarks' (override)
+   nb inbox pull -c research        # Only process 'research' collection
+   nb inbox pull -l 5               # Process only 5 items per collection
    nb inbox pull -t research        # Add #research tag to all
    nb inbox pull --all              # Include already-clipped items
+   nb inbox pull --no-ai            # Disable AI summary generation
 
 **Example Interactive Session:**
 
@@ -226,6 +230,50 @@ Lists items that have been previously processed from the inbox, including which 
    nb inbox history -l 50        # Show last 50 items
    nb inbox history --include-skipped  # Include skipped items
 
+nb inbox sync
+-------------
+
+Sync tag and note changes from Raindrop to local notes.
+
+Checks previously-clipped items for changes in Raindrop and updates the local notes accordingly:
+
+- **Tag changes**: Updates note frontmatter tags (preserves user-added tags)
+- **Note changes**: Updates the Raindrop note section in the note content
+
+Only syncs data that originally came from Raindrop. Tags you add locally to notes are preserved and not overwritten.
+
+**Usage:** ``nb inbox sync [OPTIONS]``
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``-l, --limit INTEGER``
+     - Maximum items to sync (default: 50)
+   * - ``--dry-run``
+     - Show what would be synced without making changes
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb inbox sync              # Sync up to 50 items
+   nb inbox sync -l 100       # Sync up to 100 items
+   nb inbox sync --dry-run    # Preview changes without applying
+
+.. note::
+
+   Sync must be enabled in configuration. Enable with:
+
+   .. code-block:: bash
+
+      nb config set inbox.raindrop.sync_tags true
+      nb config set inbox.raindrop.sync_notes true
+
 Configuration
 -------------
 
@@ -241,10 +289,16 @@ Configure inbox settings via ``nb config set``:
      - Inbox source service (currently only 'raindrop')
    * - ``inbox.default_notebook``
      - Default notebook for clipped items (default: bookmarks)
+   * - ``inbox.auto_summarize``
+     - Generate AI summaries when clipping (default: true)
    * - ``inbox.raindrop.collection``
      - Raindrop collection to pull from (default: nb-inbox)
    * - ``inbox.raindrop.auto_archive``
      - Move items to archive after clipping (default: true)
+   * - ``inbox.raindrop.sync_tags``
+     - Sync tag changes from Raindrop to notes (default: false)
+   * - ``inbox.raindrop.sync_notes``
+     - Sync note changes from Raindrop to notes (default: false)
 
 **Example configuration in config.yaml:**
 
@@ -253,9 +307,12 @@ Configure inbox settings via ``nb config set``:
    inbox:
      source: raindrop
      default_notebook: reading
+     auto_summarize: true
      raindrop:
        collection: nb-inbox
        auto_archive: true
+       sync_tags: true
+       sync_notes: true
 
 Duplicate Detection
 -------------------
@@ -263,6 +320,6 @@ Duplicate Detection
 The inbox feature tracks which URLs have been clipped to prevent duplicates:
 
 - When listing items, previously clipped URLs show a warning
-- Use ``--skip-duplicates`` with ``nb inbox pull`` to automatically skip them
+- Already-clipped items are hidden by default (use ``--all`` to include them)
 - Use ``d`` in interactive mode to mark an item as duplicate without clipping
 - View clipping history with ``nb inbox history``

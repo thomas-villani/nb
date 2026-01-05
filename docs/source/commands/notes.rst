@@ -754,7 +754,7 @@ Delete a note from the filesystem and database.
    nb delete daily/2025-11-27
    nb delete friday -f          # Skip confirmation
 
-Note: Linked notes cannot be deleted. Use ``nb unlink`` to remove them.
+Note: Linked notes cannot be deleted. Use ``nb link remove`` to remove them from tracking.
 
 nb mv
 -----
@@ -801,7 +801,7 @@ Moving a note will:
    nb mv friday archive/2025-01-10
    nb mv work/draft work/final -f          # Overwrite if exists
 
-Note: Linked notes cannot be moved. Use ``nb unlink`` first.
+Note: Linked notes cannot be moved. Use ``nb link remove`` first.
 
 nb cp
 -----
@@ -914,3 +914,8 @@ Command aliases
      - ``clip``
 
 Additionally, ``nbt`` is a standalone executable that works exactly like ``nb todo``.
+
+See also
+--------
+
+**Linking external files:** To index external markdown files or directories alongside your notes, use the ``nb link`` command. This lets you track todos and search content from files outside your notes directory (e.g., project README files, external wikis). See :ref:`Linked Files <management:Linked Files>` in :doc:`management`.
