@@ -44,7 +44,9 @@ nb/config.py    Configuration management
 - **Todo extraction**: Parses `- [ ]`, `- [^]`, `- [x]` checkboxes with metadata (`@due()`, `@priority()`, `#tags`)
 - **Change detection**: SHA256 hash per file for incremental indexing
 - **Todo IDs**: First 8 chars of SHA256(path:content) - stable but changes if content/path changes (displayed as 6 chars in CLI for brevity)
-- **Date-based notebooks**: Organize by week folders: `daily/2025/Nov25-Dec01/2025-11-27.md`
+- **Date-based notebooks**: Two modes:
+  - **Daily** (`date_based: true`): One file per day: `daily/2025/Nov25-Dec01/2025-11-27.md`
+  - **Weekly** (`date_based: "weekly"`): One file per week with daily sections: `journal/2025/Nov25-Dec01.md`
 - **Hybrid search**: 70% semantic (vector embeddings) + 30% keyword (FTS5)
 
 ## API Key Configuration

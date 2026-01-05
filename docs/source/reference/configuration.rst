@@ -15,8 +15,11 @@ Full example:
 
    notebooks:
      - name: daily
-       date_based: true
+       date_based: true         # Daily mode: one file per day (YYYY/Week/YYYY-MM-DD.md)
        icon: calendar
+     - name: journal
+       date_based: weekly       # Weekly mode: one file per week with daily sections
+       icon: note
      - name: projects
        date_based: false
        color: cyan
@@ -114,7 +117,7 @@ Notebook options
    * - ``name``
      - Notebook name (required)
    * - ``date_based``
-     - Use week-based date organization
+     - Date organization mode: ``true``/``"daily"`` for one file per day, ``"weekly"`` for one file per week with daily sections, ``false`` for flat structure
    * - ``todo_exclude``
      - Exclude from ``nb todo`` by default
    * - ``path``

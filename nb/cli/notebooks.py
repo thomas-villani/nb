@@ -52,8 +52,10 @@ def _list_notebooks(verbose: bool = False) -> None:
                 note_count = "[dim]-[/dim]"
 
             nb_type_parts = []
-            if nb.date_based:
-                nb_type_parts.append("date")
+            if nb.date_mode == "daily":
+                nb_type_parts.append("daily")
+            elif nb.date_mode == "weekly":
+                nb_type_parts.append("weekly")
             if nb.todo_exclude:
                 nb_type_parts.append("excl")
             if nb.is_external:
@@ -69,8 +71,10 @@ def _list_notebooks(verbose: bool = False) -> None:
             suffix = ""
             if nb.is_external:
                 suffix = f" [dim](external: {nb.path})[/dim]"
-            elif nb.date_based:
-                suffix = " [dim](date-based)[/dim]"
+            elif nb.date_mode == "weekly":
+                suffix = " [dim](weekly)[/dim]"
+            elif nb.date_mode == "daily":
+                suffix = " [dim](daily)[/dim]"
             console.print(f"{nb.name}{suffix}")
 
 
@@ -84,7 +88,8 @@ def notebooks_list(verbose: bool) -> None:
 @notebooks_cmd.command("create")
 @click.argument("name")
 @click.option("--from", "from_path", help="External path to use as notebook")
-@click.option("--date-based", "-d", is_flag=True, help="Use date-based organization")
+@click.option("--date-based", "-d", is_flag=True, help="Use daily date-based organization (one file per day)")
+@click.option("--weekly", "-w", is_flag=True, help="Use weekly organization (one file per week with daily sections)")
 @click.option(
     "--todo-exclude", "-x", is_flag=True, help="Exclude from nb todo by default"
 )
@@ -92,6 +97,7 @@ def notebooks_create(
     name: str,
     from_path: str | None,
     date_based: bool,
+    weekly: bool,
     todo_exclude: bool,
 ) -> None:
     """Create a new notebook.
@@ -99,11 +105,25 @@ def notebooks_create(
     Examples:
         nb notebooks create ideas
         nb notebooks create work-log --date-based
+        nb notebooks create journal --weekly
         nb notebooks create obsidian --from ~/Documents/Obsidian/vault
         nb notebooks create personal --todo-exclude
 
     """
     from nb.config import add_notebook, expand_path
+
+    # Validate mutually exclusive flags
+    if date_based and weekly:
+        console.print("[red]Error:[/red] --date-based and --weekly are mutually exclusive")
+        raise SystemExit(1)
+
+    # Determine date_based value
+    if weekly:
+        date_based_value: str | bool = "weekly"
+    elif date_based:
+        date_based_value = True  # or "daily" - both work
+    else:
+        date_based_value = False
 
     # Validate external path if provided
     ext_path = None
@@ -119,7 +139,7 @@ def notebooks_create(
     try:
         nb = add_notebook(
             name=name,
-            date_based=date_based,
+            date_based=date_based_value,
             todo_exclude=todo_exclude,
             path=ext_path,
         )
@@ -133,9 +153,13 @@ def notebooks_create(
             console.print(f"[green]Created notebook:[/green] {name}")
             console.print(f"[dim]Location: {config.notes_root / name}[/dim]")
 
-        if date_based:
+        if weekly:
             console.print(
-                "[dim]Using date-based organization (YYYY/Week/YYYY-MM-DD.md)[/dim]"
+                "[dim]Using weekly organization (YYYY/Week.md with daily sections)[/dim]"
+            )
+        elif date_based:
+            console.print(
+                "[dim]Using daily organization (YYYY/Week/YYYY-MM-DD.md)[/dim]"
             )
         if todo_exclude:
             console.print("[dim]Excluded from nb todo by default[/dim]")

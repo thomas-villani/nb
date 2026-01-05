@@ -10,6 +10,7 @@ from nb.core.notebooks import (
     create_notebook,
     ensure_notebook_note,
     get_default_transcript_notebook,
+    get_notebook_date_mode,
     get_notebook_for_file,
     get_notebook_note_path,
     get_notebook_notes,
@@ -394,3 +395,245 @@ class TestGetDefaultTranscriptNotebook:
 
         with pytest.raises(ValueError, match="No notebooks configured"):
             get_default_transcript_notebook()
+
+
+class TestGetNotebookDateMode:
+    """Tests for get_notebook_date_mode function."""
+
+    def test_daily_mode(self, mock_config):
+        """Daily notebook should return 'daily' mode."""
+        assert get_notebook_date_mode("daily") == "daily"
+
+    def test_flat_mode(self, mock_config):
+        """Non-date-based notebook should return 'none' mode."""
+        assert get_notebook_date_mode("projects") == "none"
+
+    def test_weekly_mode(self, temp_notes_root, monkeypatch):
+        """Weekly notebook should return 'weekly' mode."""
+        from nb.config import Config, NotebookConfig, reset_config
+
+        config = Config(
+            notes_root=temp_notes_root,
+            editor="vim",
+            notebooks=[
+                NotebookConfig(name="journal", date_based="weekly"),
+            ],
+        )
+
+        def mock_get_config():
+            return config
+
+        import nb.core.notebooks
+
+        monkeypatch.setattr(nb.core.notebooks, "get_config", mock_get_config)
+        reset_config()
+
+        assert get_notebook_date_mode("journal") == "weekly"
+
+    def test_unknown_notebook_default(self, mock_config):
+        """Unknown notebooks default to 'none' unless named 'daily'."""
+        assert get_notebook_date_mode("random") == "none"
+        assert get_notebook_date_mode("daily") == "daily"
+
+
+class TestIsNotebookDateBasedWithWeekly:
+    """Tests for is_notebook_date_based with weekly notebooks."""
+
+    def test_weekly_is_date_based(self, temp_notes_root, monkeypatch):
+        """Weekly notebook should be considered date-based."""
+        from nb.config import Config, NotebookConfig, reset_config
+
+        config = Config(
+            notes_root=temp_notes_root,
+            editor="vim",
+            notebooks=[
+                NotebookConfig(name="journal", date_based="weekly"),
+            ],
+        )
+
+        def mock_get_config():
+            return config
+
+        import nb.core.notebooks
+
+        monkeypatch.setattr(nb.core.notebooks, "get_config", mock_get_config)
+        reset_config()
+
+        assert is_notebook_date_based("journal") is True
+
+
+class TestWeeklyNotebookPath:
+    """Tests for weekly notebook path generation."""
+
+    def test_weekly_path_structure(self, temp_notes_root, monkeypatch):
+        """Weekly notebook should create path: notebook/YYYY/WeekFolder.md."""
+        from nb.config import Config, NotebookConfig, reset_config
+
+        config = Config(
+            notes_root=temp_notes_root,
+            editor="vim",
+            notebooks=[
+                NotebookConfig(name="journal", date_based="weekly"),
+            ],
+        )
+
+        def mock_get_config():
+            return config
+
+        import nb.core.notebooks
+
+        monkeypatch.setattr(nb.core.notebooks, "get_config", mock_get_config)
+        reset_config()
+
+        # Nov 26, 2025 is a Wednesday - week is Nov24-Nov30
+        path = get_notebook_note_path("journal", dt=date(2025, 11, 26))
+
+        # Should be: journal/2025/Nov24-Nov30.md
+        assert path.name == "Nov24-Nov30.md"
+        assert path.parent.name == "2025"
+        assert path.parent.parent.name == "journal"
+
+
+class TestWeeklyNotebookEnsure:
+    """Tests for ensure_notebook_note with weekly notebooks."""
+
+    def test_creates_weekly_note(self, temp_notes_root, monkeypatch):
+        """Weekly notebook should create note with week header and daily section."""
+        from nb.config import Config, NotebookConfig, reset_config
+
+        config = Config(
+            notes_root=temp_notes_root,
+            editor="vim",
+            notebooks=[
+                NotebookConfig(name="journal", date_based="weekly"),
+            ],
+        )
+
+        def mock_get_config():
+            return config
+
+        import nb.core.notebooks
+
+        monkeypatch.setattr(nb.core.notebooks, "get_config", mock_get_config)
+        reset_config()
+
+        dt = date(2025, 11, 26)  # Wednesday
+        path = ensure_notebook_note("journal", dt=dt)
+
+        assert path.exists()
+        content = path.read_text()
+
+        # Check frontmatter (YAML may quote strings)
+        assert "2025-11-24" in content  # Week start date (Monday)
+        assert "Nov24-Nov30" in content
+
+        # Check week title
+        assert "# Week of November 24 - November 30, 2025" in content
+
+        # Check daily section
+        assert "## Wednesday, November 26, 2025" in content
+
+    def test_appends_daily_section(self, temp_notes_root, monkeypatch):
+        """Running ensure_notebook_note for a different day should append section."""
+        from nb.config import Config, NotebookConfig, reset_config
+
+        config = Config(
+            notes_root=temp_notes_root,
+            editor="vim",
+            notebooks=[
+                NotebookConfig(name="journal", date_based="weekly"),
+            ],
+        )
+
+        def mock_get_config():
+            return config
+
+        import nb.core.notebooks
+
+        monkeypatch.setattr(nb.core.notebooks, "get_config", mock_get_config)
+        reset_config()
+
+        # Create note for Wednesday
+        dt1 = date(2025, 11, 26)  # Wednesday
+        path1 = ensure_notebook_note("journal", dt=dt1)
+
+        # Now ensure for Thursday
+        dt2 = date(2025, 11, 27)  # Thursday
+        path2 = ensure_notebook_note("journal", dt=dt2)
+
+        assert path1 == path2  # Same file
+
+        content = path2.read_text()
+
+        # Both sections should exist
+        assert "## Wednesday, November 26, 2025" in content
+        assert "## Thursday, November 27, 2025" in content
+
+    def test_no_duplicate_section(self, temp_notes_root, monkeypatch):
+        """Running ensure_notebook_note twice for same day should not duplicate."""
+        from nb.config import Config, NotebookConfig, reset_config
+
+        config = Config(
+            notes_root=temp_notes_root,
+            editor="vim",
+            notebooks=[
+                NotebookConfig(name="journal", date_based="weekly"),
+            ],
+        )
+
+        def mock_get_config():
+            return config
+
+        import nb.core.notebooks
+
+        monkeypatch.setattr(nb.core.notebooks, "get_config", mock_get_config)
+        reset_config()
+
+        dt = date(2025, 11, 26)  # Wednesday
+
+        # Ensure twice
+        ensure_notebook_note("journal", dt=dt)
+        path = ensure_notebook_note("journal", dt=dt)
+
+        content = path.read_text()
+
+        # Should only have one Wednesday section
+        count = content.count("## Wednesday, November 26, 2025")
+        assert count == 1
+
+    def test_preserves_existing_content(self, temp_notes_root, monkeypatch):
+        """Appending a new section should preserve existing content."""
+        from nb.config import Config, NotebookConfig, reset_config
+
+        config = Config(
+            notes_root=temp_notes_root,
+            editor="vim",
+            notebooks=[
+                NotebookConfig(name="journal", date_based="weekly"),
+            ],
+        )
+
+        def mock_get_config():
+            return config
+
+        import nb.core.notebooks
+
+        monkeypatch.setattr(nb.core.notebooks, "get_config", mock_get_config)
+        reset_config()
+
+        # Create note for Wednesday
+        dt1 = date(2025, 11, 26)
+        path = ensure_notebook_note("journal", dt=dt1)
+
+        # Add some content
+        content = path.read_text()
+        path.write_text(content + "Some important notes here.\n")
+
+        # Now ensure for Thursday
+        dt2 = date(2025, 11, 27)
+        ensure_notebook_note("journal", dt=dt2)
+
+        # Content should be preserved
+        final_content = path.read_text()
+        assert "Some important notes here." in final_content
+        assert "## Thursday, November 27, 2025" in final_content

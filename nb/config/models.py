@@ -12,7 +12,7 @@ class NotebookConfig:
     """Configuration for a notebook."""
 
     name: str
-    date_based: bool = False  # If True, uses YYYY/Week/YYYY-MM-DD.md structure
+    date_based: str | bool = False  # False/"none", True/"daily", or "weekly"
     todo_exclude: bool = False  # If True, exclude from `nb todo` by default
     path: Path | None = None  # External path (None = inside notes_root)
     color: str | None = None  # Display color (e.g., "blue", "green", "#ff5500")
@@ -23,6 +23,23 @@ class NotebookConfig:
     def is_external(self) -> bool:
         """Check if this notebook is external (outside notes_root)."""
         return self.path is not None
+
+    @property
+    def date_mode(self) -> str:
+        """Return normalized date mode: 'none', 'daily', or 'weekly'.
+
+        Handles backward compatibility:
+        - False/None/"none" -> "none" (flat structure)
+        - True/"daily" -> "daily" (one file per day)
+        - "weekly" -> "weekly" (one file per week with daily sections)
+        """
+        if self.date_based is False or self.date_based is None or self.date_based == "none":
+            return "none"
+        if self.date_based is True or self.date_based == "daily":
+            return "daily"
+        if self.date_based == "weekly":
+            return "weekly"
+        return "none"
 
 
 @dataclass
@@ -422,7 +439,8 @@ notes_root: ~/notes
 editor: micro
 
 # Notebook directories (created under notes_root)
-# Set date_based: true to use YYYY/Week/YYYY-MM-DD.md structure
+# Set date_based: true or "daily" for YYYY/Week/YYYY-MM-DD.md (one file per day)
+# Set date_based: "weekly" for YYYY/Week.md (one file per week with daily sections)
 # Set todo_exclude: true to exclude from `nb todo` by default
 # Set path: to use an external directory as a notebook
 # Set color: to customize display color (e.g., blue, green, #ff5500)

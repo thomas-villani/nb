@@ -60,7 +60,7 @@ class TestNotebooksCreate:
             cli, ["notebooks", "create", "journal", "--date-based"]
         )
         assert result.exit_code == 0
-        assert "date-based" in result.output.lower()
+        assert "daily" in result.output.lower()
 
     def test_create_todo_exclude_notebook(
         self, cli_runner: CliRunner, mock_cli_config: Config

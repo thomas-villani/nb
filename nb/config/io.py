@@ -394,7 +394,7 @@ def init_config(notes_root: Path | None = None) -> Config:
 
 def add_notebook(
     name: str,
-    date_based: bool = False,
+    date_based: str | bool = False,
     todo_exclude: bool = False,
     path: Path | None = None,
     color: str | None = None,
@@ -404,7 +404,8 @@ def add_notebook(
 
     Args:
         name: Name of the notebook
-        date_based: Whether to use date-based organization
+        date_based: Date organization mode - False/"none" for flat, True/"daily" for daily,
+                   or "weekly" for weekly notes with daily sections
         todo_exclude: Whether to exclude from nb todo by default
         path: External path (None for internal notebook)
         color: Display color for the notebook

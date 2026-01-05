@@ -1,3 +1,14 @@
+# Unreleased
+
+## New Features
+
+- Add week-based notebooks: a new `date_based: "weekly"` mode that creates one file per week with daily sections
+  - Weekly notes use path structure: `notebook/YYYY/Nov25-Dec01.md` (single file per week)
+  - Running `nb today -n journal` on a weekly notebook appends a `## Monday, January 6, 2025` section if not present
+  - Add `--weekly` / `-w` flag to `nb notebooks create` command
+  - Notebook list shows "weekly" type for weekly notebooks
+  - Full backward compatibility: existing `date_based: true` notebooks continue to work as daily notebooks
+
 # v0.4.7 - 2026-01-05
 
 Patch release delivering Raindrop multi-collection inbox and clipboard support, a daemon CLI invocation change, a DB schema bump, and a few compatibility fixes and test additions. Includes a breaking change: database schema version bumped to v18 (see Migration notes).

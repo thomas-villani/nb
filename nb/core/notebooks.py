@@ -213,6 +213,26 @@ def get_notebook_stats(notebook: str, notes_root: Path | None = None) -> dict[st
     }
 
 
+def get_notebook_date_mode(notebook: str) -> str:
+    """Get the date mode for a notebook.
+
+    Args:
+        notebook: Name of the notebook
+
+    Returns:
+        'none' for flat structure (one file per note)
+        'daily' for daily structure (one file per day)
+        'weekly' for weekly structure (one file per week with daily sections)
+
+    """
+    config = get_config()
+    nb_config = config.get_notebook(notebook)
+    if nb_config:
+        return nb_config.date_mode
+    # Default: only "daily" notebook name uses daily mode
+    return "daily" if notebook == "daily" else "none"
+
+
 def is_notebook_date_based(notebook: str) -> bool:
     """Check if a notebook uses date-based organization.
 
@@ -220,15 +240,10 @@ def is_notebook_date_based(notebook: str) -> bool:
         notebook: Name of the notebook
 
     Returns:
-        True if the notebook uses YYYY/MM/YYYY-MM-DD.md structure.
+        True if the notebook uses date-based structure (daily or weekly).
 
     """
-    config = get_config()
-    nb_config = config.get_notebook(notebook)
-    if nb_config:
-        return nb_config.date_based
-    # Default: only "daily" is date-based for unknown notebooks
-    return notebook == "daily"
+    return get_notebook_date_mode(notebook) != "none"
 
 
 def get_default_transcript_notebook() -> str:
@@ -304,8 +319,11 @@ def get_notebook_note_path(
 ) -> Path:
     """Get the path for a note in a notebook.
 
-    For date-based notebooks, creates path like: base/YYYY/Nov25-Dec01/YYYY-MM-DD.md
-    (organized by work week, Monday-Sunday)
+    For daily notebooks, creates path like: base/YYYY/Nov25-Dec01/YYYY-MM-DD.md
+    (organized by work week, Monday-Sunday, one file per day)
+
+    For weekly notebooks, creates path like: base/YYYY/Nov25-Dec01.md
+    (one file per week with daily sections)
 
     For flat notebooks, creates path like: base/name.md
 
@@ -325,6 +343,7 @@ def get_notebook_note_path(
 
     config = get_config()
     nb_config = config.get_notebook(notebook)
+    date_mode = get_notebook_date_mode(notebook)
 
     # Determine base path (external path or notes_root/notebook)
     if nb_config and nb_config.is_external:
@@ -334,12 +353,19 @@ def get_notebook_note_path(
     else:
         base_path = config.notes_root / notebook
 
-    if is_notebook_date_based(notebook):
+    if date_mode == "daily":
         if dt is None:
             dt = date.today()
         week_folder = get_week_folder_name(dt)
         return base_path / str(dt.year) / week_folder / f"{dt}.md"
+    elif date_mode == "weekly":
+        if dt is None:
+            dt = date.today()
+        week_folder = get_week_folder_name(dt)
+        # Single file per week: weekly/2025/Nov25-Dec01.md
+        return base_path / str(dt.year) / f"{week_folder}.md"
     else:
+        # Flat structure ("none" mode)
         if name is None:
             raise ValueError(f"Name required for non-date-based notebook: {notebook}")
         # Ensure .md extension
@@ -356,7 +382,8 @@ def ensure_notebook_note(
 ) -> Path:
     """Ensure a note exists in a notebook, creating it if necessary.
 
-    For date-based notebooks, creates the daily note with a header.
+    For daily notebooks, creates a note file with a date header.
+    For weekly notebooks, creates/updates a weekly note with daily sections.
     For flat notebooks, creates an empty note with a title.
 
     If a template is specified or the notebook has a default template,
@@ -373,6 +400,10 @@ def ensure_notebook_note(
 
     """
     path = get_notebook_note_path(notebook, dt=dt, name=name)
+
+    # Weekly notebooks need special handling - append section if needed
+    if get_notebook_date_mode(notebook) == "weekly":
+        return _ensure_weekly_note_section(notebook, path, dt, template)
 
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -425,3 +456,82 @@ def ensure_notebook_note(
             )
 
     return path
+
+
+def _ensure_weekly_note_section(
+    notebook: str,
+    path: Path,
+    dt: date | None = None,
+    template: str | None = None,
+) -> Path:
+    """Ensure a weekly note exists with today's section.
+
+    Creates the weekly file if it doesn't exist, and appends
+    today's section if it's not already present.
+
+    Args:
+        notebook: Name of the notebook
+        path: Path to the weekly note file
+        dt: Date for the daily section (defaults to today)
+        template: Template name (currently unused for weekly notes)
+
+    Returns:
+        Path to the weekly note file.
+
+    """
+    config = get_config()
+    if dt is None:
+        dt = date.today()
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Generate the daily section header using the configured format
+    daily_header = f"## {dt.strftime(config.daily_title_format)}"
+
+    if not path.exists():
+        # Create new weekly file with initial content
+        content = _create_weekly_note_template(dt, config)
+        content += f"\n{daily_header}\n\n"
+        path.write_text(content, encoding="utf-8")
+    else:
+        # Check if today's section already exists
+        existing_content = path.read_text(encoding="utf-8")
+        if daily_header not in existing_content:
+            # Append today's section at the end
+            with path.open("a", encoding="utf-8") as f:
+                f.write(f"\n{daily_header}\n\n")
+
+    return path
+
+
+def _create_weekly_note_template(dt: date, config) -> str:
+    """Generate template for a weekly note file.
+
+    Creates frontmatter with week info and a week title header.
+
+    Args:
+        dt: A date within the week
+        config: Application config
+
+    Returns:
+        String content for the weekly note template.
+
+    """
+    from nb.utils.dates import get_week_folder_name, get_week_range
+    from nb.utils.markdown import generate_frontmatter
+
+    start, end = get_week_range(dt)
+    week_folder = get_week_folder_name(dt)
+
+    # Format week title: "Week of November 25 - December 1, 2025"
+    week_title = f"Week of {start.strftime('%B %d')} - {end.strftime('%B %d, %Y')}"
+
+    meta = {
+        "date": start.isoformat(),
+        "week": week_folder,
+    }
+
+    content = generate_frontmatter(meta)
+    content += f"# {week_title}\n"
+
+    return content

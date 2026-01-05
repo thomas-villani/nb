@@ -4,7 +4,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 
 ## Features
 
-- **Daily notes** - Automatic date-organized journal entries with week-based folders
+- **Daily & weekly notes** - Automatic date-organized journal entries with daily (one file per day) or weekly (one file per week with daily sections) modes
 - **Note templates** - Create reusable templates with variables for new notes
 - **Todo management** - Extract and track todos from any markdown file with in-progress support
 - **Todo views** - Save and reuse filter configurations for quick access
@@ -114,8 +114,26 @@ nb history -C             # Copy history list to clipboard
 ```
 
 Date-based notebooks organize notes by work week:
+
+**Daily mode** (`date_based: true` or `date_based: daily`) - One file per day:
 ```
 daily/2025/Nov25-Dec01/2025-11-27.md
+```
+
+**Weekly mode** (`date_based: weekly`) - One file per week with daily sections:
+```
+journal/2025/Nov25-Dec01.md
+```
+
+In weekly mode, `nb today` appends a new section for the current day if it doesn't exist:
+```markdown
+# Week of November 25 - December 1, 2025
+
+## Monday, November 25, 2025
+- Started project kickoff
+
+## Tuesday, November 26, 2025
+- Team standup notes
 ```
 
 ### Notes Management
@@ -346,7 +364,8 @@ Pinned notes are stored in the database for quick retrieval.
 nb notebooks               # List all notebooks
 nb notebooks -v            # Verbose list with note counts
 nb notebooks create ideas  # Create a new notebook
-nb notebooks create work-log --date-based     # Date-based notebook
+nb notebooks create work-log --date-based     # Daily date-based (one file per day)
+nb notebooks create journal --weekly          # Weekly (one file per week with daily sections)
 nb notebooks create personal --todo-exclude   # Exclude from nb todo
 nb notebooks create vault --from ~/Obsidian   # External directory
 nb notebooks remove old-project               # Remove from config
@@ -1700,8 +1719,11 @@ editor: micro  # or vim, code, etc.
 # Notebooks (internal and external)
 notebooks:
   - name: daily
-    date_based: true          # Uses YYYY/Week/YYYY-MM-DD.md structure
+    date_based: true          # Daily mode: YYYY/Week/YYYY-MM-DD.md (one file per day)
     icon: 📅                  # Display icon in listings
+  - name: journal
+    date_based: weekly        # Weekly mode: YYYY/Week.md (one file per week with daily sections)
+    icon: 📓
   - name: projects
     date_based: false
     color: cyan               # Display color (blue, green, cyan, etc.)
@@ -1795,7 +1817,7 @@ git:
 | Option | Description |
 |--------|-------------|
 | `name` | Notebook name (required) |
-| `date_based` | Use week-based date organization |
+| `date_based` | Date organization mode: `true`/`"daily"` for one file per day, `"weekly"` for one file per week with daily sections, `false` for flat structure |
 | `todo_exclude` | Exclude from `nb todo` by default |
 | `path` | External directory path (makes notebook external) |
 | `color` | Display color in listings (e.g., blue, green, cyan, magenta, #ff5500) |
@@ -1822,13 +1844,17 @@ Use `nb config api-keys` to see which keys are detected.
 
 ```
 ~/notes/
-├── daily/                    # Date-based notebook
+├── daily/                    # Daily date-based notebook (one file per day)
 │   └── 2025/
 │       ├── Nov18-Nov24/
 │       │   └── 2025-11-20.md
 │       └── Nov25-Dec01/      # Week folders (Mon-Sun)
 │           ├── 2025-11-26.md
 │           └── 2025-11-27.md
+├── journal/                  # Weekly date-based notebook (one file per week)
+│   └── 2025/
+│       ├── Nov18-Nov24.md    # Single file for entire week
+│       └── Nov25-Dec01.md    # Contains daily sections (## Monday, ## Tuesday, etc.)
 ├── projects/                 # Flat notebook
 │   └── myproject.md
 ├── work/

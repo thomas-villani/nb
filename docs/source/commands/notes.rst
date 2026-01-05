@@ -34,11 +34,16 @@ Open today's daily note in your editor.
 nb today
 --------
 
-Alias for the default action - open today's daily note.
+Alias for the default action - open today's note.
 
 **Usage:** ``nb today [OPTIONS]``
 
 **Options:** Same as ``nb`` default.
+
+The behavior depends on the notebook's ``date_based`` setting:
+
+- **Daily mode** (``date_based: true``): Opens today's file (creates if needed)
+- **Weekly mode** (``date_based: weekly``): Opens the current week's file and appends today's section if not present
 
 **Examples:**
 
@@ -46,6 +51,7 @@ Alias for the default action - open today's daily note.
 
    nb today
    nb today -n work
+   nb today -n journal    # Opens weekly file, adds today's section
 
 nb yesterday
 ------------

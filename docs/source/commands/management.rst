@@ -57,8 +57,10 @@ Create a new notebook.
 
    * - Option
      - Description
-   * - ``--date-based``
-     - Use week-based date organization
+   * - ``--date-based, -d``
+     - Use daily date organization (one file per day)
+   * - ``--weekly, -w``
+     - Use weekly date organization (one file per week with daily sections)
    * - ``--todo-exclude``
      - Exclude from ``nb todo`` by default
    * - ``--from PATH``
@@ -69,7 +71,8 @@ Create a new notebook.
 .. code-block:: bash
 
    nb notebooks create ideas
-   nb notebooks create work-log --date-based
+   nb notebooks create work-log --date-based    # Daily: one file per day
+   nb notebooks create journal --weekly         # Weekly: one file per week
    nb notebooks create personal --todo-exclude
    nb notebooks create vault --from ~/Obsidian
 
