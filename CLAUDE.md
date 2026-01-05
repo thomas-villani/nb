@@ -152,6 +152,7 @@ inbox:
   raindrop:
     sync_tags: true        # Sync tag changes from Raindrop to notes
     sync_notes: true       # Sync note changes from Raindrop to notes
+    push_summary: true     # Push AI summaries to empty Raindrop notes
     collections:
       - name: nb-inbox
         notebook: bookmarks

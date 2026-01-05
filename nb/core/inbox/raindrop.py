@@ -272,6 +272,23 @@ class RaindropClient:
         )
         return True
 
+    def update_item_note(self, item_id: int, note: str) -> bool:
+        """Update an item's note in Raindrop.
+
+        Args:
+            item_id: The raindrop ID to update
+            note: Note content to set
+
+        Returns:
+            True if successful
+        """
+        self._request(
+            "PUT",
+            f"/raindrop/{item_id}",
+            json={"note": note},
+        )
+        return True
+
     def get_item(self, item_id: int) -> RaindropItem | None:
         """Get a single item by ID.
 

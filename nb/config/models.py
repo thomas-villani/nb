@@ -145,6 +145,7 @@ class RaindropConfig:
     # Sync settings
     sync_tags: bool = True  # Sync tag changes from Raindrop to notes
     sync_notes: bool = True  # Sync note changes from Raindrop to notes
+    push_summary: bool = False  # Push AI summary to Raindrop note if empty
 
     def get_all_collections(
         self, default_notebook: str = "bookmarks"

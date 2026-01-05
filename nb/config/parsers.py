@@ -256,6 +256,7 @@ def _parse_raindrop_config(data: dict[str, Any] | None) -> RaindropConfig:
         collections=collections,
         sync_tags=data.get("sync_tags", True),
         sync_notes=data.get("sync_notes", True),
+        push_summary=data.get("push_summary", False),
     )
 
 

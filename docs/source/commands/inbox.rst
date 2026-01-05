@@ -239,6 +239,7 @@ Checks previously-clipped items for changes in Raindrop and updates the local no
 
 - **Tag changes**: Updates note frontmatter tags (preserves user-added tags)
 - **Note changes**: Updates the Raindrop note section in the note content
+- **Push summaries**: Pushes AI-generated summaries to Raindrop notes (if ``push_summary`` is enabled and the Raindrop note is empty)
 
 Only syncs data that originally came from Raindrop. Tags you add locally to notes are preserved and not overwritten.
 
@@ -296,9 +297,11 @@ Configure inbox settings via ``nb config set``:
    * - ``inbox.raindrop.auto_archive``
      - Move items to archive after clipping (default: true)
    * - ``inbox.raindrop.sync_tags``
-     - Sync tag changes from Raindrop to notes (default: false)
+     - Sync tag changes from Raindrop to notes (default: true)
    * - ``inbox.raindrop.sync_notes``
-     - Sync note changes from Raindrop to notes (default: false)
+     - Sync note changes from Raindrop to notes (default: true)
+   * - ``inbox.raindrop.push_summary``
+     - Push AI summaries to Raindrop bookmark notes if empty (default: false)
 
 **Example configuration in config.yaml:**
 
@@ -313,6 +316,7 @@ Configure inbox settings via ``nb config set``:
        auto_archive: true
        sync_tags: true
        sync_notes: true
+       push_summary: true
 
 Duplicate Detection
 -------------------

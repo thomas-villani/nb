@@ -439,6 +439,16 @@ def pull_items(
                             console.print(
                                 f"\r   [dim]Summary:[/dim] {summary[:80]}{'...' if len(summary) > 80 else ''}"
                             )
+
+                            # Push summary to Raindrop if enabled and no existing note
+                            if config.inbox.raindrop.push_summary and not item.note:
+                                try:
+                                    client.update_item_note(item.id, summary)
+                                    console.print(
+                                        "   [dim]Summary pushed to Raindrop[/dim]"
+                                    )
+                                except Exception:
+                                    pass  # Non-fatal
                         else:
                             console.print(
                                 "\r   [dim]Summary: skipped (AI unavailable)[/dim]"
@@ -683,7 +693,7 @@ def sync_items(limit: int, dry_run: bool) -> None:
         if result.error:
             console.print(f"[red]Error syncing {result.item_id}:[/red] {result.error}")
             error_count += 1
-        elif result.tags_updated or result.note_updated:
+        elif result.tags_updated or result.note_updated or result.summary_pushed:
             changes = []
             if result.tags_updated:
                 # Show tag diff
@@ -699,6 +709,8 @@ def sync_items(limit: int, dry_run: bool) -> None:
                 changes.append(f"tags ({' '.join(tag_changes)})")
             if result.note_updated:
                 changes.append("note")
+            if result.summary_pushed:
+                changes.append("summary pushed")
             action = "Would update" if dry_run else "Updated"
             console.print(
                 f"[green]{action} {result.note_path}:[/green] {', '.join(changes)}"

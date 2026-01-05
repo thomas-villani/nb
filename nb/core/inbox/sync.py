@@ -25,6 +25,7 @@ class SyncResult:
     note_path: str
     tags_updated: bool = False
     note_updated: bool = False
+    summary_pushed: bool = False
     error: str | None = None
     old_tags: list[str] = field(default_factory=list)
     new_tags: list[str] = field(default_factory=list)
@@ -234,8 +235,25 @@ def sync_clipped_items(
                 else:
                     result.note_updated = sync_item_note(note_path, old_note, new_note)
 
+            # Push summary to Raindrop if enabled and Raindrop note is empty
+            if raindrop_config.push_summary and not new_note:
+                # Read local note to get summary from frontmatter
+                with note_path.open(encoding="utf-8") as f:
+                    post = frontmatter.load(f)
+                local_summary = post.metadata.get("summary")
+
+                if local_summary:
+                    if dry_run:
+                        result.summary_pushed = True
+                    else:
+                        try:
+                            client.update_item_note(int(item_id), local_summary)
+                            result.summary_pushed = True
+                        except Exception:
+                            pass  # Non-fatal
+
             # Update metadata in database
-            if not dry_run and (result.tags_updated or result.note_updated):
+            if not dry_run and (result.tags_updated or result.note_updated or result.summary_pushed):
                 update_sync_metadata(item_id, new_tags, new_note)
 
                 # Re-index the note
