@@ -924,4 +924,4 @@ Additionally, ``nbt`` is a standalone executable that works exactly like ``nb to
 See also
 --------
 
-**Linking external files:** To index external markdown files or directories alongside your notes, use the ``nb link`` command. This lets you track todos and search content from files outside your notes directory (e.g., project README files, external wikis). See :ref:`Linked Files <management:Linked Files>` in :doc:`management`.
+**Linking external files:** To index external markdown files or directories alongside your notes, use the ``nb link`` command. This lets you track todos and search content from files outside your notes directory (e.g., project README files, external wikis). See :ref:`Linked Files <linked-files>` in :doc:`management`.

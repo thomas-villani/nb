@@ -1,13 +1,53 @@
-# Unreleased
+# v0.4.8 - 2026-01-06
+
+Patch release with new AI/CLI integrations, weekly notebook mode, Raindrop summary push support, and several CLI/AI behavior fixes and formatter improvements. No breaking changes.
 
 ## New Features
 
-- Add week-based notebooks: a new `date_based: "weekly"` mode that creates one file per week with daily sections
-  - Weekly notes use path structure: `notebook/YYYY/Nov25-Dec01.md` (single file per week)
-  - Running `nb today -n journal` on a weekly notebook appends a `## Monday, January 6, 2025` section if not present
-  - Add `--weekly` / `-w` flag to `nb notebooks create` command
-  - Notebook list shows "weekly" type for weekly notebooks
-  - Full backward compatibility: existing `date_based: true` notebooks continue to work as daily notebooks
+- [cfbf19d] Add weekly date-based notebook mode with daily sections
+  - Introduce normalized date_mode ("none" / "daily" / "weekly") and accept str|bool for NotebookConfig.date_based (True/"daily" preserved for backward compatibility)
+  - Add get_notebook_date_mode helper and treat True/"daily" as daily
+  - CLI: add --weekly / -w, make --date-based mean daily, validate mutually exclusive flags and expose weekly/daily in listings and create output
+  - Core: generate weekly note paths (notebook/YYYY/WeekFolder.md) and implement weekly note creation/append flow that inserts daily sections and preserves existing content without duplication
+  - IO: accept "weekly" value when adding notebooks
+  - Tests added for path generation, append behavior, no-duplication, and CLI output
+
+- [126120d] Push AI summaries to Raindrop notes
+  - Add inbox.raindrop.push_summary config option (default: false)
+  - Push AI-generated summary to Raindrop when the remote note is empty (uses local frontmatter summary)
+  - New RaindropClient.update_item_note API and sync logic updates: set summary_pushed flag, respect dry-run, and include summary push in sync output
+  - Pull CLI flow can optionally push summaries and shows confirmation; config parser/models updated accordingly
+
+- [c7631c1] Global --copy / -C clipboard support for AI commands
+  - Add a global --copy / -C option to AI commands (plan, ask, summarize, tldr, research, review, standup, etc.) to copy generated output to the clipboard when requested
+  - Wire copy_to_clip through nb/cli/ai.py and call nb.cli.utils.copy_to_clipboard after generating content; print confirmation on success
+  - Update CLI docs and examples to document the new flag
+
+## Improvements
+
+- [02fedd4] Respect configured excluded notebooks in AI contexts
+  - Apply config.excluded_notebooks() when scope.notebooks is None for planning, review, and standup so configured exclusions are honored by default
+  - In planning, merge config exclusions with scope.exclude_notebooks and pass combined list to get_sorted_todos
+  - In review and standup, pass excluded_nbs into query_todos calls when not filtering by notebook, aligning AI context gathering with nb todo behavior
+
+- [c7631c1] Todos formatter and CLI UX improvements
+  - Improve todos formatter (nb/cli/todos/formatters.py): scale content and source column widths on wide terminals and adjust section length behavior for better readability
+  - Minor todo.md housekeeping (mark week-based notebooks item as completed)
+
+## Documentation & Misc
+
+- [4d929de] Docs and changelog updates related to inbox and clipboard
+  - Document inbox multi-collection features, per-collection settings, --paste/--copy clipboard flags, --ai toggle, and nb inbox sync options (dry-run, limit)
+  - Note DB schema bump to v18 and daemon CLI changes; update README and command docs
+
+- [1c248f2] Documentation fix
+  - Remove invalid link from configuration.rst
+
+## Other
+
+- [c7a06f7] Bump version: 0.4.7 → 0.4.8
+
+No breaking changes in this release.
 
 # v0.4.7 - 2026-01-05
 

@@ -89,6 +89,8 @@ Remove a notebook from config (does not delete files).
 
    nb notebooks remove old-project
 
+.. _linked-files:
+
 Linked Files
 ------------
 
