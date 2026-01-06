@@ -110,6 +110,10 @@ def gather_review_context(
 
     today = date.today()
 
+    # Get excluded notebooks from config when not filtering by specific notebooks
+    config = get_config()
+    excluded_nbs = config.excluded_notebooks() if scope.notebooks is None else None
+
     # Determine the review period
     if horizon == "day":
         period_start = today
@@ -126,6 +130,7 @@ def gather_review_context(
         notebooks=scope.notebooks,
         tag=scope.tags[0] if scope.tags else None,
         parent_only=True,
+        exclude_notebooks=excluded_nbs,
         exclude_note_excluded=False,
     )
 
@@ -136,6 +141,7 @@ def gather_review_context(
         notebooks=scope.notebooks,
         tag=scope.tags[0] if scope.tags else None,
         parent_only=True,
+        exclude_notebooks=excluded_nbs,
         exclude_note_excluded=scope.notebooks is None,
     )
 
@@ -145,6 +151,7 @@ def gather_review_context(
         notebooks=scope.notebooks,
         tag=scope.tags[0] if scope.tags else None,
         parent_only=True,
+        exclude_notebooks=excluded_nbs,
         exclude_note_excluded=scope.notebooks is None,
     )
 
@@ -157,6 +164,7 @@ def gather_review_context(
         notebooks=scope.notebooks,
         tag=scope.tags[0] if scope.tags else None,
         parent_only=True,
+        exclude_notebooks=excluded_nbs,
         exclude_note_excluded=scope.notebooks is None,
     )
 

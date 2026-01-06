@@ -211,6 +211,16 @@ def gather_planning_context(
         scope = PlanScope()
 
     today = date.today()
+    config = get_config()
+
+    # Merge config exclusions with scope exclusions when no specific notebook requested
+    # (matches nb todo behavior where excluded notebooks are filtered by default)
+    if scope.notebooks is None:
+        config_excluded = config.excluded_notebooks()
+        scope_excluded = scope.exclude_notebooks or []
+        all_excluded = list(set(config_excluded) | set(scope_excluded)) or None
+    else:
+        all_excluded = scope.exclude_notebooks
 
     # Fetch incomplete todos
     # Only exclude todo_excluded notes when no specific notebook is requested
@@ -218,7 +228,7 @@ def gather_planning_context(
     todos_raw = get_sorted_todos(
         completed=False,
         notebooks=scope.notebooks,
-        exclude_notebooks=scope.exclude_notebooks,
+        exclude_notebooks=all_excluded,
         tag=scope.tags[0] if scope.tags else None,
         exclude_note_excluded=scope.notebooks is None,
     )
@@ -232,7 +242,6 @@ def gather_planning_context(
 
     # Get recent daily notes for context
     recent_notes: list[NoteContext] = []
-    config = get_config()
 
     start_date = today - timedelta(days=days_back)
     daily_note_paths = list_daily_notes(start=start_date, end=today)

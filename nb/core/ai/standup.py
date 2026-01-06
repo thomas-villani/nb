@@ -107,6 +107,10 @@ def gather_standup_context(
     today = date.today()
     yesterday = today - timedelta(days=1)
 
+    # Get excluded notebooks from config when not filtering by specific notebooks
+    config = get_config()
+    excluded_nbs = config.excluded_notebooks() if scope.notebooks is None else None
+
     # Get yesterday's completed todos
     yesterday_raw = query_todos(
         status=TodoStatus.COMPLETED,
@@ -115,6 +119,7 @@ def gather_standup_context(
         notebooks=scope.notebooks,
         tag=scope.tags[0] if scope.tags else None,
         parent_only=True,
+        exclude_notebooks=excluded_nbs,
         exclude_note_excluded=False,
     )
 
@@ -124,6 +129,7 @@ def gather_standup_context(
         notebooks=scope.notebooks,
         tag=scope.tags[0] if scope.tags else None,
         parent_only=True,
+        exclude_notebooks=excluded_nbs,
         exclude_note_excluded=scope.notebooks is None,
     )
 
@@ -133,6 +139,7 @@ def gather_standup_context(
         notebooks=scope.notebooks,
         tag=scope.tags[0] if scope.tags else None,
         parent_only=True,
+        exclude_notebooks=excluded_nbs,
         exclude_note_excluded=scope.notebooks is None,
     )
 
@@ -143,6 +150,7 @@ def gather_standup_context(
         notebooks=scope.notebooks,
         tag=scope.tags[0] if scope.tags else None,
         parent_only=True,
+        exclude_notebooks=excluded_nbs,
         exclude_note_excluded=scope.notebooks is None,
     )
 
