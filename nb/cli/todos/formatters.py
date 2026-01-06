@@ -501,7 +501,17 @@ def _calculate_column_widths(
     """
     terminal_width = console.width or 120
     min_content_width = 25
-    max_content_width = 60  # Don't pad content beyond this for readability
+
+    # Scale max widths for wider terminals (>150 cols)
+    # Below 150: existing behavior (content=60, source=30)
+    # Above 150: content grows ~0.5 char, source ~0.25 char per extra col
+    if terminal_width <= 150:
+        max_content_width = 60
+        max_source_cap = 30
+    else:
+        extra = terminal_width - 150
+        max_content_width = 60 + extra // 2  # 103 at 236 cols
+        max_source_cap = 30 + extra // 4  # 51 at 236 cols
 
     # Calculate full source width based on actual content (min 15, max 30)
     # Account for icons which add ~2 visual chars (emoji + space)
@@ -546,9 +556,9 @@ def _calculate_column_widths(
             notebook_len = len(parts["notebook"]) if parts["notebook"] else 0
             max_source_compact = max(max_source_compact, notebook_len + icon_width)
 
-    source_width_full = min(max_source_full, 30)
-    source_width_nosection = min(max_source_nosection, 25)
-    source_width_compact = min(max_source_compact, 15)
+    source_width_full = min(max_source_full, max_source_cap)
+    source_width_nosection = min(max_source_nosection, max_source_cap - 5)
+    source_width_compact = min(max_source_compact, 15)  # compact stays fixed
 
     # Fixed widths
     created_width = 6  # "+MM/DD"
@@ -763,6 +773,8 @@ def _print_todo(
 
     # Build source column (colored) - different modes for different widths
     source_width = widths["source"] if widths else 15
+    # Scale section length with source width (default 15, scale up for wider sources)
+    max_section_len = min(source_width // 2, 30) if source_width > 30 else 15
     if compact_source:
         source_str = _format_compact_source(t, hide_notebook=hide_notebook)
         source_part = _format_colored_compact_source(
@@ -778,9 +790,13 @@ def _print_todo(
             else " " * source_width
         )
     else:
-        source_str = _format_todo_source(t, hide_notebook=hide_notebook)
+        source_str = _format_todo_source(
+            t, max_section_len=max_section_len, hide_notebook=hide_notebook
+        )
         source_part = (
-            _format_colored_todo_source(t, source_width, hide_notebook=hide_notebook)
+            _format_colored_todo_source(
+                t, source_width, max_section_len=max_section_len, hide_notebook=hide_notebook
+            )
             if source_str
             else " " * source_width
         )

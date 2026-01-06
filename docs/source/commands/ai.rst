@@ -49,6 +49,8 @@ Generate AI-assisted daily or weekly plans based on your todos, calendar, and re
      - Stream the response in real-time (default: stream)
    * - ``--smart / --fast``
      - Use smart model (better) or fast model (cheaper)
+   * - ``-C, --copy``
+     - Copy plan to clipboard
 
 **How it works:**
 
@@ -144,6 +146,8 @@ Generate AI-assisted daily or weekly reviews reflecting on completed work, items
      - Stream the response in real-time (default: stream)
    * - ``--smart / --fast``
      - Use smart model (better) or fast model (cheaper)
+   * - ``-C, --copy``
+     - Copy review to clipboard
 
 **How it works:**
 
@@ -217,6 +221,8 @@ Generate an AI-powered morning standup briefing based on yesterday's completed w
      - Stream the response in real-time (default: stream)
    * - ``--smart / --fast``
      - Use smart model (better) or fast model (cheaper)
+   * - ``-C, --copy``
+     - Copy standup to clipboard
 
 **How it works:**
 
@@ -304,6 +310,8 @@ Ask questions about your notes using AI-powered retrieval augmented generation (
      - Number of similar chunks to include per match (default: 3)
    * - ``--agentic / --no-agentic``
      - Use agentic mode with tool-calling for complex queries
+   * - ``-C, --copy``
+     - Copy answer to clipboard
 
 **How it works:**
 
@@ -444,6 +452,8 @@ Generate comprehensive summaries of one or more notes using AI.
      - Stream the response in real-time (default: stream)
    * - ``--smart / --fast``
      - Use smart model or fast model
+   * - ``-C, --copy``
+     - Copy summary to clipboard
 
 **Examples:**
 
@@ -704,6 +714,8 @@ Research a topic using web search and AI analysis. Uses an agent to search the w
      - Stream progress (default: stream)
    * - ``--smart / --fast``
      - Use smart model or fast model
+   * - ``-C, --copy``
+     - Copy research report to clipboard
 
 **Requirements:**
 

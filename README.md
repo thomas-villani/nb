@@ -1561,17 +1561,20 @@ Generate AI-powered daily/weekly reviews and morning standups.
 nb review day                     # End of day review
 nb review day -n work             # Filter to work notebook
 nb review day -o today            # Save to today's note
+nb review day -C                  # Copy review to clipboard
 
 # Weekly review - comprehensive week reflection
 nb review week                    # End of week review
 nb review week -o work/reviews    # Save to specific note
 nb review week --prompt "Focus on wins"  # Custom instructions
+nb review week --copy             # Copy review to clipboard
 
 # Morning standup - plan the day ahead
 nb standup                        # Morning briefing
 nb standup -o today               # Save to today's note
 nb standup --notebook work        # Filter to work notebook
 nb standup --no-calendar          # Skip calendar integration
+nb standup -C                     # Copy standup to clipboard
 ```
 
 **Review sections:**

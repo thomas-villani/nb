@@ -100,6 +100,13 @@ def plan_group():
     is_flag=True,
     help="Include clipboard content as additional context.",
 )
+@click.option(
+    "--copy",
+    "-C",
+    "copy_to_clip",
+    is_flag=True,
+    help="Copy plan to clipboard.",
+)
 def plan_week_command(
     notebook: str | None,
     tag: str | None,
@@ -110,6 +117,7 @@ def plan_week_command(
     stream: bool,
     use_smart: bool,
     paste: bool,
+    copy_to_clip: bool,
 ) -> None:
     """Plan the upcoming week.
 
@@ -151,6 +159,7 @@ def plan_week_command(
         interactive=interactive,
         stream=stream,
         use_smart=use_smart,
+        copy_to_clip=copy_to_clip,
     )
 
 
@@ -210,6 +219,13 @@ def plan_week_command(
     is_flag=True,
     help="Include clipboard content as additional context.",
 )
+@click.option(
+    "--copy",
+    "-C",
+    "copy_to_clip",
+    is_flag=True,
+    help="Copy plan to clipboard.",
+)
 def plan_today_command(
     notebook: str | None,
     tag: str | None,
@@ -220,6 +236,7 @@ def plan_today_command(
     stream: bool,
     use_smart: bool,
     paste: bool,
+    copy_to_clip: bool,
 ) -> None:
     """Plan or replan today.
 
@@ -259,6 +276,7 @@ def plan_today_command(
         interactive=interactive,
         stream=stream,
         use_smart=use_smart,
+        copy_to_clip=copy_to_clip,
     )
 
 
@@ -272,6 +290,7 @@ def _run_planning(
     interactive: bool,
     stream: bool,
     use_smart: bool,
+    copy_to_clip: bool = False,
 ) -> None:
     """Shared implementation for plan commands."""
     from datetime import date
@@ -331,6 +350,13 @@ def _run_planning(
                 plan_result = PlanResult(horizon=horizon, raw_response=plan_content)
                 saved_path = append_plan_to_note(plan_result, note_path=note_path)
                 console.print(f"\n[green]Plan saved to {saved_path}[/green]")
+
+            # Copy to clipboard if requested
+            if copy_to_clip and plan_content:
+                from nb.cli.utils import copy_to_clipboard
+
+                if copy_to_clipboard(plan_content):
+                    console.print("[dim]Copied plan to clipboard.[/dim]")
 
     except LLMConfigError as e:
         console.print(f"[red]Configuration error:[/red] {e}")
@@ -621,6 +647,13 @@ def _run_interactive_planning(
     is_flag=True,
     help="Include clipboard content as additional context.",
 )
+@click.option(
+    "--copy",
+    "-C",
+    "copy_to_clip",
+    is_flag=True,
+    help="Copy answer to clipboard.",
+)
 def ask_command(
     question: str,
     notebook: str | None,
@@ -634,6 +667,7 @@ def ask_command(
     agentic: bool,
     max_tool_calls: int,
     paste: bool,
+    copy_to_clip: bool,
 ) -> None:
     """Ask a question about your notes using AI.
 
@@ -681,6 +715,7 @@ def ask_command(
                     use_smart=use_smart,
                     max_results=max_results,
                     max_tool_calls=max_tool_calls,
+                    copy_to_clip=copy_to_clip,
                 )
             else:
                 _ask_agentic_non_streaming(
@@ -691,6 +726,7 @@ def ask_command(
                     use_smart=use_smart,
                     max_results=max_results,
                     max_tool_calls=max_tool_calls,
+                    copy_to_clip=copy_to_clip,
                 )
         elif stream:
             _ask_streaming(
@@ -702,6 +738,7 @@ def ask_command(
                 use_smart=use_smart,
                 max_results=max_results,
                 context_window=context_window,
+                copy_to_clip=copy_to_clip,
             )
         else:
             _ask_non_streaming(
@@ -713,6 +750,7 @@ def ask_command(
                 use_smart=use_smart,
                 max_results=max_results,
                 context_window=context_window,
+                copy_to_clip=copy_to_clip,
             )
     except LLMConfigError as e:
         console.print(f"[red]Configuration error:[/red] {e}")
@@ -738,6 +776,7 @@ def _ask_streaming(
     use_smart: bool,
     max_results: int,
     context_window: int,
+    copy_to_clip: bool = False,
 ) -> None:
     """Handle streaming ask response."""
     from nb.core.ai.ask import ask_notes_stream
@@ -789,6 +828,13 @@ def _ask_streaming(
             f"\n[dim]Tokens: {chunk.input_tokens} in, {chunk.output_tokens} out[/dim]"
         )
 
+    # Copy to clipboard if requested
+    if copy_to_clip and full_response:
+        from nb.cli.utils import copy_to_clipboard
+
+        if copy_to_clipboard(full_response):
+            console.print("[dim]Copied answer to clipboard.[/dim]")
+
 
 def _ask_non_streaming(
     question: str,
@@ -799,6 +845,7 @@ def _ask_non_streaming(
     use_smart: bool,
     max_results: int,
     context_window: int,
+    copy_to_clip: bool = False,
 ) -> None:
     """Handle non-streaming ask response."""
     from nb.core.ai.ask import ask_notes
@@ -828,6 +875,13 @@ def _ask_non_streaming(
         console.print(
             f"\n[dim]Tokens: {result.input_tokens} in, {result.output_tokens} out[/dim]"
         )
+
+    # Copy to clipboard if requested
+    if copy_to_clip and result.answer:
+        from nb.cli.utils import copy_to_clipboard
+
+        if copy_to_clipboard(result.answer):
+            console.print("[dim]Copied answer to clipboard.[/dim]")
 
 
 def _display_sources(sources: list) -> None:
@@ -865,6 +919,7 @@ def _ask_agentic_streaming(
     use_smart: bool,
     max_results: int,
     max_tool_calls: int,
+    copy_to_clip: bool = False,
 ) -> None:
     """Handle streaming agentic ask response."""
     from nb.core.ai.ask_agentic import ask_notes_agentic_stream
@@ -908,6 +963,13 @@ def _ask_agentic_streaming(
         f"Tool calls: {result.tool_calls}{tool_info}[/dim]"
     )
 
+    # Copy to clipboard if requested
+    if copy_to_clip and result.answer:
+        from nb.cli.utils import copy_to_clipboard
+
+        if copy_to_clipboard(result.answer):
+            console.print("[dim]Copied answer to clipboard.[/dim]")
+
 
 def _ask_agentic_non_streaming(
     question: str,
@@ -917,6 +979,7 @@ def _ask_agentic_non_streaming(
     use_smart: bool,
     max_results: int,
     max_tool_calls: int,
+    copy_to_clip: bool = False,
 ) -> None:
     """Handle non-streaming agentic ask response."""
     from nb.core.ai.ask_agentic import ask_notes_agentic
@@ -957,6 +1020,13 @@ def _ask_agentic_non_streaming(
         f"Tool calls: {result.tool_calls}{tool_info}[/dim]"
     )
 
+    # Copy to clipboard if requested
+    if copy_to_clip and result.answer:
+        from nb.cli.utils import copy_to_clipboard
+
+        if copy_to_clipboard(result.answer):
+            console.print("[dim]Copied answer to clipboard.[/dim]")
+
 
 # ============================================================================
 # Summarize Command
@@ -966,6 +1036,13 @@ def _ask_agentic_non_streaming(
 def _base_summarize_options(f):
     """Base options for summarize and tldr commands (without model selection)."""
     # Apply options in reverse order (Click decorator stacking)
+    f = click.option(
+        "--copy",
+        "-C",
+        "copy_to_clip",
+        is_flag=True,
+        help="Copy summary to clipboard.",
+    )(f)
     f = click.option(
         "--stream/--no-stream",
         default=True,
@@ -1050,6 +1127,7 @@ def summarize_command(
     custom_prompt: str | None,
     stream: bool,
     use_smart: bool,
+    copy_to_clip: bool,
 ) -> None:
     """Summarize notes with AI.
 
@@ -1078,6 +1156,7 @@ def summarize_command(
         stream=stream,
         use_smart=use_smart,
         mode="summarize",
+        copy_to_clip=copy_to_clip,
     )
 
 
@@ -1093,6 +1172,7 @@ def tldr_command(
     custom_prompt: str | None,
     stream: bool,
     use_smart: bool,
+    copy_to_clip: bool,
 ) -> None:
     """Quick 1-2 sentence summary of notes.
 
@@ -1117,6 +1197,7 @@ def tldr_command(
         stream=stream,
         use_smart=use_smart,
         mode="tldr",
+        copy_to_clip=copy_to_clip,
     )
 
 
@@ -1131,6 +1212,7 @@ def _run_summarize(
     stream: bool,
     use_smart: bool,
     mode: Literal["summarize", "tldr"],
+    copy_to_clip: bool = False,
 ) -> None:
     """Shared implementation for summarize and tldr commands."""
     from datetime import date
@@ -1222,6 +1304,13 @@ def _run_summarize(
             console.print(
                 f"\n[dim]Tokens: {result.input_tokens} in, {result.output_tokens} out[/dim]"
             )
+
+        # Copy to clipboard if requested
+        if copy_to_clip and result.summary:
+            from nb.cli.utils import copy_to_clipboard
+
+            if copy_to_clipboard(result.summary):
+                console.print("[dim]Copied summary to clipboard.[/dim]")
 
     except LLMConfigError as e:
         console.print(f"[red]Configuration error:[/red] {e}")
@@ -1409,6 +1498,13 @@ def _summarize_multiple_notes(
     default=True,
     help="Use smart model (better) or fast model (cheaper). Default: smart.",
 )
+@click.option(
+    "--copy",
+    "-C",
+    "copy_to_clip",
+    is_flag=True,
+    help="Copy research report to clipboard.",
+)
 def research_command(
     query: str,
     output: str | None,
@@ -1419,6 +1515,7 @@ def research_command(
     use_vectordb: bool,
     stream: bool,
     use_smart: bool,
+    copy_to_clip: bool,
 ) -> None:
     """Research a topic using web search and AI analysis.
 
@@ -1452,6 +1549,7 @@ def research_command(
                 use_vectordb=use_vectordb,
                 token_budget=token_budget,
                 output=output,
+                copy_to_clip=copy_to_clip,
             )
         else:
             _research_non_streaming(
@@ -1463,6 +1561,7 @@ def research_command(
                 use_vectordb=use_vectordb,
                 token_budget=token_budget,
                 output=output,
+                copy_to_clip=copy_to_clip,
             )
     except LLMConfigError as e:
         console.print(f"[red]Configuration error:[/red] {e}")
@@ -1495,6 +1594,7 @@ def _research_streaming(
     use_vectordb: bool,
     token_budget: int,
     output: str | None,
+    copy_to_clip: bool = False,
 ) -> None:
     """Handle streaming research with progress updates."""
     from nb.core.ai.research import append_research_to_note, research_stream
@@ -1545,6 +1645,13 @@ def _research_streaming(
         saved_path = append_research_to_note(result, target)
         console.print(f"\n[green]Report saved to:[/green] {saved_path}")
 
+    # Copy to clipboard if requested
+    if copy_to_clip and result.report:
+        from nb.cli.utils import copy_to_clipboard
+
+        if copy_to_clipboard(result.report):
+            console.print("[dim]Copied report to clipboard.[/dim]")
+
 
 def _research_non_streaming(
     query: str,
@@ -1555,6 +1662,7 @@ def _research_non_streaming(
     use_vectordb: bool,
     token_budget: int,
     output: str | None,
+    copy_to_clip: bool = False,
 ) -> None:
     """Handle non-streaming research."""
     from nb.core.ai.research import append_research_to_note, research
@@ -1601,6 +1709,13 @@ def _research_non_streaming(
 
         saved_path = append_research_to_note(result, target)
         console.print(f"\n[green]Report saved to:[/green] {saved_path}")
+
+    # Copy to clipboard if requested
+    if copy_to_clip and result.report:
+        from nb.cli.utils import copy_to_clipboard
+
+        if copy_to_clipboard(result.report):
+            console.print("[dim]Copied report to clipboard.[/dim]")
 
 
 def _display_research_result(result) -> None:
@@ -1697,6 +1812,13 @@ def review_group():
     default=True,
     help="Use smart model (better) or fast model (cheaper). Default: smart.",
 )
+@click.option(
+    "--copy",
+    "-C",
+    "copy_to_clip",
+    is_flag=True,
+    help="Copy review to clipboard.",
+)
 def review_day_command(
     notebook: str | None,
     tag: str | None,
@@ -1704,6 +1826,7 @@ def review_day_command(
     custom_prompt: str | None,
     stream: bool,
     use_smart: bool,
+    copy_to_clip: bool,
 ) -> None:
     """Generate an end-of-day review.
 
@@ -1724,6 +1847,7 @@ def review_day_command(
         custom_prompt=custom_prompt,
         stream=stream,
         use_smart=use_smart,
+        copy_to_clip=copy_to_clip,
     )
 
 
@@ -1767,6 +1891,13 @@ def review_day_command(
     default=True,
     help="Use smart model (better) or fast model (cheaper). Default: smart.",
 )
+@click.option(
+    "--copy",
+    "-C",
+    "copy_to_clip",
+    is_flag=True,
+    help="Copy review to clipboard.",
+)
 def review_week_command(
     notebook: str | None,
     tag: str | None,
@@ -1774,6 +1905,7 @@ def review_week_command(
     custom_prompt: str | None,
     stream: bool,
     use_smart: bool,
+    copy_to_clip: bool,
 ) -> None:
     """Generate an end-of-week review.
 
@@ -1794,6 +1926,7 @@ def review_week_command(
         custom_prompt=custom_prompt,
         stream=stream,
         use_smart=use_smart,
+        copy_to_clip=copy_to_clip,
     )
 
 
@@ -1805,6 +1938,7 @@ def _run_review(
     custom_prompt: str | None,
     stream: bool,
     use_smart: bool,
+    copy_to_clip: bool = False,
 ) -> None:
     """Shared implementation for review commands."""
     from datetime import date
@@ -1860,6 +1994,13 @@ def _run_review(
             )
             saved_path = append_review_to_note(review_result, note_path=note_path)
             console.print(f"\n[green]Review saved to {saved_path}[/green]")
+
+        # Copy to clipboard if requested
+        if copy_to_clip and review_content:
+            from nb.cli.utils import copy_to_clipboard
+
+            if copy_to_clipboard(review_content):
+                console.print("[dim]Copied review to clipboard.[/dim]")
 
     except LLMConfigError as e:
         console.print(f"[red]Configuration error:[/red] {e}")
@@ -1999,6 +2140,13 @@ def _run_non_streaming_review(
     default=True,
     help="Use smart model (better) or fast model (cheaper). Default: smart.",
 )
+@click.option(
+    "--copy",
+    "-C",
+    "copy_to_clip",
+    is_flag=True,
+    help="Copy standup to clipboard.",
+)
 def standup_command(
     notebook: str | None,
     tag: str | None,
@@ -2007,6 +2155,7 @@ def standup_command(
     no_calendar: bool,
     stream: bool,
     use_smart: bool,
+    copy_to_clip: bool,
 ) -> None:
     """Generate a morning standup briefing.
 
@@ -2080,6 +2229,13 @@ def standup_command(
             )
             saved_path = append_standup_to_note(standup_result, note_path=note_path)
             console.print(f"\n[green]Standup saved to {saved_path}[/green]")
+
+        # Copy to clipboard if requested
+        if copy_to_clip and standup_content:
+            from nb.cli.utils import copy_to_clipboard
+
+            if copy_to_clipboard(standup_content):
+                console.print("[dim]Copied standup to clipboard.[/dim]")
 
     except LLMConfigError as e:
         console.print(f"[red]Configuration error:[/red] {e}")
