@@ -114,6 +114,10 @@ class PlanningContext:
     horizon: Literal["day", "week"]
     today: date
     scope: PlanScope
+    # Backlog suggestions for light days
+    backlog_suggestions: list[TodoContext] = field(default_factory=list)
+    is_light_day: bool = False
+    light_day_reason: str = ""
 
 
 @dataclass
@@ -178,9 +182,17 @@ Guidelines:
 - For weekly plans, spread work across days to avoid overload
 - For daily plans, focus on what can realistically be accomplished today
 
+When backlog suggestions are provided:
+- The schedule has been detected as "light" (sufficient free time, few urgent items)
+- Consider adding 1-2 backlog items to the plan as stretch goals
+- Prioritize items with higher scores (older + higher priority items)
+- Frame these as "bonus" or "if time permits" goals, not hard commitments
+- Don't overload the plan - these are optional extras for productive days
+
 Output format:
 - Start with today's focus items (2-3 most important tasks)
 - Then provide a day-by-day breakdown with brief reasoning
+- If backlog suggestions available, include a "Stretch Goals" section
 - End with warnings about potential issues (overdue items, conflicts, stale tasks)
 - Keep the plan actionable and concise
 - Reference todo ID hashes when referencing them
@@ -298,6 +310,41 @@ def gather_planning_context(
             # Calendar not available, continue without it
             pass
 
+    # Detect light day and gather backlog suggestions
+    from nb.core.ai.backlog import detect_light_day, get_backlog_suggestions
+
+    # Calculate due_today for light day detection
+    due_today_todos = [t for t in todos if t.due_date and t.due_date.date() == today]
+
+    # For light day detection, only consider today's availability (even for week horizon)
+    today_blocks = [
+        b for b in availability_blocks if b.start.date() == today
+    ] or availability_blocks[:1] if not availability_blocks else []
+
+    # If no calendar, assume full work day available (8 hours)
+    if not today_blocks and not calendar_events:
+        today_blocks = [
+            AvailabilityBlock(
+                start=datetime.combine(today, time(9, 0)),
+                end=datetime.combine(today, time(17, 0)),
+            )
+        ]
+
+    light_day = detect_light_day(
+        availability_blocks=today_blocks,
+        overdue_count=len(overdue_todos),
+        due_today_count=len(due_today_todos),
+    )
+
+    backlog_suggestions: list[TodoContext] = []
+    if light_day.is_light:
+        backlog_suggestions = get_backlog_suggestions(
+            todos=todos,
+            overdue_todos=overdue_todos,
+            in_progress_todos=in_progress_todos,
+            due_today_todos=due_today_todos,
+        )
+
     return PlanningContext(
         todos=todos,
         overdue_todos=overdue_todos,
@@ -308,6 +355,9 @@ def gather_planning_context(
         horizon=horizon,
         today=today,
         scope=scope,
+        backlog_suggestions=backlog_suggestions,
+        is_light_day=light_day.is_light,
+        light_day_reason=light_day.reason,
     )
 
 
@@ -454,6 +504,23 @@ def build_planning_prompt(
     if context.availability_blocks:
         total_available = sum(b.duration_minutes for b in context.availability_blocks)
         parts.append(f"## AVAILABILITY: ~{total_available // 60} hours of free time")
+        parts.append("")
+
+    # Backlog suggestions for light days
+    if context.backlog_suggestions and context.is_light_day:
+        from nb.core.ai.backlog import score_backlog_item
+
+        parts.append("## BACKLOG SUGGESTIONS (schedule has room)")
+        parts.append(f"[{context.light_day_reason}]")
+        parts.append("")
+        for todo in context.backlog_suggestions:
+            priority_str = f" [P{todo.priority.value}]" if todo.priority else ""
+            age_str = f" ({todo.age_days}d old)" if todo.age_days > 0 else ""
+            notebook_str = f" [{todo.notebook}]" if todo.notebook else ""
+            score = int(score_backlog_item(todo))
+            parts.append(
+                f"- {todo.content}{priority_str}{notebook_str}{age_str} [score: {score}]"
+            )
         parts.append("")
 
     # Recent context from notes (brief)

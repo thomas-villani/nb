@@ -1552,9 +1552,56 @@ Use `nb record devices` to find device indices for your system. WASAPI devices t
 
 **Speaker labeling**: When recording with both microphone and system audio, speakers are automatically distinguished by channel. Your microphone is labeled with `mic_speaker_label` (default: "You"), while remote participants from system audio are labeled "Speaker 100", "Speaker 101", etc. Override with `--speakers "0:Me,100:Alice,101:Bob"`.
 
-### AI Review & Standup
+### AI Planning & Standup
 
-Generate AI-powered daily/weekly reviews and morning standups.
+Generate AI-powered daily/weekly plans and morning standups.
+
+```bash
+# Plan the day or week
+nb plan today                     # Plan what's achievable today
+nb plan week                      # Plan the upcoming week
+nb plan today -n work             # Filter to work notebook
+nb plan today -o today            # Save plan to today's note
+nb plan week -i                   # Interactive mode to refine plan
+nb plan week -C                   # Copy plan to clipboard
+
+# Morning standup - briefing for the day ahead
+nb standup                        # Morning briefing
+nb standup -o today               # Save to today's note
+nb standup --notebook work        # Filter to work notebook
+nb standup --no-calendar          # Skip calendar integration
+nb standup -C                     # Copy standup to clipboard
+```
+
+**How planning works:**
+
+1. Gathers incomplete todos, overdue items, and in-progress tasks
+2. Fetches calendar events from Outlook (Windows) to identify availability
+3. Detects "light days" when you have room for extra work
+4. Generates prioritized plan with day-by-day breakdown
+
+**Light day detection & backlog suggestions:**
+
+On days with sufficient free time (≥4 hours) and few urgent items (≤3 overdue/due-today), the planner automatically suggests backlog items - older todos without due dates that could be tackled as stretch goals.
+
+Backlog items are scored by: `age_days + (priority_weight × 7)` where HIGH=3, MEDIUM=2, LOW=1. This surfaces old, forgotten tasks and high-priority items that haven't been scheduled.
+
+**Plan sections:**
+- **Focus Items** - Top 2-3 priorities for today
+- **Day-by-day breakdown** - Scheduled work with reasoning
+- **Stretch Goals** - Backlog suggestions when schedule allows
+- **Warnings** - Overdue items, conflicts, stale tasks
+
+**Standup sections:**
+- **Yesterday** - Brief summary of completed work
+- **Today's Schedule** - Calendar events to be aware of
+- **Focus Areas** - Top priorities based on due dates and overdue items
+- **Needs Attention** - Blockers or stale tasks requiring action
+- **Stretch Goals** - Backlog suggestions when today is light
+
+### AI Reviews
+
+Generate AI-powered daily/weekly reviews reflecting on completed work.
 
 ```bash
 # Daily review - reflect on completed work
@@ -1568,13 +1615,6 @@ nb review week                    # End of week review
 nb review week -o work/reviews    # Save to specific note
 nb review week --prompt "Focus on wins"  # Custom instructions
 nb review week --copy             # Copy review to clipboard
-
-# Morning standup - plan the day ahead
-nb standup                        # Morning briefing
-nb standup -o today               # Save to today's note
-nb standup --notebook work        # Filter to work notebook
-nb standup --no-calendar          # Skip calendar integration
-nb standup -C                     # Copy standup to clipboard
 ```
 
 **Review sections:**
@@ -1582,12 +1622,6 @@ nb standup -C                     # Copy standup to clipboard
 - **Carrying Over** - Pending items moving forward with context
 - **Wins** - Notable achievements or milestones
 - **Improvements** (weekly) - Process improvement suggestions
-
-**Standup sections:**
-- **Yesterday** - Brief summary of completed work
-- **Today's Schedule** - Calendar events to be aware of
-- **Focus Areas** - Top priorities based on due dates and overdue items
-- **Needs Attention** - Blockers or stale tasks requiring action
 
 ### AI Assistant
 

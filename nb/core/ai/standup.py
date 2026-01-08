@@ -7,13 +7,13 @@ today's calendar, and items needing attention.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass
-from datetime import date, timedelta
+from dataclasses import dataclass, field
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nb.config import get_config
-from nb.core.ai.planning import TodoContext
+from nb.core.ai.planning import AvailabilityBlock, TodoContext
 from nb.core.llm import Message, StreamChunk, get_llm_client
 from nb.models import TodoStatus
 
@@ -40,6 +40,11 @@ class StandupContext:
     due_today: list[TodoContext]
     today: date
     scope: StandupScope
+    # Backlog suggestions for light days
+    availability_blocks: list[AvailabilityBlock] = field(default_factory=list)
+    backlog_suggestions: list[TodoContext] = field(default_factory=list)
+    is_light_day: bool = False
+    light_day_reason: str = ""
 
 
 @dataclass
@@ -78,11 +83,19 @@ Top 2-3 priorities for today based on:
 Flag any blockers, overdue items that have been stuck, or
 stale tasks that need decisions.
 
+## Stretch Goals (if backlog suggestions provided)
+When the schedule is light and backlog suggestions are provided:
+- Briefly mention 1-2 items that could be tackled if there's extra time
+- Frame these as optional stretch goals, not commitments
+- Prioritize items with higher scores (older + higher priority)
+
 Guidelines:
 - Keep it concise and actionable
 - Prioritize ruthlessly - not everything needs to be done today
 - Be specific about what needs to happen
 - If the calendar is full, acknowledge realistic constraints
+- If backlog suggestions are provided, acknowledge the lighter schedule
+  and recommend 1-2 stretch goals for the day
 """
 
 
@@ -165,14 +178,58 @@ def gather_standup_context(
 
     # Get calendar events for today
     calendar_events = []
+    availability_blocks: list[AvailabilityBlock] = []
     if include_calendar:
         try:
             from nb.core.calendar import get_today_events
 
+            from nb.core.ai.planning import _compute_availability_blocks
+
             calendar_events = get_today_events()
+            availability_blocks = _compute_availability_blocks(
+                calendar_events, today, horizon="day"
+            )
         except Exception:
             # Calendar not available, continue without it
             pass
+
+    # If no calendar, assume full work day available (8 hours)
+    if not availability_blocks:
+        availability_blocks = [
+            AvailabilityBlock(
+                start=datetime.combine(today, time(9, 0)),
+                end=datetime.combine(today, time(17, 0)),
+            )
+        ]
+
+    # Detect light day and gather backlog suggestions
+    from nb.core.ai.backlog import detect_light_day, get_backlog_suggestions
+
+    light_day = detect_light_day(
+        availability_blocks=availability_blocks,
+        overdue_count=len(overdue_todos),
+        due_today_count=len(due_today),
+    )
+
+    backlog_suggestions: list[TodoContext] = []
+    if light_day.is_light:
+        # Need all incomplete todos for backlog analysis
+        all_todos_raw = query_todos(
+            completed=False,
+            notebooks=scope.notebooks,
+            tag=scope.tags[0] if scope.tags else None,
+            parent_only=True,
+            exclude_notebooks=excluded_nbs,
+            exclude_note_excluded=scope.notebooks is None,
+        )
+        all_todos = [TodoContext.from_todo(t, today) for t in all_todos_raw]
+
+        backlog_suggestions = get_backlog_suggestions(
+            todos=all_todos,
+            overdue_todos=overdue_todos,
+            in_progress_todos=in_progress_todos,
+            due_today_todos=due_today,
+        )
 
     return StandupContext(
         yesterday_completed=yesterday_completed,
@@ -182,6 +239,10 @@ def gather_standup_context(
         due_today=due_today,
         today=today,
         scope=scope,
+        availability_blocks=availability_blocks,
+        backlog_suggestions=backlog_suggestions,
+        is_light_day=light_day.is_light,
+        light_day_reason=light_day.reason,
     )
 
 
@@ -270,6 +331,23 @@ def build_standup_prompt(
         parts.append("(No items due today)")
     parts.append("")
 
+    # Backlog suggestions for light days
+    if context.backlog_suggestions and context.is_light_day:
+        from nb.core.ai.backlog import score_backlog_item
+
+        parts.append("## BACKLOG SUGGESTIONS (schedule has room)")
+        parts.append(f"[{context.light_day_reason}]")
+        parts.append("")
+        for todo in context.backlog_suggestions:
+            priority_str = f" [P{todo.priority.value}]" if todo.priority else ""
+            age_str = f" ({todo.age_days}d old)" if todo.age_days > 0 else ""
+            notebook_str = f" [{todo.notebook}]" if todo.notebook else ""
+            score = int(score_backlog_item(todo))
+            parts.append(
+                f"- {todo.content}{priority_str}{notebook_str}{age_str} [score: {score}]"
+            )
+        parts.append("")
+
     # Stats summary
     total_focus = (
         len(context.overdue_todos)
@@ -283,6 +361,8 @@ def build_standup_prompt(
     parts.append(f"  - Overdue: {len(context.overdue_todos)}")
     parts.append(f"  - In progress: {len(context.in_progress_todos)}")
     parts.append(f"  - Due today: {len(context.due_today)}")
+    if context.backlog_suggestions:
+        parts.append(f"  - Backlog suggestions: {len(context.backlog_suggestions)}")
     parts.append("")
 
     # Custom instructions

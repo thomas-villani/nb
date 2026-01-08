@@ -56,9 +56,23 @@ Generate AI-assisted daily or weekly plans based on your todos, calendar, and re
 
 1. Gathers incomplete todos from your notes
 2. Fetches calendar events from Outlook (on Windows)
-3. Reviews recent daily notes for context
-4. Sends this context to the LLM with planning instructions
-5. Generates a prioritized plan with warnings about overdue items
+3. Calculates available time blocks from calendar gaps
+4. Detects "light days" when you have room for extra work
+5. Reviews recent daily notes for context
+6. Sends this context to the LLM with planning instructions
+7. Generates a prioritized plan with warnings about overdue items
+
+**Light Day Detection & Backlog Suggestions:**
+
+On days with sufficient free time (≥4 hours) and few urgent items (≤3 overdue/due-today combined), the planner automatically suggests backlog items - older todos without due dates that could be tackled as stretch goals.
+
+Backlog items are scored by: ``age_days + (priority_weight × 7)``
+
+- Priority weights: HIGH=3, MEDIUM=2, LOW=1, None=0
+- Example: A 10-day-old HIGH priority item scores 10 + 21 = 31
+- Example: A 20-day-old item with no priority scores 20
+
+This surfaces old, forgotten tasks and high-priority items that haven't been scheduled. Up to 5 backlog items are suggested, framed as optional "stretch goals" rather than commitments.
 
 **Examples:**
 
@@ -228,9 +242,11 @@ Generate an AI-powered morning standup briefing based on yesterday's completed w
 
 1. Gathers completed todos from yesterday
 2. Fetches today's calendar events from Outlook (on Windows)
-3. Collects overdue and in-progress todos
-4. Identifies todos due today
-5. Generates a focused morning briefing
+3. Calculates available time blocks from calendar gaps
+4. Collects overdue and in-progress todos
+5. Identifies todos due today
+6. Detects "light days" and suggests backlog items if appropriate
+7. Generates a focused morning briefing
 
 **Standup Sections:**
 
@@ -238,6 +254,13 @@ Generate an AI-powered morning standup briefing based on yesterday's completed w
 - **Today's Schedule** - Calendar events and meetings to be aware of
 - **Focus Areas** - Top 2-3 priorities based on due dates and importance
 - **Needs Attention** - Overdue items or stale tasks requiring action
+- **Stretch Goals** - Backlog suggestions when today is light (optional)
+
+**Light Day Detection & Backlog Suggestions:**
+
+Like ``nb plan``, the standup command detects "light days" when you have sufficient free time (≥4 hours) and few urgent items (≤3 overdue/due-today combined). On these days, it suggests up to 5 backlog items - older todos without due dates - as optional stretch goals.
+
+Backlog items are scored by: ``age_days + (priority_weight × 7)`` to surface old, forgotten tasks and high-priority items that haven't been scheduled.
 
 **Examples:**
 

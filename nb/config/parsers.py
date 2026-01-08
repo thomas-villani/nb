@@ -205,12 +205,15 @@ def _parse_clip_config(data: dict[str, Any] | None) -> ClipConfig:
     )
 
 
-def _parse_raindrop_collection_config(data: dict[str, Any]) -> RaindropCollectionConfig:
+def _parse_raindrop_collection_config(
+    data: dict[str, Any],
+    default_auto_archive: bool = True,
+) -> RaindropCollectionConfig:
     """Parse a single Raindrop collection configuration."""
     return RaindropCollectionConfig(
         name=data["name"],
         notebook=data.get("notebook", "bookmarks"),
-        auto_archive=data.get("auto_archive", True),
+        auto_archive=data.get("auto_archive", default_auto_archive),
         extra_tags=data.get("extra_tags", []),
     )
 
@@ -242,16 +245,20 @@ def _parse_raindrop_config(data: dict[str, Any] | None) -> RaindropConfig:
     if data is None:
         data = {}
 
-    # Parse collections list if present
+    # Parse global auto_archive first (used as default for collections)
+    global_auto_archive = data.get("auto_archive", True)
+
+    # Parse collections list if present, inheriting global auto_archive as default
     collections: list[RaindropCollectionConfig] = []
     if "collections" in data:
         collections = [
-            _parse_raindrop_collection_config(c) for c in data["collections"]
+            _parse_raindrop_collection_config(c, default_auto_archive=global_auto_archive)
+            for c in data["collections"]
         ]
 
     return RaindropConfig(
         collection=data.get("collection", "nb-inbox"),
-        auto_archive=data.get("auto_archive", True),
+        auto_archive=global_auto_archive,
         api_token=os.environ.get("RAINDROP_API_KEY"),
         collections=collections,
         sync_tags=data.get("sync_tags", True),

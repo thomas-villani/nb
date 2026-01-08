@@ -144,14 +144,16 @@ todo_exclude: true
 - [x] Add .env file config and move the env vars to a .env file (openai, anthropic, deepgram, raindrop)
 - [x] Make ai function flags consistent (e.g. -b is for notebook for some reason)
 - [x] Need to improve the `nb ask` function to handle queries like `nb ask "What still remains to be done for the wijjit project?"`
-- [ ] Add clipboard integration to various commands (e.g. nb add --paste)
+- [x] Add clipboard integration to various commands (e.g. nb add --paste)
 - [x] Enhance templates by adding fancy tags like `{{ calendar }}` and `{{ todos.overdue }}` and `{{ todos.due_today }}`
 - [x] Week-based notebooks where `nb today` adds todays date in a section and notes are organized weekly.
 - [x] Need to make sure the `nb inbox` command supports when tags are changed in raindrop - should sync the changes in flags.
    Also, should have a way to directly tag notebooks, e.g. a collection with the same name?
-- [ ] Make sure 'nb todo add; handles relative due dates
-- [ ] Make sure to properly use pyyaml to generate frontmatter for the notes for the `clip` command
-- [ ] Add `--copy` to `nb plan ...` commands and other ai commands that give output
+- [x] Make sure 'nb todo add; handles relative due dates
+- [x] Make sure to properly use pyyaml to generate frontmatter for the notes for the `clip` command
+- [x] Add `--copy` to `nb plan ...` commands and other ai commands that give output
+- [ ] Need a command to see which notebooks/notes are todo_excluded
+- [ ] Need a way to archive notebooks
 
 ### Phase 5: Wijjit TUI
 - [x] Full Wijjit-based todo list view with richer interactions #feature

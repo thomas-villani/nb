@@ -396,6 +396,10 @@ def _display_context_summary(context) -> None:
     if ctx.availability_blocks:
         total_mins = sum(b.duration_minutes for b in ctx.availability_blocks)
         table.add_row("Available time", f"~{total_mins // 60}h {total_mins % 60}m")
+    if ctx.is_light_day:
+        table.add_row("Schedule", f"[green]Light day[/green] ({ctx.light_day_reason})")
+    if ctx.backlog_suggestions:
+        table.add_row("Backlog suggestions", str(len(ctx.backlog_suggestions)))
 
     console.print(
         Panel(table, title="[bold]Planning Context[/bold]", border_style="blue")
@@ -2277,6 +2281,10 @@ def _display_standup_context_summary(context) -> None:
         table.add_row("In progress", f"[yellow]{len(ctx.in_progress_todos)}[/yellow]")
     if ctx.due_today:
         table.add_row("Due today", str(len(ctx.due_today)))
+    if ctx.is_light_day:
+        table.add_row("Schedule", f"[green]Light[/green] ({ctx.light_day_reason})")
+    if ctx.backlog_suggestions:
+        table.add_row("Backlog suggestions", str(len(ctx.backlog_suggestions)))
 
     console.print(
         Panel(table, title="[bold]Standup Context[/bold]", border_style="blue")
