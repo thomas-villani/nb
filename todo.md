@@ -154,6 +154,7 @@ todo_exclude: true
 - [x] Add `--copy` to `nb plan ...` commands and other ai commands that give output
 - [ ] Need a command to see which notebooks/notes are todo_excluded
 - [ ] Need a way to archive notebooks
+- [ ] Make sure pinned notes are included in todos while pinned
 
 ### Phase 5: Wijjit TUI
 - [x] Full Wijjit-based todo list view with richer interactions #feature

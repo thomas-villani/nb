@@ -4,7 +4,7 @@
             level: 'inline',
             start(src) { return src.indexOf('[['); },
             tokenizer(src) {
-                const match = /^\\[\\[([^\\]|]+)(?:\\|([^\\]]+))?\\]\\]/.exec(src);
+                const match = /^\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/.exec(src);
                 if (match) {
                     return {
                         type: 'wikiLink',
@@ -206,7 +206,7 @@
         }
 
         function escapeJs(str) {
-            return str.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "\\\\'").replace(/"/g, '\\\\"');
+            return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');
         }
 
         // Navigate to a note from a wiki link or internal markdown link
