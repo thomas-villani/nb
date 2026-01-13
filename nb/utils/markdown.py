@@ -13,7 +13,6 @@ import yaml.scanner
 from nb.config import get_config
 from nb.utils.dates import parse_date_from_filename
 from nb.utils.patterns import HEX_COLOR_PATTERN
-from nb.utils.patterns import TAG_PATTERN as INLINE_TAG_PATTERN
 
 # Pattern for wiki-style links: [[path|title]] or [[path]]
 WIKI_LINK_PATTERN = re.compile(r"\[\[([^|\]]+)(?:\|([^\]]+))?\]\]")
@@ -109,30 +108,24 @@ def extract_todo_exclude(meta: dict[str, Any]) -> bool:
 
 
 def extract_tags(meta: dict[str, Any], body: str) -> list[str]:
-    """Extract all tags from a note.
+    """Extract tags from a note's frontmatter.
 
-    Combines:
-    1. 'tags' list in frontmatter
-    2. Inline #tags in body
+    Only extracts tags from the frontmatter 'tags' field.
+    Inline #tags in the body are NOT extracted - they were causing false positives
+    from markdown headings and internal anchor links.
+
+    Todo items have their own tag extraction in nb/core/todos.py.
     """
     tags: set[str] = set()
 
-    # Get frontmatter tags
+    # Get frontmatter tags only
     if "tags" in meta:
         fm_tags = meta["tags"]
         if isinstance(fm_tags, list):
-            tags.update(str(t) for t in fm_tags)
+            tags.update(str(t).lower() for t in fm_tags)
         elif isinstance(fm_tags, str):
             # Handle comma-separated string
-            tags.update(t.strip() for t in fm_tags.split(",") if t.strip())
-
-    # Find inline tags (skip inside code blocks)
-    # Simple approach: just find all #tag patterns
-    # A more robust approach would parse markdown properly
-    for match in INLINE_TAG_PATTERN.finditer(body):
-        tag = match.group(1).lower()
-        if is_valid_tag(tag):
-            tags.add(tag)
+            tags.update(t.strip().lower() for t in fm_tags.split(",") if t.strip())
 
     return sorted(tags)
 

@@ -155,6 +155,9 @@ todo_exclude: true
 - [ ] Need a command to see which notebooks/notes are todo_excluded
 - [ ] Need a way to archive notebooks
 - [ ] Make sure pinned notes are included in todos while pinned
+- [ ] Add changelog to package and add `nb changelog` command
+- [ ] Add a command to refactor a tag (rename) that way they can be merged - should probably auto-detect similar ones and suggest too.
+- [ ] Tool to help/automatically schedule items without due date
 
 ### Phase 5: Wijjit TUI
 - [x] Full Wijjit-based todo list view with richer interactions #feature
@@ -177,6 +180,7 @@ todo_exclude: true
   These can use the `win11toast` library which is dead simple.
 - [ ] Add '@startby' to todos #feature
 - [x] Web clipper via integration with raindrop
+- [ ] Add dependencies and gantt functionality, making blocked items visible.
 
 ### AI Ideas:
 - [x] Generate narrative of what was completed in the week

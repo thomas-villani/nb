@@ -7,7 +7,6 @@ from pathlib import Path
 
 from nb.utils.markdown import (
     H1_PATTERN,
-    INLINE_TAG_PATTERN,
     WIKI_LINK_PATTERN,
     create_daily_note_template,
     create_note_template,
@@ -18,6 +17,7 @@ from nb.utils.markdown import (
     generate_frontmatter,
     parse_note_file,
 )
+from nb.utils.patterns import TAG_PATTERN as INLINE_TAG_PATTERN
 
 
 class TestPatterns:
@@ -215,34 +215,56 @@ class TestExtractTags:
         result = extract_tags(meta, body)
         assert sorted(result) == ["tag1", "tag2", "tag3"]
 
-    def test_from_inline(self):
+    def test_inline_tags_ignored(self):
+        """Inline #tags in body are NOT extracted - only frontmatter tags count."""
         meta = {}
         body = "Some text #important and #urgent stuff #followup"
 
         result = extract_tags(meta, body)
-        assert sorted(result) == ["followup", "important", "urgent"]
+        # Inline tags should be ignored - they caused false positives from
+        # markdown headings and anchor links
+        assert result == []
 
-    def test_combined(self):
+    def test_frontmatter_only_not_body(self):
+        """Only frontmatter tags are extracted, body tags are ignored."""
         meta = {"tags": ["meeting"]}
         body = "Discussion #important about #planning"
 
         result = extract_tags(meta, body)
-        assert sorted(result) == ["important", "meeting", "planning"]
+        # Only frontmatter tag, not body tags
+        assert result == ["meeting"]
 
-    def test_deduplication(self):
-        meta = {"tags": ["tag1"]}
-        body = "Text #tag1 repeated"
+    def test_frontmatter_deduplication(self):
+        meta = {"tags": ["tag1", "Tag1", "TAG1"]}
+        body = ""
 
         result = extract_tags(meta, body)
+        # All lowercased and deduplicated
         assert result == ["tag1"]
 
     def test_case_normalization(self):
-        meta = {}
-        body = "#TAG1 and #Tag2"
+        meta = {"tags": ["TAG1", "Tag2"]}
+        body = ""
 
         result = extract_tags(meta, body)
-        # Inline tags are lowercased
+        # Frontmatter tags are lowercased
         assert sorted(result) == ["tag1", "tag2"]
+
+    def test_anchor_links_not_detected_as_tags(self):
+        """Anchor links like [0](#f0n) should not detect #f0n as a tag."""
+        meta = {}
+        body = "Reference [0](#f0n) and [1](#sec2) in the document"
+
+        result = extract_tags(meta, body)
+        assert result == []
+
+    def test_markdown_headings_not_detected_as_tags(self):
+        """Markdown headings like # Heading should not be detected as tags."""
+        meta = {}
+        body = "# Heading\n\nSome content\n\n## Subheading"
+
+        result = extract_tags(meta, body)
+        assert result == []
 
 
 class TestExtractWikiLinks:

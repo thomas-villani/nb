@@ -173,6 +173,7 @@ Some content here.
         assert row["notebook"] == "projects"
 
     def test_indexes_tags(self, db_fixture, create_note):
+        """Only frontmatter tags are indexed for notes (not inline body tags)."""
         notes_root = db_fixture.notes_root
 
         content = """\
@@ -184,7 +185,7 @@ tags:
 
 # Note
 
-#inline_tag
+Some text with #inline_tag that should NOT be indexed.
 """
         note_path = create_note("projects", "test.md", content)
 
@@ -195,9 +196,11 @@ tags:
         tags = db.fetchall("SELECT tag FROM note_tags WHERE note_path = ?", (rel_path,))
         tag_list = [t["tag"] for t in tags]
 
+        # Only frontmatter tags are indexed
         assert "tag1" in tag_list
         assert "tag2" in tag_list
-        assert "inline_tag" in tag_list
+        # Inline tags in note body are NOT indexed (they caused false positives)
+        assert "inline_tag" not in tag_list
 
     def test_indexes_links(self, db_fixture, create_note):
         notes_root = db_fixture.notes_root
