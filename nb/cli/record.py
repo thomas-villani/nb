@@ -11,12 +11,16 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 from rich.console import Console
 
 from nb.cli.completion import complete_notebook
 from nb.config import get_config
+
+if TYPE_CHECKING:
+    from nb.recorder.audio import RecordingSession
 
 console = Console()
 
@@ -43,16 +47,22 @@ def record_group() -> None:
     """Record meetings and transcribe audio.
 
     Captures audio from your microphone and system (meeting participants),
-    then transcribes using Deepgram with speaker diarization.
+    then transcribes using Deepgram with speaker diarization. Recordings
+    auto-stop after a configurable duration (default 30 min) and can be
+    extended on the fly. An interactive widget lets you type notes during
+    the recording, and an LLM can generate meeting notes from the transcript.
 
     \b
     Quick start:
-      nb record start              # Start recording (Ctrl+C to stop)
-      nb record start --name call  # Name the recording
-      nb record start --mic-only   # Record microphone only
-      nb record list               # List recordings
-      nb record transcribe <id>    # Re-transcribe a recording
-      nb record purge              # Delete old audio files
+      nb record start                    # Record with 30-min auto-stop
+      nb record start --name standup     # Name the recording
+      nb record start -t 60             # Record up to 60 minutes
+      nb record start -t 0              # No auto-stop
+      nb record start --no-summarize    # Skip LLM meeting notes
+      nb record start --mic-only        # Record microphone only
+      nb record list                    # List recordings
+      nb record transcribe <id>         # Re-transcribe a recording
+      nb record purge                   # Delete old audio files
 
     \b
     To transcribe an existing audio file, use:
@@ -98,6 +108,20 @@ def record_group() -> None:
 )
 @click.option("--mic", "-m", type=int, help="Microphone device index")
 @click.option("--loopback", "-l", type=int, help="System audio (loopback) device index")
+@click.option(
+    "--duration",
+    "-t",
+    type=int,
+    default=30,
+    show_default=True,
+    help="Auto-stop after N minutes (0 for no limit)",
+)
+@click.option(
+    "--summarize/--no-summarize",
+    default=True,
+    show_default=True,
+    help="Generate meeting notes from transcript using LLM",
+)
 def record_start(
     name: str,
     notebook: str | None,
@@ -108,20 +132,26 @@ def record_start(
     dictate: bool,
     mic: int | None,
     loopback: int | None,
+    duration: int,
+    summarize: bool,
 ) -> None:
     """Start recording audio.
 
-    Records until you press Ctrl+C. By default, transcribes automatically
-    after recording stops.
+    Records with an interactive widget showing elapsed time, remaining time,
+    and a notes textarea. Auto-stops after --duration minutes (default 30).
+    Use the +5/+10 min buttons to extend if needed. Notes typed during
+    recording are included in the transcript.
 
     \b
     Examples:
-      nb record start                     # Record mic + system audio
+      nb record start                     # Record with 30-min auto-stop
       nb record start --name standup      # Named recording
+      nb record start -t 60              # Record up to 60 minutes
+      nb record start -t 0               # No auto-stop (Ctrl+C to stop)
       nb record start -n work             # Save transcript to 'work' notebook
+      nb record start --no-summarize      # Skip LLM meeting notes
       nb record start --audio-only        # Record without transcription
       nb record start --mic-only          # Microphone only
-      nb record start --system-only       # System audio only
       nb record start --delete-audio      # Delete WAV after transcription
       nb record start --mic 1 --loopback 3  # Specify devices
 
@@ -217,85 +247,59 @@ def record_start(
         RecordingMode.SYSTEM_ONLY: "system only",
     }[mode]
 
+    # Calculate timeout in seconds (0 means no timeout)
+    timeout_seconds = duration * 60 if duration > 0 else None
+
     console.print(f"[green]Recording started:[/green] {name}")
     console.print(f"    Mode: {mode_str}")
     console.print(f"    Output: {output_path.name}")
-    console.print("    [dim]Press Ctrl+C to stop...[/dim]")
+    if timeout_seconds:
+        console.print(f"    Auto-stop: {duration} min")
     console.print()
 
-    # Use Rich Progress with spinner and elapsed time
-    from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
-
-    stop_requested = False
-    final_duration = 0.0
-
-    # Handle Ctrl+C gracefully
-    def signal_handler(sig: int, frame: object) -> None:
-        nonlocal stop_requested, final_duration
-        stop_requested = True
-        final_duration = session.duration
-
-    signal.signal(signal.SIGINT, signal_handler)
-    if sys.platform != "win32":
-        signal.signal(signal.SIGTERM, signal_handler)
-
-    # Wait for recording with spinner + elapsed time
-    import time
-
+    # Try to use interactive Wijjit widget, fall back to simple spinner
+    user_notes = ""
     try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            TimeElapsedColumn(),
-            transient=True,
-        ) as progress:
-            _task = progress.add_task("Recording", total=None)
-            while session.is_recording and not stop_requested:
-                time.sleep(0.25)
-                # Check for errors
-                if session._error:
-                    progress.stop()
-                    console.print(f"[red]Recording error: {session._error}[/red]")
-                    raise SystemExit(1)
-    except KeyboardInterrupt:
-        stop_requested = True
-        final_duration = session.duration
+        from nb.tui.recording import run_recording_widget
 
-    # Handle stop
-    if stop_requested or not session.is_recording:
-        console.print("[yellow]Stopping recording...[/yellow]")
-        try:
-            result_path = stop_recording(session)
-            duration_str = _format_duration(
-                final_duration if final_duration > 0 else session.duration
+        user_notes = run_recording_widget(
+            session=session,
+            name=name,
+            mode_str=mode_str,
+            timeout_seconds=timeout_seconds,
+        )
+    except ImportError:
+        # Wijjit not available — fall back to simple spinner
+        user_notes = _recording_spinner_fallback(session, timeout_seconds)
+
+    # Stop recording
+    final_duration = session.duration
+    console.print("[yellow]Stopping recording...[/yellow]")
+    try:
+        result_path = stop_recording(session)
+        duration_str = _format_duration(final_duration)
+        console.print(
+            f"[green]Recording saved:[/green] {result_path.name} ({duration_str})"
+        )
+
+        # Auto-transcribe unless --audio-only
+        if not audio_only:
+            _transcribe_recording(
+                result_path,
+                notebook=notebook,
+                delete_audio=delete_audio,
+                dictation=dictate,
+                user_notes=user_notes,
+                summarize=summarize,
             )
-            console.print(
-                f"[green]Recording saved:[/green] {result_path.name} ({duration_str})"
-            )
+        elif delete_audio:
+            console.print("[yellow]--delete-audio ignored with --audio-only[/yellow]")
 
-            # Auto-transcribe unless --audio-only
-            if not audio_only:
-                _transcribe_recording(
-                    result_path,
-                    notebook=notebook,
-                    delete_audio=delete_audio,
-                    dictation=dictate,
-                )
-            elif delete_audio:
-                console.print(
-                    "[yellow]--delete-audio ignored with --audio-only[/yellow]"
-                )
+    except Exception as e:
+        console.print(f"[red]Error stopping recording: {e}[/red]")
+        raise SystemExit(1) from e
 
-        except Exception as e:
-            console.print(f"[red]Error stopping recording: {e}[/red]")
-            raise SystemExit(1) from e
-
-        raise SystemExit(0)
-
-    # If we get here, recording stopped unexpectedly
-    if session._error:
-        console.print(f"[red]Recording stopped unexpectedly: {session._error}[/red]")
-        raise SystemExit(1)
+    raise SystemExit(0)
 
 
 @record_group.command("stop")
@@ -805,6 +809,53 @@ def _save_device_config(mic_device: int | None, loopback_device: int | None) -> 
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
 
+def _recording_spinner_fallback(
+    session: RecordingSession,
+    timeout_seconds: int | None,
+) -> str:
+    """Fallback recording loop when Wijjit is not available.
+
+    Uses a simple Rich spinner with timeout support.
+    Returns empty string (no notes support without Wijjit).
+    """
+    from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+
+    stop_requested = False
+
+    def signal_handler(sig: int, frame: object) -> None:
+        nonlocal stop_requested
+        stop_requested = True
+
+    signal.signal(signal.SIGINT, signal_handler)
+    if sys.platform != "win32":
+        signal.signal(signal.SIGTERM, signal_handler)
+
+    try:
+        desc = "Recording"
+        if timeout_seconds:
+            desc += f" (auto-stop in {timeout_seconds // 60} min)"
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            transient=True,
+        ) as progress:
+            _task = progress.add_task(desc, total=None)
+            while session.is_recording and not stop_requested:
+                time.sleep(0.25)
+                if session._error:
+                    progress.stop()
+                    console.print(f"[red]Recording error: {session._error}[/red]")
+                    raise SystemExit(1)
+                if timeout_seconds and session.duration >= timeout_seconds:
+                    console.print("[yellow]Auto-stop: duration limit reached.[/yellow]")
+                    stop_requested = True
+    except KeyboardInterrupt:
+        pass
+
+    return ""
+
+
 def _format_duration(seconds: float) -> str:
     """Format seconds as MM:SS or HH:MM:SS."""
     total = int(seconds)
@@ -859,6 +910,8 @@ def _transcribe_recording(
     attendees: str | None = None,
     delete_audio: bool = False,
     dictation: bool = False,
+    user_notes: str | None = None,
+    summarize: bool = False,
 ) -> None:
     """Transcribe a recording and save outputs."""
     from nb.recorder.formatter import (
@@ -967,6 +1020,15 @@ def _transcribe_recording(
             nb_path = config.notes_root / notebook
         md_path = nb_path / f"{recording_id}.md"
 
+    # Generate meeting notes with LLM if requested
+    meeting_summary = None
+    if summarize and not dictation and result.full_text.strip():
+        from nb.recorder.meeting_notes import generate_meeting_notes
+
+        meeting_summary = generate_meeting_notes(result.full_text)
+        if meeting_summary:
+            console.print("[green]Meeting notes generated.[/green]")
+
     # Write markdown
     tags = ["voice-note", "dictation"] if dictation else ["meeting", "transcript"]
     to_markdown(
@@ -975,6 +1037,8 @@ def _transcribe_recording(
         title=title,
         speaker_names=speaker_names,
         tags=tags,
+        user_notes=user_notes,
+        meeting_summary=meeting_summary,
     )
     console.print(
         f"[green]Transcript saved:[/green] {md_path.relative_to(config.notes_root)}"

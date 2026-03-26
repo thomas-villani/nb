@@ -1,3 +1,13 @@
+# Unreleased
+
+## New Features
+
+- Enhanced `nb record start` with interactive recording widget, auto-stop, and LLM meeting notes
+  - **Interactive widget**: Wijjit-based TUI shows elapsed/remaining time and a textarea for typing notes during the recording; notes are included as a `## Notes` section in the transcript
+  - **Auto-stop** (`--duration/-t`, default 30 min): Recordings automatically stop after the configured duration to prevent recording silence after meetings end; use `+5 min` / `+10 min` buttons in the widget to extend on the fly; use `-t 0` for no limit
+  - **LLM meeting notes** (`--summarize/--no-summarize`, default enabled): After transcription, sends the transcript to the fast LLM model (Haiku) to generate a `## Meeting Summary` section with summary, key discussion points, decisions, action items, and follow-ups; requires an Anthropic or OpenAI API key (silently skipped if not configured)
+  - Falls back to a simple spinner with timeout support if Wijjit is not available
+
 # v0.4.8 - 2026-01-06
 
 Patch release with new AI/CLI integrations, weekly notebook mode, Raindrop summary push support, and several CLI/AI behavior fixes and formatter improvements. No breaking changes.

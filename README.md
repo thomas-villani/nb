@@ -21,7 +21,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Attachments** - Attach files and URLs to notes and todos
 - **Interactive mode** - Keyboard-driven todo management
 - **Web viewer** - Browse notes with clickable links, backlinks panel, and graph view
-- **Meeting recording** - Record audio and transcribe with speaker diarization (optional)
+- **Meeting recording** - Record audio with auto-stop, live notes, transcription, and LLM meeting notes (optional)
 - **Raindrop inbox** - Pull bookmarks from Raindrop.io and clip them as notes with AI summaries
 - **Git integration** - Version control notes with auto-commit and GitHub sync
 - **AI assistant** - Interactive AI agent for task management with confirmation flow
@@ -1426,7 +1426,7 @@ Press `Ctrl+C` to stop the server.
 
 ### Meeting Recording
 
-Record meetings and automatically transcribe them with speaker diarization.
+Record meetings and automatically transcribe them with speaker diarization. An interactive widget lets you type notes during the recording, recordings auto-stop after a configurable duration, and an LLM can generate structured meeting notes from the transcript.
 
 **Requires optional dependencies:**
 
@@ -1437,14 +1437,18 @@ uv sync --extra recorder
 **Also requires:**
 - WASAPI-capable audio devices (Windows)
 - Deepgram API key (set `DEEPGRAM_API_KEY` environment variable)
+- Anthropic or OpenAI API key (for LLM meeting notes — optional)
 
 #### Commands
 
 ```bash
 # Recording
-nb record start                     # Start recording (Ctrl+C to stop)
+nb record start                     # Record with 30-min auto-stop
 nb record start --name standup      # Name the recording
+nb record start -t 60              # Record up to 60 minutes
+nb record start -t 0               # No auto-stop (click Stop or Ctrl+C)
 nb record start -n work             # Save transcript to 'work' notebook
+nb record start --no-summarize      # Skip LLM meeting notes generation
 nb record start --audio-only        # Record without auto-transcription
 nb record start --mic-only          # Record microphone only (no system audio)
 nb record start --system-only       # Record system audio only (no microphone)
@@ -1474,20 +1478,29 @@ nb record purge --dry-run           # Preview what would be deleted
 #### Recording Flow
 
 1. **Record**: `nb record start --name meeting-name`
+   - An interactive widget shows elapsed time, remaining time, and a notes textarea
    - Audio is captured from microphone and/or system audio (configurable)
    - Saved as WAV: stereo when both sources (left=mic, right=system), mono otherwise
    - Use `--mic-only` or `--system-only` to capture from a single source
-   - Press Ctrl+C to stop
+   - Recording auto-stops after `--duration` minutes (default 30); use the **+5 min** / **+10 min** buttons to extend on the fly
+   - Click **Stop Recording** or press Ctrl+C to stop early; notes typed during recording are saved in the transcript
 
 2. **Transcribe**: Automatically runs after recording (unless `--audio-only`)
    - Uploads to Deepgram for transcription with speaker diarization
    - Saves structured JSON to `.nb/recordings/`
    - Saves human-readable Markdown to your notebook
 
-3. **Result**: Transcript note is indexed by nb
+3. **Meeting Notes**: LLM-generated summary (unless `--no-summarize`)
+   - Sends transcript to the fast LLM model (Haiku) for summarization
+   - Generates summary, key discussion points, decisions, action items, and follow-ups
+   - Appended as a `## Meeting Summary` section in the transcript note
+   - Requires `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`; silently skipped if not configured
+
+4. **Result**: Transcript note is indexed by nb
    - Appears in searches
    - Todos extracted (if transcript contains checkboxes)
    - Tags from frontmatter
+   - User-typed notes included as a `## Notes` section
 
 #### Output Files
 
@@ -1504,6 +1517,8 @@ Example: `2025-12-01_1430_standup.wav` for a recording started at 2:30 PM.
 The Markdown transcript includes:
 - YAML frontmatter with date, tags, and duration
 - Meeting metadata (date, duration)
+- User-typed notes (if any were entered during recording)
+- LLM-generated meeting summary (if `--summarize` was used)
 - Speaker-attributed utterances with timestamps
 
 ```markdown
@@ -1519,6 +1534,20 @@ duration: 30:45
 **Duration:** 30:45
 
 ---
+
+## Notes
+
+Need to follow up with Alice on the API timeline.
+
+## Meeting Summary
+
+**Summary**: Discussed API integration progress and upcoming deadlines...
+
+**Action Items**:
+- Alice to share API docs by Wednesday
+- Bob to update the staging environment
+
+## Transcript
 
 **Speaker 0** [0:00]: Good morning everyone, let's start the standup.
 

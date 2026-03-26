@@ -134,6 +134,8 @@ def to_markdown(
     speaker_names: dict[int, str] | None = None,
     include_frontmatter: bool = True,
     tags: list[str] | None = None,
+    user_notes: str | None = None,
+    meeting_summary: str | None = None,
 ) -> None:
     """Write transcript to Markdown file.
 
@@ -145,6 +147,8 @@ def to_markdown(
         speaker_names: Map of speaker IDs to names (optional)
         include_frontmatter: Whether to include YAML frontmatter
         tags: List of tags for frontmatter
+        user_notes: Notes typed during recording (optional)
+        meeting_summary: LLM-generated meeting notes (optional)
     """
     if recorded_at is None:
         recorded_at = datetime.now()
@@ -173,6 +177,25 @@ def to_markdown(
     lines.append("")
     lines.append("---")
     lines.append("")
+
+    # User notes section (typed during recording)
+    if user_notes and user_notes.strip():
+        lines.append("## Notes")
+        lines.append("")
+        lines.append(user_notes.strip())
+        lines.append("")
+
+    # LLM-generated meeting summary
+    if meeting_summary and meeting_summary.strip():
+        lines.append("## Meeting Summary")
+        lines.append("")
+        lines.append(meeting_summary.strip())
+        lines.append("")
+
+    # Transcript section (add heading when notes/summary are present)
+    if user_notes or meeting_summary:
+        lines.append("## Transcript")
+        lines.append("")
 
     # Group utterances to reduce repetition
     # Combine consecutive utterances from the same speaker
