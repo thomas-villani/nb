@@ -212,6 +212,33 @@ class TestNotebooksMerge:
         assert (mock_cli_config.notes_root / "projects" / "archived" / "sub1" / "a.md").exists()
         assert (mock_cli_config.notes_root / "projects" / "archived" / "sub2" / "b.md").exists()
 
+    def test_merge_moves_non_markdown_files(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Test that non-markdown files (PDFs, CSVs, images) are also moved."""
+        cli_runner.invoke(cli, ["notebooks", "create", "source"])
+        src_dir = mock_cli_config.notes_root / "source"
+        (src_dir / "readme.md").write_text("# Readme\n")
+        (src_dir / "data.csv").write_bytes(b"a,b,c\n1,2,3\n")
+        (src_dir / "assets").mkdir()
+        (src_dir / "assets" / "logo.png").write_bytes(b"\x89PNG fake image")
+        (src_dir / "assets" / "notes.md").write_text("# Asset Notes\n")
+
+        result = cli_runner.invoke(
+            cli, ["notebooks", "merge", "source", "projects", "-s", "src"]
+        )
+        assert result.exit_code == 0
+
+        dest = mock_cli_config.notes_root / "projects" / "src"
+        assert (dest / "readme.md").exists()
+        assert (dest / "data.csv").exists()
+        assert (dest / "data.csv").read_bytes() == b"a,b,c\n1,2,3\n"
+        assert (dest / "assets" / "logo.png").exists()
+        assert (dest / "assets" / "notes.md").exists()
+
+        # Source should be fully cleaned up
+        assert not src_dir.exists()
+
     def test_merge_dry_run(self, cli_runner: CliRunner, mock_cli_config: Config):
         """Test dry run shows planned moves without modifying files."""
         cli_runner.invoke(cli, ["notebooks", "create", "source"])

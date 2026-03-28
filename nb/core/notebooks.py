@@ -373,19 +373,32 @@ def merge_notebook(
     if not dry_run:
         target_dir.mkdir(parents=True, exist_ok=True)
 
-    # Get all notes in source notebook
-    source_notes = get_notebook_notes(source, notes_root)
-    if not source_notes:
-        raise ValueError(f"Source notebook '{source}' has no notes to merge.")
+    # Get ALL files in source notebook (not just .md)
+    source_dir = notes_root / source
+    all_source_files: list[Path] = []
+    for f in source_dir.rglob("*"):
+        if not f.is_file():
+            continue
+        # Skip hidden files/directories
+        try:
+            rel_parts = f.relative_to(source_dir).parts
+            if any(part.startswith(".") for part in rel_parts):
+                continue
+        except ValueError:
+            continue
+        all_source_files.append(f.relative_to(notes_root))
+
+    if not all_source_files:
+        raise ValueError(f"Source notebook '{source}' has no files to merge.")
 
     # Compute move plan: (source_relative, dest_relative) pairs
     moves: list[tuple[Path, Path]] = []
     conflicts: list[Path] = []
 
-    for note_path in source_notes:
-        # note_path is relative to notes_root, e.g. "source/subdir/note.md"
+    for file_path in all_source_files:
+        # file_path is relative to notes_root, e.g. "source/subdir/note.md"
         # Get the path within the source notebook
-        rel_within_source = Path(*note_path.parts[1:])  # strip notebook prefix
+        rel_within_source = Path(*file_path.parts[1:])  # strip notebook prefix
 
         # Build destination path
         if section:
@@ -397,7 +410,7 @@ def merge_notebook(
         if (notes_root / dest_rel).exists() and not force:
             conflicts.append(dest_rel)
 
-        moves.append((note_path, dest_rel))
+        moves.append((file_path, dest_rel))
 
     if conflicts:
         conflict_list = "\n  ".join(str(c) for c in conflicts[:10])
@@ -411,6 +424,8 @@ def merge_notebook(
         return moves
 
     # Perform the moves
+    import shutil
+
     from nb.index.db import get_db
     from nb.index.scanner import index_note
     from nb.index.todos_repo import delete_todos_for_source
@@ -422,28 +437,34 @@ def merge_notebook(
         source_full = notes_root / source_rel
         dest_full = notes_root / dest_rel
 
-        # Read source content
-        content = source_full.read_text(encoding="utf-8")
-
-        # Create destination directory and write file
+        # Create destination directory
         dest_full.parent.mkdir(parents=True, exist_ok=True)
-        dest_full.write_text(content, encoding="utf-8")
 
-        # Delete old database entries
-        delete_todos_for_source(source_full)
-        db.execute(
-            "DELETE FROM notes WHERE path = ?",
-            (normalize_path(source_rel),),
-        )
+        is_markdown = source_full.suffix.lower() == ".md"
+
+        if is_markdown:
+            # Text copy for markdown files + clean up DB entries
+            content = source_full.read_text(encoding="utf-8")
+            dest_full.write_text(content, encoding="utf-8")
+
+            delete_todos_for_source(source_full)
+            db.execute(
+                "DELETE FROM notes WHERE path = ?",
+                (normalize_path(source_rel),),
+            )
+        else:
+            # Binary copy for non-markdown files (PDFs, images, CSVs, etc.)
+            shutil.copy2(source_full, dest_full)
 
         # Delete source file
         source_full.unlink()
 
     db.commit()
 
-    # Index all notes at their new locations
+    # Index markdown files at their new locations
     for _, dest_rel in moves:
-        index_note(notes_root / dest_rel, notes_root=notes_root)
+        if (notes_root / dest_rel).suffix.lower() == ".md":
+            index_note(notes_root / dest_rel, notes_root=notes_root)
 
     # Clean up empty directories in source notebook
     source_dir = notes_root / source
