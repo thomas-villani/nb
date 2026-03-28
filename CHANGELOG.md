@@ -1,12 +1,40 @@
-# Unreleased
+# v0.5.0 - 2026-03-27
+
+Minor release adding notebook merge/reorganization, section filtering across search and grep, interactive recording enhancements, AI light-day detection, and several fixes. No breaking changes.
 
 ## New Features
+
+- Add `nb notebooks merge <source> <target>` command for bulk notebook reorganization
+  - Moves all notes from one notebook into another in a single operation
+  - `--section/-s <name>`: Place notes into a subfolder/section in the target (e.g., archiving a completed project)
+  - `--dry-run`: Preview planned moves without modifying files
+  - `--force/-f`: Overwrite destination files on conflict
+  - `--keep-source`: Preserve source notebook in config (removed by default after merge)
+  - Preserves subdirectory structure within the source notebook
+  - Single git commit for the entire merge operation
+
+- Add `--section/-S` and `--exclude-section/-xs` filtering to `nb search` and `nb grep`
+  - Filter search and grep results by path-based sections (subdirectories within notebooks)
+  - Matches existing `--section`/`--exclude-section` support in `nb list`
+  - Repeatable options for filtering by multiple sections
+
+- Add light-day detection and backlog suggestions to AI planning and standup
+  - Detects light calendar days (4+ free hours) and suggests backlog items to work on
+  - Scoring formula based on age and priority; configurable thresholds
+  - Integrated into `nb plan` and `nb standup` context panels
 
 - Enhanced `nb record start` with interactive recording widget, auto-stop, and LLM meeting notes
   - **Interactive widget**: Wijjit-based TUI shows elapsed/remaining time and a textarea for typing notes during the recording; notes are included as a `## Notes` section in the transcript
   - **Auto-stop** (`--duration/-t`, default 30 min): Recordings automatically stop after the configured duration to prevent recording silence after meetings end; use `+5 min` / `+10 min` buttons in the widget to extend on the fly; use `-t 0` for no limit
   - **LLM meeting notes** (`--summarize/--no-summarize`, default enabled): After transcription, sends the transcript to the fast LLM model (Haiku) to generate a `## Meeting Summary` section with summary, key discussion points, decisions, action items, and follow-ups; requires an Anthropic or OpenAI API key (silently skipped if not configured)
   - Falls back to a simple spinner with timeout support if Wijjit is not available
+
+## Bug Fixes
+
+- Fix tag extraction to only use frontmatter tags and lowercase them consistently
+- Fix wiki link tokenizer regex to properly match `[[link|label]]` forms
+- Fix `escapeJs` to escape single backslashes and quotes correctly, preventing malformed JS string output
+- Switch highlight.js includes to cdn-release build and limit shipped languages to python/sql/yaml
 
 # v0.4.8 - 2026-01-06
 
