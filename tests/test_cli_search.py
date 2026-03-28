@@ -152,6 +152,65 @@ class TestGrepCommand:
         result = cli_runner.invoke(cli, ["grep", "[invalid(regex"])
         assert result.exit_code == 1
 
+    def test_grep_with_section_filter(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Test grep filtered by section."""
+        # Create notes in different sections
+        docs_dir = mock_cli_config.notes_root / "projects" / "docs"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        (docs_dir / "api.md").write_text("# API\n\nFindable content here")
+        (mock_cli_config.notes_root / "projects" / "readme.md").write_text(
+            "# Readme\n\nFindable content here too"
+        )
+
+        # Grep with section filter -- should only find docs/api.md
+        result = cli_runner.invoke(cli, ["grep", "Findable", "-S", "docs"])
+        assert result.exit_code == 0
+        assert "api.md" in result.output
+        assert "readme.md" not in result.output
+
+    def test_grep_with_exclude_section(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Test grep with section exclusion."""
+        docs_dir = mock_cli_config.notes_root / "projects" / "docs"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        (docs_dir / "api.md").write_text("# API\n\nExcludable content")
+        (mock_cli_config.notes_root / "projects" / "readme.md").write_text(
+            "# Readme\n\nExcludable content"
+        )
+
+        # Grep excluding docs section -- should only find readme.md
+        result = cli_runner.invoke(
+            cli, ["grep", "Excludable", "-n", "projects", "-xs", "docs"]
+        )
+        assert result.exit_code == 0
+        assert "readme.md" in result.output
+        assert "api.md" not in result.output
+
+
+
+class TestSearchSectionFilter:
+    """Tests for section filtering in search."""
+
+    def test_search_section_option_accepted(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Test that --section and --exclude-section options are accepted by search."""
+        # Just verify the CLI accepts the options without "no such option" errors.
+        # Actual search may fail without embeddings infrastructure, so we don't
+        # assert exit_code == 0 -- we just verify the option is recognized.
+        result = cli_runner.invoke(
+            cli, ["search", "--keyword", "test", "-S", "docs"]
+        )
+        assert "No such option" not in result.output
+
+        result = cli_runner.invoke(
+            cli, ["search", "--keyword", "test", "-xs", "docs"]
+        )
+        assert "No such option" not in result.output
+
 
 class TestIndexCommand:
     """Tests for 'nb index' command."""

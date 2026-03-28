@@ -5,6 +5,7 @@ from __future__ import annotations
 import click
 from rich.table import Table
 
+from nb.cli.completion import complete_notebook
 from nb.cli.utils import console
 from nb.config import get_config
 from nb.core.notebooks import get_notebook_notes
@@ -203,3 +204,84 @@ def notebooks_remove(name: str, force: bool) -> None:
         console.print(f"[green]Removed notebook:[/green] {name}")
     else:
         console.print(f"[red]Failed to remove notebook:[/red] {name}")
+
+
+@notebooks_cmd.command("merge")
+@click.argument("source", shell_complete=complete_notebook)
+@click.argument("target", shell_complete=complete_notebook)
+@click.option("--section", "-s", help="Place notes into a subfolder/section in the target")
+@click.option("--dry-run", is_flag=True, help="Preview what would be moved without doing it")
+@click.option("--force", "-f", is_flag=True, help="Overwrite files if they already exist at destination")
+@click.option(
+    "--keep-source",
+    is_flag=True,
+    help="Keep the source notebook in configuration after merging (removed by default)",
+)
+def notebooks_merge(
+    source: str,
+    target: str,
+    section: str | None,
+    dry_run: bool,
+    force: bool,
+    keep_source: bool,
+) -> None:
+    """Merge all notes from one notebook into another.
+
+    Moves every note from SOURCE into TARGET. Use --section to place
+    them in a subfolder (e.g., merging a finished project into an archive).
+
+    Subdirectory structure within the source is preserved. By default,
+    the source notebook is removed from configuration after merging.
+
+    \b
+    Examples:
+      nb notebooks merge myproject archive --section myproject
+      nb notebooks merge old-ideas ideas
+      nb notebooks merge work-2024 archive --section work-2024 --keep-source
+      nb notebooks merge draft published --dry-run
+      nb notebooks merge old new --force        # Overwrite conflicts
+
+    """
+    from nb.core.notebooks import merge_notebook
+
+    # Show what will happen
+    if section:
+        dest_desc = f"'{target}/{section}/'"
+    else:
+        dest_desc = f"'{target}/'"
+
+    if dry_run:
+        console.print(f"[dim]Dry run: previewing merge of '{source}' into {dest_desc}[/dim]\n")
+
+    try:
+        moves = merge_notebook(
+            source,
+            target,
+            section=section,
+            force=force,
+            dry_run=dry_run,
+        )
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise SystemExit(1) from None
+    except FileExistsError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise SystemExit(1) from None
+
+    if not moves:
+        console.print("[dim]No notes to merge.[/dim]")
+        return
+
+    if dry_run:
+        for src, dst in moves:
+            console.print(f"  {src} -> [cyan]{dst}[/cyan]")
+        console.print(f"\n[dim]Would move {len(moves)} note(s). Run without --dry-run to apply.[/dim]")
+        return
+
+    console.print(f"[green]Merged {len(moves)} note(s)[/green] from '{source}' into {dest_desc}")
+
+    if not keep_source:
+        from nb.config import remove_notebook
+
+        if remove_notebook(source):
+            console.print(f"[dim]Removed '{source}' from notebook configuration.[/dim]")

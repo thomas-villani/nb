@@ -312,6 +312,171 @@ def get_notebook_for_file(path: Path) -> str | None:
     return None
 
 
+def merge_notebook(
+    source: str,
+    target: str,
+    section: str | None = None,
+    force: bool = False,
+    dry_run: bool = False,
+    notes_root: Path | None = None,
+) -> list[tuple[Path, Path]]:
+    """Merge all notes from source notebook into target notebook.
+
+    Moves every note from the source notebook into the target. If section
+    is provided, notes are placed under a subfolder with that name.
+
+    Args:
+        source: Name of the source notebook.
+        target: Name of the target notebook.
+        section: Optional subfolder name within target to place notes.
+        force: If True, overwrite files that already exist at the destination.
+        dry_run: If True, return planned moves without modifying anything.
+        notes_root: Override notes root directory.
+
+    Returns:
+        List of (source_relative, dest_relative) path tuples for each moved note.
+
+    Raises:
+        ValueError: If notebooks are invalid, external, or identical.
+        FileExistsError: If destination conflicts exist and force=False.
+
+    """
+    import sys
+
+    config = get_config()
+    if notes_root is None:
+        notes_root = config.notes_root
+
+    # Validate notebooks
+    if source == target:
+        raise ValueError("Cannot merge a notebook into itself.")
+
+    source_config = config.get_notebook(source)
+    target_config = config.get_notebook(target)
+
+    if source_config and source_config.is_external:
+        raise ValueError(
+            f"Cannot merge external notebook '{source}'. "
+            "Only internal notebooks can be merged."
+        )
+    if target_config and target_config.is_external:
+        raise ValueError(
+            f"Cannot merge into external notebook '{target}'. "
+            "Only internal notebooks can be merged into."
+        )
+
+    if not notebook_exists(source, notes_root):
+        raise ValueError(f"Source notebook '{source}' does not exist.")
+
+    # Create target directory if it doesn't exist
+    target_dir = notes_root / target
+    if not dry_run:
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+    # Get all notes in source notebook
+    source_notes = get_notebook_notes(source, notes_root)
+    if not source_notes:
+        raise ValueError(f"Source notebook '{source}' has no notes to merge.")
+
+    # Compute move plan: (source_relative, dest_relative) pairs
+    moves: list[tuple[Path, Path]] = []
+    conflicts: list[Path] = []
+
+    for note_path in source_notes:
+        # note_path is relative to notes_root, e.g. "source/subdir/note.md"
+        # Get the path within the source notebook
+        rel_within_source = Path(*note_path.parts[1:])  # strip notebook prefix
+
+        # Build destination path
+        if section:
+            dest_rel = Path(target) / section / rel_within_source
+        else:
+            dest_rel = Path(target) / rel_within_source
+
+        # Check for conflicts
+        if (notes_root / dest_rel).exists() and not force:
+            conflicts.append(dest_rel)
+
+        moves.append((note_path, dest_rel))
+
+    if conflicts:
+        conflict_list = "\n  ".join(str(c) for c in conflicts[:10])
+        suffix = f"\n  ... and {len(conflicts) - 10} more" if len(conflicts) > 10 else ""
+        raise FileExistsError(
+            f"Destination conflicts ({len(conflicts)} files):\n  {conflict_list}{suffix}\n"
+            "Use --force to overwrite."
+        )
+
+    if dry_run:
+        return moves
+
+    # Perform the moves
+    from nb.index.db import get_db
+    from nb.index.scanner import index_note
+    from nb.index.todos_repo import delete_todos_for_source
+    from nb.utils.hashing import normalize_path
+
+    db = get_db()
+
+    for source_rel, dest_rel in moves:
+        source_full = notes_root / source_rel
+        dest_full = notes_root / dest_rel
+
+        # Read source content
+        content = source_full.read_text(encoding="utf-8")
+
+        # Create destination directory and write file
+        dest_full.parent.mkdir(parents=True, exist_ok=True)
+        dest_full.write_text(content, encoding="utf-8")
+
+        # Delete old database entries
+        delete_todos_for_source(source_full)
+        db.execute(
+            "DELETE FROM notes WHERE path = ?",
+            (normalize_path(source_rel),),
+        )
+
+        # Delete source file
+        source_full.unlink()
+
+    db.commit()
+
+    # Index all notes at their new locations
+    for _, dest_rel in moves:
+        index_note(notes_root / dest_rel, notes_root=notes_root)
+
+    # Clean up empty directories in source notebook
+    source_dir = notes_root / source
+    if source_dir.exists():
+        # Walk bottom-up removing empty directories
+        for dirpath in sorted(source_dir.rglob("*"), reverse=True):
+            if dirpath.is_dir():
+                try:
+                    dirpath.rmdir()  # Only succeeds if empty
+                except OSError:
+                    pass
+        # Remove the source notebook directory itself if empty
+        try:
+            source_dir.rmdir()
+        except OSError:
+            pass
+
+    # Git auto-commit (single commit for entire merge)
+    if config.git.enabled and config.git.auto_commit:
+        from nb.core.git import commit_all, is_git_repo
+
+        if is_git_repo(notes_root):
+            try:
+                msg = f"Merge notebook '{source}' into '{target}'"
+                if section:
+                    msg += f" (section: {section})"
+                commit_all(msg, notes_root=notes_root)
+            except Exception as e:
+                print(f"Warning: Git auto-commit failed: {e}", file=sys.stderr)
+
+    return moves
+
+
 def get_notebook_note_path(
     notebook: str,
     dt: date | None = None,

@@ -34,6 +34,18 @@ def register_search_commands(cli: click.Group) -> None:
     "--notebook", "-n", help="Filter by notebook", shell_complete=complete_notebook
 )
 @click.option(
+    "--section",
+    "-S",
+    multiple=True,
+    help="Filter by path section/subdirectory (repeatable)",
+)
+@click.option(
+    "--exclude-section",
+    "-xs",
+    multiple=True,
+    help="Exclude notes from this section (repeatable)",
+)
+@click.option(
     "--when",
     "when_filter",
     help="Filter by date range (e.g., 'last 3 months', 'this week')",
@@ -64,6 +76,8 @@ def search_cmd(
     keyword: bool,
     tag: str | None,
     notebook: str | None,
+    section: tuple[str, ...],
+    exclude_section: tuple[str, ...],
     when_filter: str | None,
     since_date: str | None,
     until_date: str | None,
@@ -205,6 +219,25 @@ def search_cmd(
             )
         raise SystemExit(1) from None
 
+    # Apply section filters (post-filtering since sections aren't in vector index)
+    if section or exclude_section:
+        from nb.core.note_parser import get_sections_for_path
+
+        filtered_results = []
+        for r in results:
+            note_sections = get_sections_for_path(Path(r.path))
+
+            if section:
+                if not any(s in note_sections for s in section):
+                    continue
+
+            if exclude_section:
+                if any(s in note_sections for s in exclude_section):
+                    continue
+
+            filtered_results.append(r)
+        results = filtered_results
+
     if not results:
         console.print("[dim]No results found.[/dim]")
         return
@@ -267,6 +300,18 @@ def search_cmd(
 )
 @click.option("--note", "-N", help="Filter by specific note (path or alias)")
 @click.option(
+    "--section",
+    "-S",
+    multiple=True,
+    help="Filter by path section/subdirectory (repeatable)",
+)
+@click.option(
+    "--exclude-section",
+    "-xs",
+    multiple=True,
+    help="Exclude notes from this section (repeatable)",
+)
+@click.option(
     "--files-only",
     "-l",
     is_flag=True,
@@ -278,6 +323,8 @@ def grep_cmd(
     ignore_case: bool,
     notebook: str | None,
     note: str | None,
+    section: tuple[str, ...],
+    exclude_section: tuple[str, ...],
     files_only: bool,
 ) -> None:
     """Search notes with regex pattern matching.
@@ -323,6 +370,8 @@ def grep_cmd(
             case_sensitive=not ignore_case,
             notebook=notebook,
             note_path=note_path,
+            include_sections=list(section) if section else None,
+            exclude_sections=list(exclude_section) if exclude_section else None,
         )
     except ValueError as e:
         console.print(f"[red]{e}[/red]")

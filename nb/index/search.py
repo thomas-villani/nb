@@ -485,6 +485,8 @@ def grep_notes(
     case_sensitive: bool = False,
     notebook: str | None = None,
     note_path: Path | None = None,
+    include_sections: list[str] | None = None,
+    exclude_sections: list[str] | None = None,
 ) -> list[GrepResult]:
     """Search notes with regex pattern matching.
 
@@ -570,6 +572,27 @@ def grep_notes(
                     except ValueError:
                         continue
                     files_to_search.append(md_file)
+
+    # Apply section filters before grepping
+    if include_sections or exclude_sections:
+        from nb.core.note_parser import get_sections_for_path
+
+        filtered_files = []
+        for f in files_to_search:
+            try:
+                rel = f.relative_to(notes_root)
+            except ValueError:
+                rel = f
+            note_sections = get_sections_for_path(rel)
+
+            if include_sections:
+                if not any(s in note_sections for s in include_sections):
+                    continue
+            if exclude_sections:
+                if any(s in note_sections for s in exclude_sections):
+                    continue
+            filtered_files.append(f)
+        files_to_search = filtered_files
 
     for md_file in files_to_search:
         # Skip hidden directories and .nb

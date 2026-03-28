@@ -149,3 +149,158 @@ class TestNotebooksRemove:
 
         # Files should still exist
         assert note_path.exists()
+
+
+class TestNotebooksMerge:
+    """Tests for 'nb notebooks merge' command."""
+
+    def test_merge_basic(self, cli_runner: CliRunner, mock_cli_config: Config):
+        """Test basic merge of one notebook into another."""
+        # Create source notebook with notes
+        cli_runner.invoke(cli, ["notebooks", "create", "source"])
+        src_dir = mock_cli_config.notes_root / "source"
+        (src_dir / "note1.md").write_text("# Note 1\n")
+        (src_dir / "note2.md").write_text("# Note 2\n")
+
+        result = cli_runner.invoke(cli, ["notebooks", "merge", "source", "projects"])
+        assert result.exit_code == 0
+        assert "Merged 2 note(s)" in result.output
+
+        # Notes should be in target
+        assert (mock_cli_config.notes_root / "projects" / "note1.md").exists()
+        assert (mock_cli_config.notes_root / "projects" / "note2.md").exists()
+
+        # Source should be empty / removed
+        assert not (src_dir / "note1.md").exists()
+        assert not (src_dir / "note2.md").exists()
+
+    def test_merge_with_section(self, cli_runner: CliRunner, mock_cli_config: Config):
+        """Test merge with --section places notes in a subfolder."""
+        cli_runner.invoke(cli, ["notebooks", "create", "myproject"])
+        proj_dir = mock_cli_config.notes_root / "myproject"
+        (proj_dir / "readme.md").write_text("# Readme\n")
+        (proj_dir / "todo.md").write_text("# Todo\n")
+
+        result = cli_runner.invoke(
+            cli, ["notebooks", "merge", "myproject", "projects", "--section", "myproject"]
+        )
+        assert result.exit_code == 0
+        assert "Merged 2 note(s)" in result.output
+
+        # Notes should be under section subfolder
+        assert (mock_cli_config.notes_root / "projects" / "myproject" / "readme.md").exists()
+        assert (mock_cli_config.notes_root / "projects" / "myproject" / "todo.md").exists()
+
+    def test_merge_preserves_subdirectory_structure(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Test that subdirectory structure is preserved after merge."""
+        cli_runner.invoke(cli, ["notebooks", "create", "source"])
+        src_dir = mock_cli_config.notes_root / "source"
+        (src_dir / "sub1").mkdir()
+        (src_dir / "sub2").mkdir()
+        (src_dir / "root.md").write_text("# Root\n")
+        (src_dir / "sub1" / "a.md").write_text("# A\n")
+        (src_dir / "sub2" / "b.md").write_text("# B\n")
+
+        result = cli_runner.invoke(
+            cli, ["notebooks", "merge", "source", "projects", "-s", "archived"]
+        )
+        assert result.exit_code == 0
+
+        assert (mock_cli_config.notes_root / "projects" / "archived" / "root.md").exists()
+        assert (mock_cli_config.notes_root / "projects" / "archived" / "sub1" / "a.md").exists()
+        assert (mock_cli_config.notes_root / "projects" / "archived" / "sub2" / "b.md").exists()
+
+    def test_merge_dry_run(self, cli_runner: CliRunner, mock_cli_config: Config):
+        """Test dry run shows planned moves without modifying files."""
+        cli_runner.invoke(cli, ["notebooks", "create", "source"])
+        src_dir = mock_cli_config.notes_root / "source"
+        (src_dir / "note.md").write_text("# Note\n")
+
+        result = cli_runner.invoke(
+            cli, ["notebooks", "merge", "source", "projects", "--dry-run"]
+        )
+        assert result.exit_code == 0
+        assert "Would move" in result.output
+
+        # Source file should still exist
+        assert (src_dir / "note.md").exists()
+        # Target should NOT have the file
+        assert not (mock_cli_config.notes_root / "projects" / "note.md").exists()
+
+    def test_merge_conflict_without_force(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Test merge fails on conflict without --force."""
+        cli_runner.invoke(cli, ["notebooks", "create", "source"])
+        (mock_cli_config.notes_root / "source" / "clash.md").write_text("# Source\n")
+        (mock_cli_config.notes_root / "projects" / "clash.md").write_text("# Target\n")
+
+        result = cli_runner.invoke(cli, ["notebooks", "merge", "source", "projects"])
+        assert result.exit_code == 1
+        assert "conflict" in result.output.lower() or "force" in result.output.lower()
+
+    def test_merge_conflict_with_force(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Test merge succeeds with --force on conflict."""
+        cli_runner.invoke(cli, ["notebooks", "create", "source"])
+        (mock_cli_config.notes_root / "source" / "clash.md").write_text("# Source version\n")
+        (mock_cli_config.notes_root / "projects" / "clash.md").write_text("# Target version\n")
+
+        result = cli_runner.invoke(
+            cli, ["notebooks", "merge", "source", "projects", "--force"]
+        )
+        assert result.exit_code == 0
+
+        # Target should have source content
+        content = (mock_cli_config.notes_root / "projects" / "clash.md").read_text()
+        assert "Source version" in content
+
+    def test_merge_removes_source_by_default(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Test source notebook is removed from config by default."""
+        cli_runner.invoke(cli, ["notebooks", "create", "removable"])
+        (mock_cli_config.notes_root / "removable" / "note.md").write_text("# Note\n")
+
+        result = cli_runner.invoke(
+            cli, ["notebooks", "merge", "removable", "projects"]
+        )
+        assert result.exit_code == 0
+        assert "Removed" in result.output
+
+        # Notebook should be gone from listing
+        list_result = cli_runner.invoke(cli, ["notebooks"])
+        assert "removable" not in list_result.output
+
+    def test_merge_keep_source(self, cli_runner: CliRunner, mock_cli_config: Config):
+        """Test --keep-source preserves notebook in config."""
+        cli_runner.invoke(cli, ["notebooks", "create", "keepable"])
+        (mock_cli_config.notes_root / "keepable" / "note.md").write_text("# Note\n")
+
+        result = cli_runner.invoke(
+            cli, ["notebooks", "merge", "keepable", "projects", "--keep-source"]
+        )
+        assert result.exit_code == 0
+
+        # Notebook should still be in listing
+        list_result = cli_runner.invoke(cli, ["notebooks"])
+        assert "keepable" in list_result.output
+
+    def test_merge_same_notebook_error(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Test merging a notebook into itself fails."""
+        result = cli_runner.invoke(cli, ["notebooks", "merge", "projects", "projects"])
+        assert result.exit_code == 1
+        assert "itself" in result.output.lower()
+
+    def test_merge_nonexistent_source(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Test merging from a nonexistent notebook fails."""
+        result = cli_runner.invoke(cli, ["notebooks", "merge", "nonexistent", "projects"])
+        assert result.exit_code == 1
+        assert "does not exist" in result.output.lower()
