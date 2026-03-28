@@ -1,3 +1,3 @@
 """nb - A plaintext-first note-taking and todo management CLI."""
 
-__version__ = "0.4.8"
+__version__ = "0.5.0"
