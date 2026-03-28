@@ -179,6 +179,14 @@ def _serialize_dataclass_fields(
         if isinstance(value, Path):
             value = str(value)
 
+        # Recursively serialize nested dataclasses
+        if is_dataclass(value) and not isinstance(value, type):
+            value = _serialize_dataclass_fields(value)
+
+        # Serialize lists of dataclasses
+        if isinstance(value, list) and value and is_dataclass(value[0]):
+            value = [_serialize_dataclass_fields(item) for item in value]
+
         result[_field.name] = value
 
     return result
