@@ -235,8 +235,8 @@ def save_config(config: Config) -> None:
     # Notebooks: custom serialization with conditional fields
     notebooks_data = [_serialize_notebook(nb) for nb in config.notebooks]
 
-    # Embeddings: all fields except None, with special handling for api_key
-    embeddings_data = _serialize_dataclass_fields(config.embeddings)
+    # Embeddings: all fields except api_key (use env var for security)
+    embeddings_data = _serialize_dataclass_fields(config.embeddings, exclude={"api_key"})
 
     # Search: all fields except api_key (use env var for security)
     search_data = _serialize_dataclass_fields(config.search, exclude={"serper_api_key"})
@@ -350,8 +350,21 @@ def save_config(config: Config) -> None:
         data["llm"] = llm_data
 
     config.config_path.parent.mkdir(parents=True, exist_ok=True)
-    with config.config_path.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+
+    # Write to a temp file first, then rename — prevents data loss if
+    # serialization fails partway through (the old file stays intact).
+    import tempfile
+
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=config.config_path.parent, suffix=".yaml.tmp"
+    )
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+        Path(tmp_path).replace(config.config_path)
+    except Exception:
+        Path(tmp_path).unlink(missing_ok=True)
+        raise
 
 
 def ensure_directories(config: Config) -> None:
