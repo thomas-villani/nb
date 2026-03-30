@@ -66,6 +66,20 @@ def _list_notebooks(verbose: bool = False) -> None:
             path_display = str(nb.path) if nb.is_external else f"~/notes/{nb.name}"
             table.add_row(nb.name, nb_type, note_count, path_display)
 
+            # Show sections under the notebook
+            for sec in nb.sections:
+                sec_type_parts = ["section"]
+                if sec.todo_exclude:
+                    sec_type_parts.append("excl")
+                sec_type = ", ".join(sec_type_parts)
+                sec_path = f"~/notes/{nb.name}/{sec.name}"
+                table.add_row(
+                    f"  [dim]{sec.name}[/dim]",
+                    f"[dim]{sec_type}[/dim]",
+                    "[dim]-[/dim]",
+                    f"[dim]{sec_path}[/dim]",
+                )
+
         console.print(table)
     else:
         for nb in nbs:
@@ -77,6 +91,11 @@ def _list_notebooks(verbose: bool = False) -> None:
             elif nb.date_mode == "daily":
                 suffix = " [dim](daily)[/dim]"
             console.print(f"{nb.name}{suffix}")
+
+            # Show sections under the notebook
+            for sec in nb.sections:
+                sec_suffix = " [dim](todo excluded)[/dim]" if sec.todo_exclude else ""
+                console.print(f"  [dim]{sec.name}{sec_suffix}[/dim]")
 
 
 @notebooks_cmd.command("list")
@@ -279,6 +298,42 @@ def notebooks_merge(
         return
 
     console.print(f"[green]Merged {len(moves)} note(s)[/green] from '{source}' into {dest_desc}")
+
+    # Register the section in the target notebook's config
+    if section:
+        config = get_config()
+        source_config = config.get_notebook(source)
+        source_excluded = source_config.todo_exclude if source_config else False
+
+        from nb.config.models import SectionConfig
+
+        target_config = config.get_notebook(target)
+        if target_config:
+            existing = next((s for s in target_config.sections if s.name == section), None)
+            if existing:
+                if source_excluded:
+                    existing.todo_exclude = True
+            else:
+                target_config.sections.append(
+                    SectionConfig(name=section, todo_exclude=source_excluded)
+                )
+
+            from nb.config.io import save_config as _save_config
+
+            _save_config(config)
+            if source_excluded:
+                console.print(f"[dim]Section '{section}' inherits todo_exclude from '{source}'.[/dim]")
+
+        # Warn about linked notes that reference the source notebook
+        from nb.core.links import list_linked_notes
+
+        linked = [ln for ln in list_linked_notes() if (ln.notebook or ln.alias) == source]
+        if linked:
+            aliases = ", ".join(ln.alias for ln in linked)
+            console.print(
+                f"[yellow]Note:[/yellow] Linked notes ({aliases}) have notebook '{source}'.\n"
+                f"  View their todos with: [cyan]nb todo -n {target}/{section}[/cyan]"
+            )
 
     if not keep_source:
         from nb.config import remove_notebook

@@ -80,11 +80,17 @@ def _get_todo_source_parts(t) -> dict[str, str]:
     elif t.source.type == "inbox":
         result["notebook"] = "inbox"
     else:
-        # Regular note - show notebook/filename
+        # Regular note - show notebook/[section/]filename
         config = get_config()
         try:
             rel_path = t.source.path.relative_to(config.notes_root)
-            if len(rel_path.parts) > 1:
+            if len(rel_path.parts) > 2:
+                # Has subfolder(s) between notebook and file: notebook/section/.../note.md
+                result["notebook"] = rel_path.parts[0]
+                # Include intermediate path components as section prefix
+                middle = "/".join(rel_path.parts[1:-1])
+                result["note"] = f"{middle}/{rel_path.stem}"
+            elif len(rel_path.parts) > 1:
                 result["notebook"] = rel_path.parts[0]
                 result["note"] = rel_path.stem
             else:

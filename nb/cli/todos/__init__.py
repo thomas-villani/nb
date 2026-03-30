@@ -295,16 +295,26 @@ def todo(
         return
 
     # Resolve notebooks with fuzzy matching
+    # Supports "notebook/section" syntax (e.g., "projects/llmcli")
     from nb.cli.utils import resolve_notebook
     from nb.utils.fuzzy import UserCancelled
 
     effective_notebooks: list[str] = []
+    inline_sections: list[str] = []  # Sections parsed from notebook/section syntax
     for nb_name in notebook:
+        # Parse notebook/section syntax
+        if "/" in nb_name:
+            nb_part, sec_part = nb_name.split("/", 1)
+            if config.get_notebook(nb_part):
+                effective_notebooks.append(nb_part)
+                inline_sections.append(sec_part)
+                continue
+
         if config.get_notebook(nb_name):
             effective_notebooks.append(nb_name)
         else:
             try:
-                resolved = resolve_notebook(nb_name)
+                resolved = resolve_notebook(nb_name, allow_virtual=True)
             except UserCancelled:
                 console.print("[dim]Cancelled.[/dim]")
                 raise SystemExit(1) from None
@@ -313,13 +323,29 @@ def todo(
             else:
                 raise SystemExit(1)
 
-    # Resolve notes
+    # Combine CLI --section args with inline notebook/section args
+    all_section_args = list(section) + inline_sections
+
+    # When sections are specified, also include linked note virtual notebooks
+    # so that linked notes whose notebook matches the section are found
+    if all_section_args:
+        from nb.core.links import list_linked_notes
+
+        linked_nb_names = {
+            ln.notebook or ln.alias for ln in list_linked_notes()
+        }
+        for sec_name in all_section_args:
+            if sec_name in linked_nb_names and sec_name not in effective_notebooks:
+                effective_notebooks.append(sec_name)
+
+    # Resolve notes (supports "note::heading" syntax for markdown section filtering)
     from nb.cli.utils import resolve_note_for_todo_filter
 
     effective_notes: list[str] = []
+    effective_heading_sections: list[str] = []
     for note_ref in note:
         try:
-            resolved_path, _ = resolve_note_for_todo_filter(note_ref)
+            resolved_path, section_pattern = resolve_note_for_todo_filter(note_ref)
         except UserCancelled:
             console.print("[dim]Cancelled.[/dim]")
             raise SystemExit(1) from None
@@ -328,12 +354,12 @@ def todo(
         else:
             console.print(f"[yellow]Note not found: {note_ref}[/yellow]")
             raise SystemExit(1)
-
-    # Resolve sections
-    effective_sections: list[str] | None = list(section) if section else None
+        if section_pattern:
+            effective_heading_sections.append(section_pattern)
 
     # Resolve exclude notebooks with fuzzy matching
     all_excluded_notebooks: list[str] | None = None
+    all_excluded_sections: list[tuple[str, str]] | None = None
     if not effective_notebooks and not effective_notes:
         # Apply exclusions only when not filtering by specific notebooks/notes
         if show_all:
@@ -347,6 +373,11 @@ def todo(
             all_excluded_notebooks = list(set(config_excluded) | set(exclude_notebook))
             if not all_excluded_notebooks:
                 all_excluded_notebooks = None
+
+            # Section-level exclusions from config
+            config_excluded_sections = config.excluded_sections()
+            if config_excluded_sections:
+                all_excluded_sections = config_excluded_sections
 
     # Get sort order
     effective_sort = sort_by or config.todo.default_sort
@@ -377,9 +408,10 @@ def todo(
         exclude_tags=list(exclude_tag) if exclude_tag else None,
         notebooks=effective_notebooks if effective_notebooks else None,
         notes=effective_notes if effective_notes else None,
-        sections=effective_sections,
+        sections=effective_heading_sections if effective_heading_sections else None,
         exclude_notebooks=all_excluded_notebooks,
-        path_sections=list(section) if section else None,
+        exclude_sections=all_excluded_sections,
+        path_sections=all_section_args if all_section_args else None,
         exclude_path_sections=list(exclude_section) if exclude_section else None,
         hide_later=hide_later,
         hide_no_date=hide_no_date,
@@ -1327,7 +1359,7 @@ def todo_review(
             effective_notebooks.append(nb_name)
         else:
             try:
-                resolved = resolve_notebook(nb_name)
+                resolved = resolve_notebook(nb_name, allow_virtual=True)
             except UserCancelled:
                 console.print("[dim]Cancelled.[/dim]")
                 raise SystemExit(1) from None
@@ -1569,7 +1601,7 @@ def todo_completed(
             effective_notebooks.append(nb_name)
         else:
             try:
-                resolved = resolve_notebook(nb_name)
+                resolved = resolve_notebook(nb_name, allow_virtual=True)
             except UserCancelled:
                 console.print("[dim]Cancelled.[/dim]")
                 raise SystemExit(1) from None

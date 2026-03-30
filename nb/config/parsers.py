@@ -21,6 +21,7 @@ from .models import (
     RaindropConfig,
     RecorderConfig,
     SearchConfig,
+    SectionConfig,
     TodoConfig,
     TodoViewConfig,
 )
@@ -68,6 +69,18 @@ def _parse_notebooks(data: list[Any]) -> list[NotebookConfig]:
             ext_path = None
             if "path" in item:
                 ext_path = expand_path(item["path"])
+            # Parse sections
+            sections = []
+            for sec_item in item.get("sections", []):
+                if isinstance(sec_item, str):
+                    sections.append(SectionConfig(name=sec_item))
+                elif isinstance(sec_item, dict):
+                    sections.append(
+                        SectionConfig(
+                            name=sec_item["name"],
+                            todo_exclude=sec_item.get("todo_exclude", False),
+                        )
+                    )
             result.append(
                 NotebookConfig(
                     name=item["name"],
@@ -77,6 +90,7 @@ def _parse_notebooks(data: list[Any]) -> list[NotebookConfig]:
                     color=item.get("color"),
                     icon=item.get("icon"),
                     template=item.get("template"),
+                    sections=sections,
                 )
             )
     return result

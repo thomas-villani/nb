@@ -398,6 +398,9 @@ def update_linked_note_todo_exclude(
 ) -> bool:
     """Update the todo_exclude setting for a linked note.
 
+    Updates both the linked_notes config table and the notes table
+    (which is used by query_todos for filtering).
+
     Args:
         alias: The alias of the link to update.
         todo_exclude: New todo_exclude setting.
@@ -419,6 +422,12 @@ def update_linked_note_todo_exclude(
             "UPDATE linked_notes SET todo_exclude = ? WHERE alias = ?",
             (int(todo_exclude), alias),
         )
+
+    # Also update the notes table so query_todos filtering works
+    db.execute(
+        "UPDATE notes SET todo_exclude = ? WHERE source_alias = ?",
+        (int(todo_exclude), alias),
+    )
     db.commit()
 
     return cursor.rowcount > 0

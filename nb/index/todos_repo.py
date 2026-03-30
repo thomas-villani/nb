@@ -418,6 +418,7 @@ def query_todos(
     exclude_note_excluded: bool = True,
     path_sections: list[str] | None = None,
     exclude_path_sections: list[str] | None = None,
+    exclude_sections: list[tuple[str, str]] | None = None,
 ) -> list[Todo]:
     """Query todos with filters.
 
@@ -444,6 +445,7 @@ def query_todos(
         exclude_note_excluded: If True, exclude todos from notes with todo_exclude=true
         path_sections: Filter by path-based subdirectory sections (any match)
         exclude_path_sections: List of path-based sections to exclude
+        exclude_sections: List of (notebook, section) tuples to exclude by source path
 
     Returns:
         List of matching Todo objects.
@@ -590,6 +592,16 @@ def query_todos(
         conditions.append(f"(t.project IS NULL OR t.project NOT IN ({placeholders}))")
         params.extend(exclude_notebooks)
 
+    # Exclude specific notebook sections (subfolders) by source path
+    # Also exclude linked notes whose virtual notebook matches the section name
+    if exclude_sections:
+        for nb_name, section in exclude_sections:
+            conditions.append(
+                "(t.source_path NOT LIKE ? AND NOT (t.source_external = 1 AND t.project = ?))"
+            )
+            params.append(f"{nb_name}/{section}/%")
+            params.append(section)
+
     if exclude_tags:
         # Exclude todos that have any of the specified tags
         placeholders = ", ".join("?" for _ in exclude_tags)
@@ -599,12 +611,15 @@ def query_todos(
         params.extend([t.lower() for t in exclude_tags])
 
     # Filter by path-based sections (subdirectory hierarchy)
+    # Also match linked (external) notes whose virtual notebook matches the section name
     if path_sections:
         placeholders = ", ".join("?" for _ in path_sections)
         conditions.append(
-            f"EXISTS (SELECT 1 FROM todo_sections ps WHERE ps.todo_id = t.id AND ps.section IN ({placeholders}))"
+            f"(EXISTS (SELECT 1 FROM todo_sections ps WHERE ps.todo_id = t.id AND ps.section IN ({placeholders}))"
+            f" OR (t.source_external = 1 AND t.project IN ({placeholders})))"
         )
-        params.extend(path_sections)
+        params.extend(path_sections)  # for todo_sections
+        params.extend(path_sections)  # for project IN
 
     # Exclude path-based sections
     if exclude_path_sections:
@@ -672,6 +687,7 @@ def get_sorted_todos(
     exclude_note_excluded: bool = True,
     path_sections: list[str] | None = None,
     exclude_path_sections: list[str] | None = None,
+    exclude_sections: list[tuple[str, str]] | None = None,
 ) -> list[Todo]:
     """Get todos sorted by the default sorting order.
 
@@ -700,6 +716,7 @@ def get_sorted_todos(
         exclude_note_excluded=exclude_note_excluded,
         path_sections=path_sections,
         exclude_path_sections=exclude_path_sections,
+        exclude_sections=exclude_sections,
     )
 
     today = date.today()

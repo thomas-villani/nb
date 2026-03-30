@@ -8,6 +8,19 @@ from typing import Any
 
 
 @dataclass
+class SectionConfig:
+    """Configuration for a section (subfolder) within a notebook.
+
+    Sections are created when merging a notebook into another with --section,
+    or can be manually configured. Each section can override notebook-level settings
+    like todo_exclude.
+    """
+
+    name: str
+    todo_exclude: bool = False  # If True, exclude this section from `nb todo` by default
+
+
+@dataclass
 class NotebookConfig:
     """Configuration for a notebook."""
 
@@ -18,6 +31,7 @@ class NotebookConfig:
     color: str | None = None  # Display color (e.g., "blue", "green", "#ff5500")
     icon: str | None = None  # Display icon/emoji (e.g., "📝", "🔧")
     template: str | None = None  # Default template name for new notes
+    sections: list[SectionConfig] = field(default_factory=list)  # Per-section settings
 
     @property
     def is_external(self) -> bool:
@@ -379,6 +393,15 @@ class Config:
     def excluded_notebooks(self) -> list[str]:
         """Get list of notebooks excluded from todo by default."""
         return [nb.name for nb in self.notebooks if nb.todo_exclude]
+
+    def excluded_sections(self) -> list[tuple[str, str]]:
+        """Get list of (notebook, section) pairs excluded from todo by default."""
+        result = []
+        for nb in self.notebooks:
+            for sec in nb.sections:
+                if sec.todo_exclude:
+                    result.append((nb.name, sec.name))
+        return result
 
     def get_notebook_path(self, name: str) -> Path | None:
         """Get the filesystem path for a notebook.

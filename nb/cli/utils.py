@@ -344,12 +344,15 @@ def get_notebook_display_info(notebook_name: str) -> tuple[str, str | None]:
     return color, icon
 
 
-def resolve_notebook(name: str, interactive: bool = True) -> str | None:
+def resolve_notebook(
+    name: str, interactive: bool = True, allow_virtual: bool = False
+) -> str | None:
     """Resolve a notebook name, with fuzzy matching if no exact match.
 
     Args:
         name: The notebook name to resolve.
         interactive: If True, prompt user to select from fuzzy matches.
+        allow_virtual: If True, also accept virtual notebooks from linked notes.
 
     Returns:
         Resolved notebook name, or None if not found/cancelled.
@@ -361,6 +364,15 @@ def resolve_notebook(name: str, interactive: bool = True) -> str | None:
 
     # Get all notebook names
     notebook_names = [nb.name for nb in config.notebooks]
+
+    # Include virtual notebooks from linked notes
+    if allow_virtual:
+        from nb.core.links import list_linked_notes
+
+        for ln in list_linked_notes():
+            nb_name = ln.notebook or ln.alias
+            if nb_name not in notebook_names:
+                notebook_names.append(nb_name)
 
     return resolve_with_fuzzy(
         name,

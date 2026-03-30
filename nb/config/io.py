@@ -196,7 +196,7 @@ def _serialize_notebook(nb: NotebookConfig) -> dict[str, Any]:
     """Serialize a NotebookConfig to a dict.
 
     Always includes: name, date_based
-    Conditionally includes: todo_exclude (if True), path, color, icon, template (if not None)
+    Conditionally includes: todo_exclude (if True), path, color, icon, template, sections (if not None/empty)
 
     """
     result: dict[str, Any] = {
@@ -213,6 +213,14 @@ def _serialize_notebook(nb: NotebookConfig) -> dict[str, Any]:
         result["icon"] = nb.icon
     if nb.template is not None:
         result["template"] = nb.template
+    if nb.sections:
+        sections_data = []
+        for sec in nb.sections:
+            sec_dict: dict[str, Any] = {"name": sec.name}
+            if sec.todo_exclude:
+                sec_dict["todo_exclude"] = True
+            sections_data.append(sec_dict)
+        result["sections"] = sections_data
     return result
 
 
