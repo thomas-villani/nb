@@ -294,6 +294,7 @@
             document.getElementById('content').innerHTML = `
                 <h1>${colorBar}${escapeHtml(name)}</h1>
                 <div class="header-actions">
+                    <button class="btn" onclick="loadStream('${escapeJs(name)}')">Stream</button>
                     ${!isVirtualNb ? `<button class="btn btn-primary" onclick="showNewNoteForm('${escapeJs(name)}')">+ New Note</button>` : ''}
                 </div>
                 <input type="text" class="search-box" id="notebookFilterInput" placeholder="Filter notes by title, filename, alias, or tag..." value="${escapeHtml(notebookFilter)}" style="margin:0.5rem 0">
@@ -381,6 +382,108 @@
                 }
             }
 
+        }
+
+        // Stream view state
+        let streamNotebook = null;
+        let streamOffset = 0;
+        let streamTotal = 0;
+        let streamLoading = false;
+        const STREAM_PAGE_SIZE = 15;
+
+        async function loadStream(notebook, pushHistory = true) {
+            currentNotebook = notebook;
+            currentNotePath = null;
+            streamNotebook = notebook;
+            streamOffset = 0;
+            streamTotal = 0;
+            document.getElementById('notes-section').style.display = 'none';
+            if (pushHistory) history.pushState({ view: 'stream', notebook }, '', '#stream/' + encodeURIComponent(notebook));
+
+            const nb = notebooksCache.find(x => x.name === notebook);
+            const colorBar = nb && nb.color ? `<span class="color-dot" style="background:${nb.color};width:12px;height:12px"></span> ` : '';
+
+            document.getElementById('content').innerHTML = `
+                <div class="stream-header">
+                    <h1>${colorBar}${escapeHtml(notebook)} <span style="color:var(--text-dim);font-size:0.6em;font-weight:normal">stream</span></h1>
+                    <div class="header-actions">
+                        <button class="btn" onclick="loadNotebook('${escapeJs(notebook)}')">List View</button>
+                    </div>
+                </div>
+                <div id="streamContainer" class="stream-container"></div>
+                <div id="streamLoader" class="stream-loader" style="display:none">
+                    <p class="loading">Loading more notes...</p>
+                </div>
+                <div id="streamEnd" style="display:none;text-align:center;padding:2rem;color:var(--text-dim)">
+                    End of notes
+                </div>
+            `;
+
+            await loadStreamPage();
+
+            // Set up infinite scroll
+            const mainEl = document.querySelector('.main');
+            mainEl.addEventListener('scroll', handleStreamScroll);
+            window.addEventListener('scroll', handleStreamScroll);
+        }
+
+        function handleStreamScroll() {
+            if (streamLoading || streamOffset >= streamTotal) return;
+            const loader = document.getElementById('streamLoader');
+            if (!loader) {
+                // View changed, clean up
+                window.removeEventListener('scroll', handleStreamScroll);
+                return;
+            }
+            // Check if user scrolled near bottom (within 500px)
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const scrollHeight = document.documentElement.scrollHeight;
+            const clientHeight = document.documentElement.clientHeight;
+            if (scrollHeight - scrollTop - clientHeight < 500) {
+                loadStreamPage();
+            }
+        }
+
+        async function loadStreamPage() {
+            if (streamLoading) return;
+            streamLoading = true;
+            const loader = document.getElementById('streamLoader');
+            if (loader) loader.style.display = 'block';
+
+            const data = await api('/stream?notebook=' + encodeURIComponent(streamNotebook) + '&offset=' + streamOffset + '&limit=' + STREAM_PAGE_SIZE);
+            streamTotal = data.total;
+            streamOffset += data.notes.length;
+
+            const container = document.getElementById('streamContainer');
+            if (!container) { streamLoading = false; return; }
+
+            data.notes.forEach(note => {
+                const noteEl = document.createElement('div');
+                noteEl.className = 'stream-note';
+                noteEl.innerHTML = `
+                    <div class="stream-note-header">
+                        <a href="javascript:void(0)" class="stream-note-title" onclick="loadNote('${escapeJs(note.path)}')">${escapeHtml(note.title)}</a>
+                        <span class="stream-note-date">${note.date || ''}</span>
+                    </div>
+                    <div class="stream-note-content">${marked.parse(note.content)}</div>
+                `;
+                container.appendChild(noteEl);
+            });
+
+            if (loader) loader.style.display = 'none';
+            if (streamOffset >= streamTotal) {
+                const endEl = document.getElementById('streamEnd');
+                if (endEl) endEl.style.display = 'block';
+            }
+            streamLoading = false;
+
+            // Update counter
+            const h1 = document.querySelector('.stream-header h1');
+            if (h1) {
+                const nb = notebooksCache.find(x => x.name === streamNotebook);
+                const colorBar = nb && nb.color ? `<span class="color-dot" style="background:${nb.color};width:12px;height:12px"></span> ` : '';
+                h1.innerHTML = `${colorBar}${escapeHtml(streamNotebook)} <span style="color:var(--text-dim);font-size:0.6em;font-weight:normal">stream (${streamOffset}/${streamTotal})</span>`;
+            }
         }
 
         let currentNoteMarkdown = ''; // Store markdown for copy function
@@ -1330,6 +1433,7 @@
             else if (state.view === 'kanban') loadKanban(false);
             else if (state.view === 'graph') loadGraph(false);
             else if (state.view === 'history') loadHistory(false);
+            else if (state.view === 'stream') loadStream(state.notebook, false);
         });
 
         // Init - set initial state and load based on hash
@@ -1355,6 +1459,10 @@
         } else if (hash === '#history') {
             history.replaceState({ view: 'history' }, '', hash);
             loadHistory(false);
+        } else if (hash.startsWith('#stream/')) {
+            const notebook = decodeURIComponent(hash.slice(8));
+            history.replaceState({ view: 'stream', notebook }, '', hash);
+            loadStream(notebook, false);
         } else {
             history.replaceState({ view: 'home' }, '', '#');
             loadHome(false);

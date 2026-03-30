@@ -457,3 +457,62 @@
         .kanban-card-meta .due.overdue { color: #f85149; }
         .kanban-card-meta .due.today { color: #d29922; }
         .kanban-card-meta .notebook { color: var(--accent); }
+
+        /* Stream view */
+        .stream-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+        .stream-header h1 {
+            border-bottom: none;
+            padding-bottom: 0;
+            margin-bottom: 0;
+        }
+        .stream-container {
+            max-width: 800px;
+        }
+        .stream-note {
+            margin-bottom: 2.5rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .stream-note:last-child {
+            border-bottom: none;
+        }
+        .stream-note-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .stream-note-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .stream-note-title:hover {
+            text-decoration: underline;
+        }
+        .stream-note-date {
+            color: var(--text-dim);
+            font-size: 0.85rem;
+            white-space: nowrap;
+            margin-left: 1rem;
+        }
+        .stream-note-content {
+            line-height: 1.7;
+        }
+        .stream-note-content h1,
+        .stream-note-content h2,
+        .stream-note-content h3 {
+            margin-top: 1em;
+        }
+        .stream-loader {
+            text-align: center;
+            padding: 1.5rem;
+        }

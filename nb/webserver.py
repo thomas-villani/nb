@@ -1011,6 +1011,64 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             self.send_json(result)
             return
 
+        # API: Stream - get notes with full content for continuous reading
+        if path == "/api/stream":
+            from nb.index.db import get_db
+
+            notebook_name = query.get("notebook", [None])[0]
+            if not notebook_name:
+                self.send_json({"error": "Missing notebook parameter"}, 400)
+                return
+
+            offset = int(query.get("offset", [0])[0])
+            limit = int(query.get("limit", [20])[0])
+
+            db = get_db()
+
+            # Query notes sorted by date (creation date) descending, with pagination
+            note_rows = db.fetchall(
+                """SELECT path, title, date, mtime
+                   FROM notes WHERE notebook = ? AND external = 0
+                   ORDER BY COALESCE(date, '') DESC, mtime DESC
+                   LIMIT ? OFFSET ?""",
+                (notebook_name, limit, offset),
+            )
+
+            # Get total count for this notebook
+            count_row = db.fetchone(
+                "SELECT COUNT(*) as total FROM notes WHERE notebook = ? AND external = 0",
+                (notebook_name,),
+            )
+            total = count_row["total"] if count_row else 0
+
+            results = []
+            for row in note_rows:
+                note_path = Path(row["path"])
+                full_path = config.notes_root / note_path
+
+                # Read file content
+                try:
+                    content = full_path.read_text(encoding="utf-8")
+                    # Strip frontmatter
+                    if content.startswith("---"):
+                        parts = content.split("---", 2)
+                        if len(parts) >= 3:
+                            content = parts[2].strip()
+                except Exception:
+                    content = "[Error reading file]"
+
+                results.append(
+                    {
+                        "path": normalize_path(note_path),
+                        "title": row["title"] or note_path.stem,
+                        "date": row["date"],
+                        "content": content,
+                    }
+                )
+
+            self.send_json({"notes": results, "total": total, "offset": offset})
+            return
+
         # 404
         self.send_response(404)
         self.end_headers()
