@@ -1,3 +1,40 @@
+# v0.5.1 - 2026-03-30
+
+Patch release adding a stream view to the web UI, notebook sections with per-section settings, and several config/merge bug fixes. No breaking changes.
+
+## New Features
+
+- [a43685d] Add stream view to web UI for continuous note reading
+  - New "Stream" button on any notebook's list view opens a full-content reading mode
+  - Notes rendered as a continuous, scrollable feed sorted by creation date (newest first)
+  - Infinite scroll pagination loads more notes automatically as you scroll down
+  - Progress counter shows loaded/total notes; click any title to jump to the full note view
+  - New `/api/stream` backend endpoint with `notebook`, `offset`, and `limit` parameters
+
+- [6dbbbbd] Add notebook sections with per-section `todo_exclude` and linked note integration
+  - Notebooks can now have named sections (subfolders) with independent settings like `todo_exclude`
+  - Fixes the issue where merging a todo-excluded notebook into another as a section lost the exclusion
+  - `query_todos` supports `exclude_sections` for section-level todo exclusion
+  - Section exclusion also covers linked notes with matching virtual notebooks
+  - Merge command registers sections on target and warns about linked notes
+  - `nb notebooks list` shows sections under their parent notebook
+  - Todo source display shows subfolder path (e.g., `projects/llmcli/note`)
+  - Support `notebook/section` syntax in `-n` flag (e.g., `nb todo -n projects/llmcli`)
+  - `--section` flag matches both path-based sections and linked note virtual notebooks
+  - `--note` flag supports `::heading` syntax for markdown heading section filtering
+
+## Bug Fixes
+
+- [3b00dba] Fix notebook merge to move all files, not just markdown
+  - `merge_notebook()` previously only found `*.md` files; now scans for all file types (CSVs, PDFs, images, etc.) and moves them with `shutil.copy2` for non-markdown files
+
+- [11f289f] Fix `save_config` to prevent data loss and API key leakage
+  - Write config to a temp file first, then atomically rename — prevents config file truncation if serialization fails partway through
+  - Exclude `api_key` from embeddings serialization, matching the existing pattern for search and recorder configs
+
+- [fb73e93] Fix config serialization of nested dataclass fields
+  - `_serialize_dataclass_fields` now recursively serializes nested dataclass instances and lists of dataclasses (e.g. `RaindropCollectionConfig`), preventing `yaml.RepresenterError` when saving config after notebook operations
+
 # v0.5.0 - 2026-03-27
 
 Minor release adding notebook merge/reorganization, section filtering across search and grep, interactive recording enhancements, AI light-day detection, and several fixes. No breaking changes.
