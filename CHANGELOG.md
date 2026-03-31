@@ -1,3 +1,38 @@
+# v0.6.0 - 2026-03-31
+
+Minor release integrating linked notes into the notebook sections system. Linked notes now require a target notebook and can be assigned to sections for proper organization and filtering.
+
+## Breaking Changes
+
+- `nb link add` now requires a `NOTEBOOK` positional argument: `nb link add <path> <notebook>`
+  - Previously: `nb link add ~/repos/vizier` (created virtual `@vizier` notebook)
+  - Now: `nb link add ~/repos/vizier projects` (links into the `projects` notebook)
+  - Existing links are unaffected (they already have real notebook assignments)
+- Virtual `@alias` notebooks are removed; all linked notes must target a real notebook
+
+## New Features
+
+- [9bcb9c5] Add section support to `nb link add`
+  - New `--section/-s` option to place linked notes in a notebook section
+  - `notebook/section` shorthand syntax: `nb link add ~/repos/vizier projects/vizier`
+  - Sections are auto-created in notebook config if they don't already exist
+  - Linked notes with sections populate `note_sections` and `todo_sections` tables, so `--section` filtering works for linked notes
+  - `nb link list` now shows a Section column
+
+## Documentation
+
+- Add Notebook Sections documentation to CLAUDE.md, README.md, and Sphinx docs
+- Add Linked Notes documentation with updated syntax and examples
+- Document section-level todo exclusion in todos reference
+
+## Internal
+
+- DB migration V19: add `section` column to `linked_notes` table
+- `LinkedNoteConfig.notebook` is now `str` (required, no longer `str | None`)
+- New `LinkedNoteConfig.section` field
+- `extract_todos()` accepts `sections_override` for linked note section assignment
+- Remove `@alias` virtual notebook fallbacks across codebase (17 call sites)
+
 # v0.5.1 - 2026-03-30
 
 Patch release adding a stream view to the web UI, notebook sections with per-section settings, and several config/merge bug fixes. No breaking changes.
