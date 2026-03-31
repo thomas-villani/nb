@@ -694,6 +694,21 @@ Or via command:
 
    nb config exclude projects/old-idea
 
+Section level
+^^^^^^^^^^^^^
+
+Configure ``todo_exclude`` on a section in config.yaml:
+
+.. code-block:: yaml
+
+   notebooks:
+     - name: projects
+       sections:
+         - name: archived
+           todo_exclude: true
+
+Use ``-n projects/archived`` to view excluded section todos.
+
 Linked note level
 ^^^^^^^^^^^^^^^^^
 
@@ -701,9 +716,9 @@ When linking external files:
 
 .. code-block:: bash
 
-   nb link add ~/archive --todo-exclude
+   nb link add ~/archive projects --todo-exclude
 
-Use ``-a`` or ``-n <notebook>`` to view excluded todos.
+Use ``-n <notebook>`` or ``-n notebook/section`` to view excluded todos.
 
 Command aliases
 ---------------

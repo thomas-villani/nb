@@ -24,6 +24,10 @@ Full example:
        date_based: false
        color: cyan
        icon: wrench
+       sections:
+         - name: archived
+           todo_exclude: true     # Hide this section from nb todo
+         - name: vizier
      - name: work
        date_based: true
        color: blue
@@ -35,8 +39,8 @@ Full example:
        path: ~/Documents/Obsidian/vault
        date_based: false
 
-   # Note: linked_notes are managed via 'nb link' command and stored in the database
-   # The example below is for illustration only - use 'nb link add' to add links
+   # Linked notes are managed via 'nb link' command and stored in the database
+   # Example: nb link add ~/repos/vizier projects/vizier
 
    date_format: "%Y-%m-%d"
    time_format: "%H:%M"
@@ -128,6 +132,26 @@ Notebook options
      - Display icon/emoji prefix
    * - ``template``
      - Default template name for new notes
+   * - ``sections``
+     - List of section configs (each with ``name`` and optional ``todo_exclude``)
+
+Section options
+^^^^^^^^^^^^^^^
+
+Each section in the ``sections`` list supports:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``name``
+     - Section name (matches subfolder name within the notebook)
+   * - ``todo_exclude``
+     - If ``true``, hide this section's todos from ``nb todo`` by default
+
+Sections are auto-detected from subdirectory structure and can also be created
+via ``nb notebooks merge --section`` or ``nb link add notebook/section``.
 
 Icon aliases
 ^^^^^^^^^^^^
@@ -145,10 +169,11 @@ Linked notes are **stored in the database**, not in config.yaml. Use the ``nb li
 
 .. code-block:: bash
 
-   nb link add ~/docs/wiki --alias wiki          # Link a directory
-   nb link add ~/code/TODO.md --alias project    # Link a file
-   nb link list                                   # List all links
-   nb link remove wiki                            # Remove a link
+   nb link add ~/docs/wiki projects -a wiki       # Link a directory to notebook
+   nb link add ~/repos/vizier projects/vizier      # Link to notebook/section
+   nb link add ~/code/TODO.md work -a project      # Link a file
+   nb link list                                     # List all links
+   nb link remove wiki                              # Remove a link
 
 **Link options** (specified via command flags):
 
@@ -159,14 +184,16 @@ Linked notes are **stored in the database**, not in config.yaml. Use the ``nb li
      - Description
    * - ``--alias, -a``
      - Short name for the link
-   * - ``--notebook, -n``
-     - Virtual notebook name (default: ``@alias``)
+   * - ``--section, -s``
+     - Section within the notebook (auto-created if needed)
    * - ``--recursive / --no-recursive``
      - Scan subdirectories (for directories)
    * - ``--todo-exclude``
      - Hide todos from ``nb todo``
    * - ``--sync / --no-sync``
      - Sync completions back to source file
+
+The ``NOTEBOOK`` argument is required and supports ``notebook/section`` shorthand (e.g., ``projects/vizier``).
 
 Global options
 --------------

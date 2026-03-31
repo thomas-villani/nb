@@ -183,7 +183,7 @@ def list_linked_notes() -> list[LinkedNoteConfig]:
     """Get all linked external note files/directories from the database."""
     db = get_db()
     rows = db.fetchall(
-        "SELECT alias, path, notebook, recursive, todo_exclude, sync FROM linked_notes"
+        "SELECT alias, path, notebook, recursive, todo_exclude, sync, section FROM linked_notes"
     )
 
     return [
@@ -194,6 +194,7 @@ def list_linked_notes() -> list[LinkedNoteConfig]:
             recursive=bool(row["recursive"]),
             todo_exclude=bool(row["todo_exclude"]) if row["todo_exclude"] else False,
             sync=bool(row["sync"]) if row["sync"] is not None else True,
+            section=row["section"],
         )
         for row in rows
     ]
@@ -214,12 +215,12 @@ def get_linked_note(alias: str, notebook: str | None = None) -> LinkedNoteConfig
     if notebook is not None:
         notebook_key = notebook or ""
         row = db.fetchone(
-            "SELECT alias, path, notebook, recursive, todo_exclude, sync FROM linked_notes WHERE alias = ? AND notebook = ?",
+            "SELECT alias, path, notebook, recursive, todo_exclude, sync, section FROM linked_notes WHERE alias = ? AND notebook = ?",
             (alias, notebook_key),
         )
     else:
         row = db.fetchone(
-            "SELECT alias, path, notebook, recursive, todo_exclude, sync FROM linked_notes WHERE alias = ?",
+            "SELECT alias, path, notebook, recursive, todo_exclude, sync, section FROM linked_notes WHERE alias = ?",
             (alias,),
         )
 
@@ -231,6 +232,7 @@ def get_linked_note(alias: str, notebook: str | None = None) -> LinkedNoteConfig
             recursive=bool(row["recursive"]),
             todo_exclude=bool(row["todo_exclude"]) if row["todo_exclude"] else False,
             sync=bool(row["sync"]) if row["sync"] is not None else True,
+            section=row["section"],
         )
 
     return None
@@ -247,7 +249,7 @@ def get_linked_notes_by_alias(alias: str) -> list[LinkedNoteConfig]:
     """
     db = get_db()
     rows = db.fetchall(
-        "SELECT alias, path, notebook, recursive, todo_exclude, sync FROM linked_notes WHERE alias = ?",
+        "SELECT alias, path, notebook, recursive, todo_exclude, sync, section FROM linked_notes WHERE alias = ?",
         (alias,),
     )
 
@@ -259,6 +261,7 @@ def get_linked_notes_by_alias(alias: str) -> list[LinkedNoteConfig]:
             recursive=bool(row["recursive"]),
             todo_exclude=bool(row["todo_exclude"]) if row["todo_exclude"] else False,
             sync=bool(row["sync"]) if row["sync"] is not None else True,
+            section=row["section"],
         )
         for row in rows
     ]
@@ -266,8 +269,9 @@ def get_linked_notes_by_alias(alias: str) -> list[LinkedNoteConfig]:
 
 def add_linked_note(
     path: Path,
+    notebook: str,
     alias: str | None = None,
-    notebook: str | None = None,
+    section: str | None = None,
     recursive: bool = True,
     todo_exclude: bool = False,
     sync: bool = True,
@@ -276,8 +280,9 @@ def add_linked_note(
 
     Args:
         path: Path to the external note file or directory.
+        notebook: Target notebook name.
         alias: Short name for the link (defaults to filename/dirname).
-        notebook: Virtual notebook name (defaults to @alias). Aliases are unique per-notebook.
+        section: Section within the notebook (auto-created if it doesn't exist).
         recursive: For directories, whether to scan recursively.
         todo_exclude: Exclude todos from nb todo by default.
         sync: Sync todo completions back to source file.
@@ -287,7 +292,7 @@ def add_linked_note(
 
     Raises:
         FileNotFoundError: If the path doesn't exist.
-        ValueError: If the alias is already in use in this notebook.
+        ValueError: If the alias is already in use in this notebook, or notebook doesn't exist.
 
     """
     # Resolve and validate path
@@ -295,21 +300,34 @@ def add_linked_note(
     if not path.exists():
         raise FileNotFoundError(f"Path not found: {path}")
 
+    # Validate notebook exists
+    from nb.config import get_config
+
+    config = get_config()
+    nb_config = config.get_notebook(notebook)
+    if nb_config is None:
+        raise ValueError(f"Notebook '{notebook}' does not exist")
+
     # Generate alias if not provided
     if alias is None:
         alias = path.stem if path.is_file() else path.name
 
-    # Default notebook to alias with @ prefix
-    if notebook is None:
-        notebook = f"@{alias}"
-
-    # Check for existing alias in this notebook (use empty string for NULL)
-    notebook_key = notebook or ""
-    existing = get_linked_note(alias, notebook=notebook_key)
+    # Check for existing alias in this notebook
+    existing = get_linked_note(alias, notebook=notebook)
     if existing:
         raise ValueError(
-            f"Alias '{alias}' is already in use in notebook '{notebook_key}' for: {existing.path}"
+            f"Alias '{alias}' is already in use in notebook '{notebook}' for: {existing.path}"
         )
+
+    # Auto-create section config if it doesn't exist
+    if section:
+        existing_section = next((s for s in nb_config.sections if s.name == section), None)
+        if not existing_section:
+            from nb.config.io import save_config as _save_config
+            from nb.config.models import SectionConfig
+
+            nb_config.sections.append(SectionConfig(name=section, todo_exclude=todo_exclude))
+            _save_config(config)
 
     linked = LinkedNoteConfig(
         path=path,
@@ -318,16 +336,17 @@ def add_linked_note(
         recursive=recursive,
         todo_exclude=todo_exclude,
         sync=sync,
+        section=section,
     )
 
     # Save to database
     db = get_db()
     db.execute(
         """
-        INSERT OR REPLACE INTO linked_notes (alias, path, notebook, recursive, todo_exclude, sync)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO linked_notes (alias, path, notebook, recursive, todo_exclude, sync, section)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (alias, str(path), notebook, int(recursive), int(todo_exclude), int(sync)),
+        (alias, str(path), notebook, int(recursive), int(todo_exclude), int(sync), section),
     )
     db.commit()
 
@@ -446,7 +465,7 @@ def get_linked_note_by_path(path: Path) -> LinkedNoteConfig | None:
     path = path.resolve()
     db = get_db()
     row = db.fetchone(
-        "SELECT alias, path, notebook, recursive, todo_exclude, sync FROM linked_notes WHERE path = ?",
+        "SELECT alias, path, notebook, recursive, todo_exclude, sync, section FROM linked_notes WHERE path = ?",
         (str(path),),
     )
 
@@ -458,6 +477,7 @@ def get_linked_note_by_path(path: Path) -> LinkedNoteConfig | None:
             recursive=bool(row["recursive"]),
             todo_exclude=bool(row["todo_exclude"]) if row["todo_exclude"] else False,
             sync=bool(row["sync"]) if row["sync"] is not None else True,
+            section=row["section"],
         )
 
     return None
@@ -474,7 +494,7 @@ def get_linked_note_by_notebook(notebook: str) -> LinkedNoteConfig | None:
 
     """
     for ln in list_linked_notes():
-        ln_notebook = ln.notebook or f"@{ln.alias}"
+        ln_notebook = ln.notebook
         if ln_notebook == notebook:
             return ln
     return None
@@ -526,7 +546,7 @@ def get_linked_note_in_notebook(notebook: str, alias: str) -> LinkedNoteConfig |
 
     """
     for ln in list_linked_notes():
-        ln_notebook = ln.notebook or f"@{ln.alias}"
+        ln_notebook = ln.notebook
         if ln_notebook == notebook and ln.alias == alias:
             return ln
     return None

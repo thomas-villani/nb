@@ -63,7 +63,7 @@ def _get_todo_source_parts(t) -> dict[str, str]:
 
         linked = get_linked_note(t.source.alias)
         if linked:
-            result["notebook"] = linked.notebook or f"@{linked.alias}"
+            result["notebook"] = linked.notebook
             # For single files, just show alias
             # For directories, show filename
             if linked.path.is_file():

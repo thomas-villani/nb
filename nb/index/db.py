@@ -12,7 +12,7 @@ from typing import Any
 _logger = logging.getLogger(__name__)
 
 # Current schema version
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -349,6 +349,11 @@ ALTER TABLE inbox_items ADD COLUMN last_synced_at TEXT;     -- When tags/note we
 CREATE INDEX IF NOT EXISTS idx_inbox_items_collection ON inbox_items(collection_name);
 """
 
+SCHEMA_V19 = """
+-- Add section column to linked_notes table
+ALTER TABLE linked_notes ADD COLUMN section TEXT;
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -369,6 +374,7 @@ MIGRATIONS: dict[int, str] = {
     16: SCHEMA_V16,
     17: SCHEMA_V17,
     18: SCHEMA_V18,
+    19: SCHEMA_V19,
 }
 
 

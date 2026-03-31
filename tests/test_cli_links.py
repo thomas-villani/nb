@@ -27,7 +27,7 @@ class TestLinkList:
         ext_file = tmp_path / "external.md"
         ext_file.write_text("# External Note\n- [ ] External todo\n")
 
-        cli_runner.invoke(cli, ["link", "add", str(ext_file), "-a", "ext"])
+        cli_runner.invoke(cli, ["link", "add", str(ext_file), "projects", "-a", "ext"])
 
         result = cli_runner.invoke(cli, ["link", "list"])
         assert result.exit_code == 0
@@ -44,7 +44,7 @@ class TestLinkAdd:
         ext_file = tmp_path / "todo.md"
         ext_file.write_text("# TODO\n- [ ] Important task\n")
 
-        result = cli_runner.invoke(cli, ["link", "add", str(ext_file)])
+        result = cli_runner.invoke(cli, ["link", "add", str(ext_file), "projects"])
         assert result.exit_code == 0
         assert "Linked" in result.output
 
@@ -55,7 +55,9 @@ class TestLinkAdd:
         ext_file = tmp_path / "notes.md"
         ext_file.write_text("# Notes\n")
 
-        result = cli_runner.invoke(cli, ["link", "add", str(ext_file), "-a", "mynotes"])
+        result = cli_runner.invoke(
+            cli, ["link", "add", str(ext_file), "projects", "-a", "mynotes"]
+        )
         assert result.exit_code == 0
         assert "mynotes" in result.output
 
@@ -68,7 +70,7 @@ class TestLinkAdd:
         (ext_dir / "readme.md").write_text("# Readme\n")
         (ext_dir / "guide.md").write_text("# Guide\n")
 
-        result = cli_runner.invoke(cli, ["link", "add", str(ext_dir)])
+        result = cli_runner.invoke(cli, ["link", "add", str(ext_dir), "projects"])
         assert result.exit_code == 0
         assert "Indexed" in result.output
 
@@ -80,7 +82,7 @@ class TestLinkAdd:
         ext_file.write_text("# Excluded\n- [ ] Hidden todo\n")
 
         result = cli_runner.invoke(
-            cli, ["link", "add", str(ext_file), "--todo-exclude"]
+            cli, ["link", "add", str(ext_file), "projects", "--todo-exclude"]
         )
         assert result.exit_code == 0
         assert "excluded" in result.output.lower() or "Linked" in result.output
@@ -89,8 +91,66 @@ class TestLinkAdd:
         self, cli_runner: CliRunner, mock_cli_config: Config
     ):
         """Test linking non-existent file."""
-        result = cli_runner.invoke(cli, ["link", "add", "/nonexistent/file.md"])
+        result = cli_runner.invoke(cli, ["link", "add", "/nonexistent/file.md", "projects"])
         assert result.exit_code != 0
+
+    def test_link_add_with_section(
+        self, cli_runner: CliRunner, mock_cli_config: Config, tmp_path: Path
+    ):
+        """Test linking with explicit section."""
+        ext_file = tmp_path / "vizier.md"
+        ext_file.write_text("# Vizier\n- [ ] Build feature\n")
+
+        result = cli_runner.invoke(
+            cli, ["link", "add", str(ext_file), "projects", "-s", "vizier"]
+        )
+        assert result.exit_code == 0
+        assert "projects/vizier" in result.output
+
+    def test_link_add_notebook_section_syntax(
+        self, cli_runner: CliRunner, mock_cli_config: Config, tmp_path: Path
+    ):
+        """Test linking with notebook/section shorthand."""
+        ext_file = tmp_path / "tasks.md"
+        ext_file.write_text("# Tasks\n- [ ] Do thing\n")
+
+        result = cli_runner.invoke(
+            cli, ["link", "add", str(ext_file), "projects/myproject"]
+        )
+        assert result.exit_code == 0
+        assert "projects/myproject" in result.output
+
+    def test_link_add_section_auto_creates_config(
+        self, cli_runner: CliRunner, mock_cli_config: Config, tmp_path: Path
+    ):
+        """Test that linking with section auto-creates section config."""
+        ext_file = tmp_path / "new_section.md"
+        ext_file.write_text("# New Section\n")
+
+        result = cli_runner.invoke(
+            cli, ["link", "add", str(ext_file), "projects", "-s", "newsec"]
+        )
+        assert result.exit_code == 0
+
+        # Verify section was created in config
+        from nb.config import get_config
+
+        config = get_config()
+        nb_config = config.get_notebook("projects")
+        assert nb_config is not None
+        section_names = [s.name for s in nb_config.sections]
+        assert "newsec" in section_names
+
+    def test_link_add_invalid_notebook(
+        self, cli_runner: CliRunner, mock_cli_config: Config, tmp_path: Path
+    ):
+        """Test linking to non-existent notebook."""
+        ext_file = tmp_path / "bad.md"
+        ext_file.write_text("# Bad\n")
+
+        result = cli_runner.invoke(cli, ["link", "add", str(ext_file), "nonexistent"])
+        assert result.exit_code == 1
+        assert "does not exist" in result.output
 
 
 class TestLinkRemove:
@@ -102,7 +162,9 @@ class TestLinkRemove:
         """Test removing a link."""
         ext_file = tmp_path / "remove.md"
         ext_file.write_text("# Remove Me\n")
-        cli_runner.invoke(cli, ["link", "add", str(ext_file), "-a", "toremove"])
+        cli_runner.invoke(
+            cli, ["link", "add", str(ext_file), "projects", "-a", "toremove"]
+        )
 
         result = cli_runner.invoke(cli, ["link", "remove", "toremove"])
         assert result.exit_code == 0
@@ -130,7 +192,7 @@ class TestLinkSync:
         """Test syncing all links."""
         ext_file = tmp_path / "sync.md"
         ext_file.write_text("# Sync\n- [ ] Task\n")
-        cli_runner.invoke(cli, ["link", "add", str(ext_file), "-a", "sync"])
+        cli_runner.invoke(cli, ["link", "add", str(ext_file), "projects", "-a", "sync"])
 
         result = cli_runner.invoke(cli, ["link", "sync"])
         assert result.exit_code == 0
@@ -142,7 +204,7 @@ class TestLinkSync:
         """Test syncing a specific link."""
         ext_file = tmp_path / "specific.md"
         ext_file.write_text("# Specific\n- [ ] Task\n")
-        cli_runner.invoke(cli, ["link", "add", str(ext_file), "-a", "spec"])
+        cli_runner.invoke(cli, ["link", "add", str(ext_file), "projects", "-a", "spec"])
 
         result = cli_runner.invoke(cli, ["link", "sync", "spec"])
         assert result.exit_code == 0
@@ -164,7 +226,7 @@ class TestLinkSyncToggle:
         ext_file = tmp_path / "toggle.md"
         ext_file.write_text("# Toggle\n")
         cli_runner.invoke(
-            cli, ["link", "add", str(ext_file), "-a", "toggle", "--no-sync"]
+            cli, ["link", "add", str(ext_file), "projects", "-a", "toggle", "--no-sync"]
         )
 
         result = cli_runner.invoke(cli, ["link", "enable-sync", "toggle"])
@@ -177,7 +239,9 @@ class TestLinkSyncToggle:
         """Test disabling sync for a link."""
         ext_file = tmp_path / "disable.md"
         ext_file.write_text("# Disable\n")
-        cli_runner.invoke(cli, ["link", "add", str(ext_file), "-a", "dis"])
+        cli_runner.invoke(
+            cli, ["link", "add", str(ext_file), "projects", "-a", "dis"]
+        )
 
         result = cli_runner.invoke(cli, ["link", "disable-sync", "dis"])
         assert result.exit_code == 0
@@ -193,7 +257,9 @@ class TestLinkTodoToggle:
         """Test excluding todos from a link."""
         ext_file = tmp_path / "exclude.md"
         ext_file.write_text("# Exclude\n- [ ] Task\n")
-        cli_runner.invoke(cli, ["link", "add", str(ext_file), "-a", "excl"])
+        cli_runner.invoke(
+            cli, ["link", "add", str(ext_file), "projects", "-a", "excl"]
+        )
 
         result = cli_runner.invoke(cli, ["link", "exclude-todos", "excl"])
         assert result.exit_code == 0
@@ -206,7 +272,7 @@ class TestLinkTodoToggle:
         ext_file = tmp_path / "include.md"
         ext_file.write_text("# Include\n- [ ] Task\n")
         cli_runner.invoke(
-            cli, ["link", "add", str(ext_file), "-a", "incl", "--todo-exclude"]
+            cli, ["link", "add", str(ext_file), "projects", "-a", "incl", "--todo-exclude"]
         )
 
         result = cli_runner.invoke(cli, ["link", "include-todos", "incl"])

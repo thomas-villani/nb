@@ -43,6 +43,7 @@ def link_list() -> None:
     table = Table(show_header=True, title="Linked Notes")
     table.add_column("Alias")
     table.add_column("Notebook")
+    table.add_column("Section")
     table.add_column("Path")
     table.add_column("Sync")
     table.add_column("Todo Excl")
@@ -52,24 +53,24 @@ def link_list() -> None:
         exists = "[green]yes[/green]" if ln.path.exists() else "[red]no[/red]"
         sync = "[green]yes[/green]" if ln.sync else "[dim]no[/dim]"
         todo_excl = "[yellow]yes[/yellow]" if ln.todo_exclude else "[dim]no[/dim]"
-        notebook = ln.notebook or f"@{ln.alias}"
+        notebook = ln.notebook
+        section = ln.section or "[dim]-[/dim]"
         path_str = str(ln.path)
         if ln.path.is_dir():
             path_str += "/" if ln.recursive else " (flat)"
-        table.add_row(ln.alias, notebook, path_str, sync, todo_excl, exists)
+        table.add_row(ln.alias, notebook, section, path_str, sync, todo_excl, exists)
 
     console.print(table)
 
 
 @link.command("add")
 @click.argument("path", type=click.Path(exists=True))
+@click.argument("notebook")
 @click.option("--alias", "-a", help="Short name for the file (defaults to filename)")
 @click.option(
     "--sync/--no-sync", default=True, help="Sync todo completions back to source"
 )
-@click.option(
-    "--notebook", "-n", help="Virtual notebook name for notes (defaults to @alias)"
-)
+@click.option("--section", "-s", help="Section within the notebook")
 @click.option(
     "--no-recursive", is_flag=True, help="Don't scan subdirectories (for directories)"
 )
@@ -80,47 +81,60 @@ def link_list() -> None:
 )
 def link_add(
     path: str,
+    notebook: str,
     alias: str | None,
     sync: bool,
-    notebook: str | None,
+    section: str | None,
     no_recursive: bool,
     todo_exclude: bool,
 ) -> None:
-    """Link an external file or directory.
+    """Link an external file or directory to a notebook.
+
+    NOTEBOOK can use "notebook/section" syntax to specify both notebook
+    and section in one argument (e.g., "projects/vizier").
 
     Linked notes are indexed like regular notes - both note content and todos
-    are collected. Linked notes appear in 'nb list -n <notebook>' with the
-    specified notebook name (defaults to @alias).
+    are collected. Linked notes appear in 'nb list -n <notebook>'.
 
     With --sync (default), completing a todo will update the source file.
     With --todo-exclude, todos won't appear in 'nb todo' unless you filter
     by the notebook explicitly with -n.
 
     Examples:
-        nb link add ~/work/TODO.md              # Link with todos visible
-        nb link add ~/docs/wiki                 # Link a directory of notes
-        nb link add ~/project/tasks.md --todo-exclude  # Hide from nb todo
-        nb link add ~/docs --no-sync            # Don't sync completions back
+        nb link add ~/work/TODO.md projects          # Link to projects notebook
+        nb link add ~/repos/vizier projects/vizier    # Link to projects, section vizier
+        nb link add ~/docs/wiki work -s docs          # Link to work, section docs
+        nb link add ~/project/tasks.md work --todo-exclude  # Hide from nb todo
 
     """
+    from nb.config import get_config
     from nb.core.links import add_linked_note
     from nb.index.scanner import index_single_linked_note
 
     p = Path(path)
 
+    # Parse notebook/section syntax
+    if "/" in notebook and section is None:
+        config = get_config()
+        nb_part, sec_part = notebook.split("/", 1)
+        if config.get_notebook(nb_part):
+            notebook = nb_part
+            section = sec_part
+
     try:
         linked = add_linked_note(
             p,
-            alias=alias,
             notebook=notebook,
+            alias=alias,
+            section=section,
             recursive=not no_recursive,
             todo_exclude=todo_exclude,
             sync=sync,
         )
         note_count = index_single_linked_note(linked.alias)
 
-        console.print(f"[green]Linked:[/green] {linked.alias}")
-        console.print(f"[dim]Notebook: {linked.notebook}[/dim]")
+        display_target = f"{linked.notebook}/{linked.section}" if linked.section else linked.notebook
+        console.print(f"[green]Linked:[/green] {linked.alias} -> {display_target}")
         console.print(f"[dim]Indexed {note_count} notes.[/dim]")
         if todo_exclude:
             console.print("[dim]Todos excluded from 'nb todo' by default.[/dim]")

@@ -1204,12 +1204,13 @@ def index_linked_note(
     index_vectors: bool = True,
     todo_exclude: bool = False,
     sync: bool = True,
+    section: str | None = None,
 ) -> None:
     """Index a single linked (external) note file.
 
     Args:
         path: Absolute path to the note file.
-        notebook: Virtual notebook name for the note.
+        notebook: Notebook name for the note.
         alias: Alias of the linked note source.
         notes_root: Override notes root directory.
         index_vectors: Whether to index for vector search.
@@ -1328,6 +1329,14 @@ def index_linked_note(
             ],
         )
 
+    # Update sections for linked notes
+    db.execute("DELETE FROM note_sections WHERE note_path = ?", (note_path,))
+    if section:
+        db.execute(
+            "INSERT INTO note_sections (note_path, section, depth) VALUES (?, ?, ?)",
+            (note_path, section, 0),
+        )
+
     db.commit()
 
     # Index to localvectordb
@@ -1358,6 +1367,7 @@ def index_linked_note(
         alias=alias,
         notes_root=notes_root,
         notebook=notebook,
+        sections_override=[section] if section else None,
     )
     upsert_todos_batch(todos, preserved_dates=preserved_dates)
 
@@ -1384,7 +1394,7 @@ def scan_linked_notes(
         if not linked.path.exists():
             continue
 
-        notebook = linked.notebook or f"@{linked.alias}"
+        notebook = linked.notebook
 
         # Filter by notebook if specified
         if notebook_filter and notebook != notebook_filter:
@@ -1400,6 +1410,7 @@ def scan_linked_notes(
                 alias=linked.alias,
                 todo_exclude=linked.todo_exclude,
                 sync=linked.sync,
+                section=linked.section,
             )
             total_notes += 1
             if on_progress:
@@ -1426,7 +1437,7 @@ def count_linked_notes(notebook_filter: str | None = None) -> int:
         if not linked.path.exists():
             continue
 
-        notebook = linked.notebook or f"@{linked.alias}"
+        notebook = linked.notebook
         if notebook_filter and notebook != notebook_filter:
             continue
 
@@ -1453,7 +1464,7 @@ def index_single_linked_note(alias: str) -> int:
         return 0
 
     files = scan_linked_note_files(linked)
-    notebook = linked.notebook or f"@{linked.alias}"
+    notebook = linked.notebook
 
     for file_path in files:
         index_linked_note(
@@ -1462,6 +1473,7 @@ def index_single_linked_note(alias: str) -> int:
             alias=linked.alias,
             todo_exclude=linked.todo_exclude,
             sync=linked.sync,
+            section=linked.section,
         )
 
     return len(files)

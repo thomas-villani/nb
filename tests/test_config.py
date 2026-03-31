@@ -79,12 +79,13 @@ class TestLinkedNoteConfig:
     """Tests for LinkedNoteConfig dataclass."""
 
     def test_basic(self):
-        linked = LinkedNoteConfig(path=Path("/docs/wiki"), alias="wiki")
+        linked = LinkedNoteConfig(path=Path("/docs/wiki"), alias="wiki", notebook="projects")
 
         assert linked.path == Path("/docs/wiki")
         assert linked.alias == "wiki"
-        assert linked.notebook is None
+        assert linked.notebook == "projects"
         assert linked.recursive is True
+        assert linked.section is None
 
     def test_with_notebook(self):
         linked = LinkedNoteConfig(
@@ -92,6 +93,14 @@ class TestLinkedNoteConfig:
         )
 
         assert linked.notebook == "external-wiki"
+
+    def test_with_section(self):
+        linked = LinkedNoteConfig(
+            path=Path("/docs/wiki"), alias="wiki", notebook="projects", section="vizier"
+        )
+
+        assert linked.notebook == "projects"
+        assert linked.section == "vizier"
 
 
 class TestEmbeddingsConfig:

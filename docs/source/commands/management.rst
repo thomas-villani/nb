@@ -89,19 +89,99 @@ Remove a notebook from config (does not delete files).
 
    nb notebooks remove old-project
 
+Notebook Sections
+-----------------
+
+Sections are subfolders within a notebook that provide hierarchical organization.
+They can be created by merging notebooks, linking external files, or placing notes in subdirectories.
+
+**Creating sections:**
+
+.. code-block:: bash
+
+   # Via merge: move notes into a subfolder
+   nb notebooks merge myproject projects --section myproject
+
+   # Via linking: link external files into a section
+   nb link add ~/repos/vizier projects/vizier
+
+   # Manual: create a subdirectory in a notebook folder
+
+**Filtering by section:**
+
+Most listing commands support ``--section / -S`` and ``--exclude-section / -xs`` (both repeatable):
+
+.. code-block:: bash
+
+   nb list projects --section vizier         # Notes in projects/vizier/
+   nb todo -n projects -S vizier             # Todos from projects/vizier/
+   nb todo -n projects -xs archived          # Exclude archived section
+   nb todo -n projects/vizier                # notebook/section shorthand
+   nb search "query" -S vizier               # Search within section
+   nb grep "pattern" -S vizier               # Grep within section
+
+**Section configuration:**
+
+Configure per-section settings in ``config.yaml``:
+
+.. code-block:: yaml
+
+   notebooks:
+     - name: projects
+       sections:
+         - name: archived
+           todo_exclude: true    # Hide from nb todo by default
+         - name: vizier
+
+Sections are also auto-detected from subdirectory structure (e.g., a note at
+``projects/vizier/todo.md`` is in section ``vizier``).
+
+nb notebooks merge
+^^^^^^^^^^^^^^^^^^
+
+Merge one notebook into another, optionally as a section.
+
+**Usage:** ``nb notebooks merge [OPTIONS] SOURCE TARGET``
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``--section, -s NAME``
+     - Place merged notes in a subfolder/section
+   * - ``--dry-run``
+     - Preview what would be moved
+   * - ``--force, -f``
+     - Overwrite files if they already exist
+   * - ``--keep-source``
+     - Keep the source notebook after merging
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb notebooks merge old-project projects --section old-project
+   nb notebooks merge scratch archive --dry-run
+   nb notebooks merge temp work --section temp --keep-source
+
 .. _linked-files:
 
 Linked Files
 ------------
 
 Link external markdown files or directories to index alongside your notes.
+Linked files are assigned to a notebook (and optionally a section within it).
 
 nb link add
 ^^^^^^^^^^^
 
-Link an external file or directory.
+Link an external file or directory to a notebook.
 
-**Usage:** ``nb link add [OPTIONS] PATH``
+**Usage:** ``nb link add [OPTIONS] PATH NOTEBOOK``
 
 **Arguments:**
 
@@ -113,6 +193,8 @@ Link an external file or directory.
      - Description
    * - ``PATH``
      - Path to file or directory
+   * - ``NOTEBOOK``
+     - Target notebook (supports ``notebook/section`` shorthand)
 
 **Options:**
 
@@ -124,8 +206,8 @@ Link an external file or directory.
      - Description
    * - ``--alias, -a NAME``
      - Short name for the link (defaults to filename/dirname)
-   * - ``--notebook, -n NAME``
-     - Virtual notebook name (defaults to ``@alias``)
+   * - ``--section, -s NAME``
+     - Section within the notebook (auto-created if it doesn't exist)
    * - ``--sync/--no-sync``
      - Sync todo completions back to source (default: sync)
    * - ``--todo-exclude``
@@ -137,10 +219,11 @@ Link an external file or directory.
 
 .. code-block:: bash
 
-   nb link add ~/code/project/TODO.md
-   nb link add ~/docs/wiki
-   nb link add ~/vault --alias vault -n @vault
-   nb link add ~/docs --no-recursive
+   nb link add ~/code/project/TODO.md projects
+   nb link add ~/repos/vizier projects/vizier
+   nb link add ~/repos/vizier projects -s vizier
+   nb link add ~/docs/wiki work -a wiki
+   nb link add ~/docs work --no-recursive
 
 nb link list
 ^^^^^^^^^^^^

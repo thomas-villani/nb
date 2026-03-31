@@ -256,7 +256,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             linked_notes = list_linked_notes()
             seen_notebooks = {nb["name"] for nb in nbs}
             for linked in linked_notes:
-                virtual_nb = linked.notebook or f"@{linked.alias}"
+                virtual_nb = linked.notebook
                 if virtual_nb not in seen_notebooks:
                     files = scan_linked_note_files(linked)
                     stats = notebook_stats.get(virtual_nb, {})
@@ -290,7 +290,7 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             if is_virtual_linked:
                 # Find the linked note config for this virtual notebook
                 for linked in list_linked_notes():
-                    virtual_nb = linked.notebook or f"@{linked.alias}"
+                    virtual_nb = linked.notebook
                     if virtual_nb == notebook:
                         linked_config = linked
                         break

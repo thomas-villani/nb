@@ -48,6 +48,8 @@ nb/config.py    Configuration management
   - **Daily** (`date_based: true`): One file per day: `daily/2025/Nov25-Dec01/2025-11-27.md`
   - **Weekly** (`date_based: "weekly"`): One file per week with daily sections: `journal/2025/Nov25-Dec01.md`
 - **Hybrid search**: 70% semantic (vector embeddings) + 30% keyword (FTS5)
+- **Notebook sections**: Subfolder-based organization within notebooks (see below)
+- **Linked notes**: External files/directories indexed alongside notes (see below)
 
 ## API Key Configuration
 
@@ -192,6 +194,105 @@ nb inbox sync              # Sync tag/note changes from Raindrop
 nb inbox clear             # Archive all without clipping
 nb inbox history           # Show clipping history
 ```
+
+## Notebook Sections
+
+Sections are subfolders within a notebook that provide hierarchical organization. They can be created by merging notebooks, linking external files, or simply placing notes in subdirectories.
+
+### Configuration
+
+Sections can be configured in `config.yaml` with per-section settings:
+
+```yaml
+notebooks:
+  - name: projects
+    sections:
+      - name: archived
+        todo_exclude: true    # Hide this section's todos from `nb todo`
+      - name: vizier
+      - name: llmcli
+```
+
+Sections are also auto-detected from subdirectory structure (e.g., a note at `projects/vizier/todo.md` is in section `vizier`).
+
+### Creating Sections
+
+- **Merge**: `nb notebooks merge myproject projects --section myproject` moves all notes into `projects/myproject/`
+- **Link**: `nb link add ~/repos/vizier projects/vizier` links external files into a section (see Linked Notes below)
+- **Manual**: Create a subfolder in a notebook directory; it becomes a section automatically
+
+### Filtering by Section
+
+Most listing commands support `--section / -S` and `--exclude-section / -xs` (both repeatable):
+
+```bash
+nb list projects --section vizier         # Notes in projects/vizier/
+nb todo -n projects -S vizier             # Todos from projects/vizier/
+nb todo -n projects -xs archived          # Todos excluding projects/archived/
+nb search "query" -S vizier               # Search within section
+nb grep "pattern" -S vizier               # Grep within section
+```
+
+The `notebook/section` shorthand is supported where notebooks are specified:
+
+```bash
+nb todo -n projects/vizier                # Same as -n projects -S vizier
+```
+
+### Section Config (`SectionConfig`)
+
+- `name`: Subfolder name within the notebook
+- `todo_exclude`: If `true`, todos in this section are hidden from `nb todo` by default (still visible with `-n notebook/section`)
+
+## Linked Notes
+
+Link external markdown files or directories (e.g., from repos) to index them alongside your notes. Both note content and todos are tracked.
+
+### Adding Links
+
+```bash
+nb link add <path> <notebook>                      # Link to a notebook
+nb link add ~/repos/vizier projects/vizier          # notebook/section shorthand
+nb link add ~/repos/vizier projects -s vizier       # Explicit --section
+nb link add ~/repos/vizier/TODO.md projects -a viz  # Custom alias
+nb link add ~/docs projects --no-recursive          # Don't scan subdirectories
+nb link add ~/work/tasks.md work --todo-exclude     # Hide todos from nb todo
+nb link add ~/docs work --no-sync                   # Don't sync completions back
+```
+
+The `notebook` argument is required. When `--section` is used (or `notebook/section` syntax), the section is auto-created in the notebook config if it doesn't already exist.
+
+### Managing Links
+
+```bash
+nb link list                # Show all linked files with notebook, section, sync status
+nb link sync                # Re-scan and re-index all linked files
+nb link sync <alias>        # Re-scan a specific linked file
+nb link remove <alias>      # Stop tracking a linked file (doesn't delete source)
+nb link enable-sync <alias> # Enable syncing completions back to source
+nb link disable-sync <alias>
+nb link exclude-todos <alias>
+nb link include-todos <alias>
+```
+
+### How It Works
+
+- Linked files are stored in the `linked_notes` DB table (not copied into notes_root)
+- Each link has an **alias** (defaults to filename/dirname), a target **notebook**, and optional **section**
+- On indexing, linked notes are inserted into the `notes` table with `external=1` and the specified notebook/section
+- Section assignment populates `note_sections` and `todo_sections` tables so `--section` filtering works
+- With `--sync` (default), completing a todo via `nb todo done` updates the source file
+- With `--todo-exclude`, todos are hidden from `nb todo` unless you filter by the notebook explicitly
+
+### Data Model (`LinkedNoteConfig`)
+
+- `path`: Absolute path to external file or directory
+- `alias`: Short name for the link
+- `notebook`: Target notebook name (required)
+- `section`: Section within the notebook (optional)
+- `recursive`: For directories, scan subdirectories (default: `true`)
+- `todo_exclude`: Hide todos from `nb todo` (default: `false`)
+- `sync`: Sync todo completions back to source (default: `true`)
 
 ## Code Style
 

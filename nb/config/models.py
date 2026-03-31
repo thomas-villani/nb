@@ -71,12 +71,13 @@ class LinkedNoteConfig:
 
     path: Path
     alias: str
-    notebook: str | None = None  # Virtual notebook name (defaults to alias)
+    notebook: str  # Target notebook name (required)
     recursive: bool = True  # For directories, scan recursively
     todo_exclude: bool = (
         False  # Exclude todos from nb todo (unless explicitly requested)
     )
     sync: bool = True  # Sync todo completions back to source file
+    section: str | None = None  # Section within the notebook
 
 
 @dataclass

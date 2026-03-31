@@ -326,17 +326,14 @@ def todo(
     # Combine CLI --section args with inline notebook/section args
     all_section_args = list(section) + inline_sections
 
-    # When sections are specified, also include linked note virtual notebooks
-    # so that linked notes whose notebook matches the section are found
+    # When sections are specified, also include notebooks that contain
+    # linked notes with matching sections
     if all_section_args:
         from nb.core.links import list_linked_notes
 
-        linked_nb_names = {
-            ln.notebook or ln.alias for ln in list_linked_notes()
-        }
-        for sec_name in all_section_args:
-            if sec_name in linked_nb_names and sec_name not in effective_notebooks:
-                effective_notebooks.append(sec_name)
+        for ln in list_linked_notes():
+            if ln.section in all_section_args and ln.notebook not in effective_notebooks:
+                effective_notebooks.append(ln.notebook)
 
     # Resolve notes (supports "note::heading" syntax for markdown section filtering)
     from nb.cli.utils import resolve_note_for_todo_filter

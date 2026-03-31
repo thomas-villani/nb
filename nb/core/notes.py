@@ -339,7 +339,7 @@ def get_notebook_notes_with_metadata(
     # Build a map of paths to aliases for linked notes
     path_to_alias: dict[str, str] = {}
     for ln in list_linked_notes():
-        ln_notebook = ln.notebook or f"@{ln.alias}"
+        ln_notebook = ln.notebook
         if ln_notebook == notebook:
             if ln.path.is_file():
                 path_to_alias[str(ln.path.resolve())] = ln.alias
@@ -745,27 +745,27 @@ def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
 
         for ln in list_linked_notes():
             if ln.path.is_file() and ln.path.resolve() == path.resolve():
-                notebook = ln.notebook or f"@{ln.alias}"
                 index_linked_note(
                     path,
-                    notebook=notebook,
+                    notebook=ln.notebook,
                     alias=ln.alias,
                     notes_root=notes_root,
                     todo_exclude=ln.todo_exclude,
                     sync=ln.sync,
+                    section=ln.section,
                 )
                 return
             elif ln.path.is_dir():
                 try:
                     path.relative_to(ln.path)
-                    notebook = ln.notebook or f"@{ln.alias}"
                     index_linked_note(
                         path,
-                        notebook=notebook,
+                        notebook=ln.notebook,
                         alias=ln.alias,
                         notes_root=notes_root,
                         todo_exclude=ln.todo_exclude,
                         sync=ln.sync,
+                        section=ln.section,
                     )
                     return
                 except ValueError:

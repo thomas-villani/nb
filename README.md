@@ -14,7 +14,8 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Fuzzy finding** - Auto-suggest notebooks and notes when exact match not found
 - **Unified search** - Keyword, semantic, and hybrid search powered by localvectordb
 - **Note streaming** - Browse notes interactively with keyboard navigation and search
-- **Linked files** - Index external todo files and note directories
+- **Notebook sections** - Organize notes into subfolders within notebooks with per-section settings
+- **Linked files** - Index external todo files and note directories into specific notebooks and sections
 - **Note linking** - Wiki-style and markdown links between notes with backlink tracking
 - **Knowledge graph** - Interactive D3.js visualization in web UI, ASCII graph in CLI
 - **Related notes** - Find connected notes by links, tags, and semantic similarity
@@ -529,6 +530,7 @@ Note names support fuzzy matching - if no exact match is found, similar notes wi
 Todos can be hidden from `nb todo` at three levels:
 - **Notebook-level**: Set `todo_exclude: true` in notebook config
 - **Note-level**: Set `todo_exclude: true` in note frontmatter
+- **Section-level**: Configure `todo_exclude: true` on a section in config.yaml
 - **Linked note-level**: Use `--todo-exclude` when linking or `nb link exclude-todos`
 
 Use `-a/--all` to include all todos, `-n <notebook>` to view a specific notebook, or `--note` to view a specific note (bypasses exclusion filters).
@@ -742,16 +744,44 @@ nb tags --notes           # Only show tags from notes
 
 Tags must start with a letter and can contain letters, numbers, hyphens, and underscores (e.g., `#work`, `#FY2025`, `#project-alpha`). Hex color codes like `#ff00ff` are automatically excluded.
 
+### Notebook Sections
+
+Sections are subfolders within a notebook for hierarchical organization. They can be created by merging notebooks, linking external files, or simply placing notes in subdirectories.
+
+```bash
+# Filtering by section
+nb list projects --section vizier          # Notes in projects/vizier/
+nb todo -n projects -S vizier             # Todos from projects/vizier/
+nb todo -n projects -xs archived          # Exclude archived section
+nb todo -n projects/vizier                # notebook/section shorthand
+
+# Creating sections
+nb notebooks merge myproject projects --section myproject  # Via merge
+nb link add ~/repos/vizier projects/vizier                 # Via linked files
+```
+
+Configure per-section settings in `config.yaml`:
+
+```yaml
+notebooks:
+  - name: projects
+    sections:
+      - name: archived
+        todo_exclude: true    # Hide from nb todo
+      - name: vizier
+```
+
 ### Linked Files
 
 Link external markdown files or directories to index them alongside your notes.
 Both note content and todos are indexed (like any other note):
 
 ```bash
-nb link add ~/code/project/TODO.md        # Link a single file
-nb link add ~/docs/wiki                    # Link a directory (recursive)
-nb link add ~/vault --alias vault -n @vault  # Custom alias and notebook
-nb link add ~/docs --no-recursive          # Don't scan subdirectories
+nb link add ~/code/project/TODO.md projects          # Link file to notebook
+nb link add ~/repos/vizier projects/vizier            # Link to notebook/section
+nb link add ~/repos/vizier projects -s vizier         # Same, with explicit --section
+nb link add ~/docs/wiki work -a wiki                  # Custom alias
+nb link add ~/docs work --no-recursive                # Don't scan subdirectories
 
 nb link list                              # Show all linked files
 nb link sync                              # Re-scan and update index
@@ -764,20 +794,22 @@ nb link remove wiki                       # Stop tracking
 | Option | Description |
 |--------|-------------|
 | `--alias, -a` | Short name for the link (defaults to filename/dirname) |
-| `--notebook, -n` | Virtual notebook name (defaults to `@alias`) |
+| `--section, -s` | Section within the notebook (auto-created if it doesn't exist) |
 | `--sync/--no-sync` | Sync todo completions back to source file (default: sync) |
 | `--todo-exclude` | Hide todos from `nb todo` by default |
 | `--no-recursive` | Don't scan subdirectories (for directory links) |
+
+The `NOTEBOOK` argument is required and supports `notebook/section` shorthand syntax.
 
 #### Todo Exclusion
 
 By default, todos from linked notes appear in `nb todo`. Use `--todo-exclude` to hide them:
 
 ```bash
-nb link add ~/work/archive --todo-exclude  # Todos hidden from nb todo
-nb todo -n @archive                        # View them explicitly
-nb link exclude-todos wiki                 # Toggle exclusion on existing link
-nb link include-todos wiki                 # Re-enable todos
+nb link add ~/work/archive projects --todo-exclude  # Todos hidden from nb todo
+nb todo -n projects/archive                         # View them explicitly
+nb link exclude-todos wiki                          # Toggle exclusion on existing link
+nb link include-todos wiki                          # Re-enable todos
 ```
 
 #### Sync Control
@@ -786,12 +818,12 @@ With `--sync` (default), completing a todo with `nb todo done` updates the sourc
 Disable this if you don't want nb to modify external files:
 
 ```bash
-nb link add ~/shared/tasks.md --no-sync   # Won't modify source file
-nb link disable-sync wiki                 # Disable on existing link
-nb link enable-sync wiki                  # Re-enable sync
+nb link add ~/shared/tasks.md work --no-sync  # Won't modify source file
+nb link disable-sync wiki                     # Disable on existing link
+nb link enable-sync wiki                      # Re-enable sync
 ```
 
-Linked notes appear in `nb list` with `(linked)` indicator and under a virtual notebook (prefixed with `@` by default).
+Linked notes appear in `nb list` with `(linked)` indicator under their assigned notebook and section.
 
 ### Note Linking
 
@@ -1794,6 +1826,10 @@ notebooks:
     date_based: false
     color: cyan               # Display color (blue, green, cyan, etc.)
     icon: 🔧
+    sections:                 # Per-section settings (subfolders)
+      - name: archived
+        todo_exclude: true    # Hide this section from nb todo
+      - name: vizier
   - name: work
     date_based: true
     color: blue
@@ -1805,21 +1841,10 @@ notebooks:
     path: ~/Documents/Obsidian/vault   # External directory
     date_based: false
 
-# Linked external files and directories
-linked_notes:
-  - path: ~/docs/wiki
-    alias: wiki
-    notebook: "@wiki"
-    recursive: true
-    todo_exclude: false   # Include todos in nb todo
-    sync: true            # Sync completions back to source
-  - path: ~/code/project/TODO.md
-    alias: project
-    notebook: "@project"
-    sync: true
-  - path: ~/work/archive
-    alias: archive
-    todo_exclude: true    # Hide from nb todo by default
+# Linked external files and directories (managed via `nb link` command, stored in DB)
+# Example: nb link add ~/docs/wiki projects -a wiki
+# Example: nb link add ~/repos/vizier projects/vizier
+# Example: nb link add ~/work/archive work --todo-exclude
 
 # Semantic search embeddings
 embeddings:
@@ -1889,6 +1914,7 @@ git:
 | `color` | Display color in listings (e.g., blue, green, cyan, magenta, #ff5500) |
 | `icon` | Display icon/emoji prefix (e.g., 📅, 🔧, 📝) |
 | `template` | Default template name for new notes in this notebook |
+| `sections` | List of section configs (each with `name` and optional `todo_exclude`) |
 
 ### Environment Variables
 
@@ -1921,8 +1947,12 @@ Use `nb config api-keys` to see which keys are detected.
 │   └── 2025/
 │       ├── Nov18-Nov24.md    # Single file for entire week
 │       └── Nov25-Dec01.md    # Contains daily sections (## Monday, ## Tuesday, etc.)
-├── projects/                 # Flat notebook
-│   └── myproject.md
+├── projects/                 # Flat notebook with sections (subfolders)
+│   ├── myproject.md
+│   ├── vizier/               # Section: linked or merged notes
+│   │   └── todo.md
+│   └── archived/             # Section: can have todo_exclude
+│       └── old-project.md
 ├── work/
 ├── todo.md                   # Todo inbox
 └── .nb/

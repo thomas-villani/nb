@@ -316,14 +316,14 @@ def history_cmd(
             # Check linked notes (from database) to find proper notebook
             for ln in linked_notes:
                 if ln.path.is_file() and ln.path.resolve() == path.resolve():
-                    nb_name = ln.notebook or f"@{ln.alias}"
+                    nb_name = ln.notebook
                     linked_alias = ln.alias
                     rel_path = Path(ln.alias + path.suffix)
                     break
                 elif ln.path.is_dir():
                     try:
                         inner_rel = path.relative_to(ln.path)
-                        nb_name = ln.notebook or f"@{ln.alias}"
+                        nb_name = ln.notebook
                         linked_alias = ln.alias
                         rel_path = inner_rel
                         break

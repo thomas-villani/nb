@@ -114,6 +114,7 @@ def extract_todos(
     alias: str | None = None,
     notes_root: Path | None = None,
     notebook: str | None = None,
+    sections_override: list[str] | None = None,
 ) -> list[Todo]:
     """Extract all todos from a markdown file.
 
@@ -124,6 +125,7 @@ def extract_todos(
         alias: Optional alias for linked files
         notes_root: Notes root for determining project
         notebook: Override notebook/project name (for linked notes)
+        sections_override: Explicit sections list (for linked notes with a section)
 
     Returns:
         List of Todo objects with hierarchy built.
@@ -176,13 +178,16 @@ def extract_todos(
         project = get_notebook_for_file(path)
 
     # Determine path-based sections (subdirectory hierarchy)
-    from nb.core.notes import get_sections_for_path
+    if sections_override is not None:
+        note_sections = sections_override
+    else:
+        from nb.core.notes import get_sections_for_path
 
-    try:
-        relative_path = path.relative_to(notes_root)
-    except ValueError:
-        relative_path = path
-    note_sections = get_sections_for_path(relative_path)
+        try:
+            relative_path = path.relative_to(notes_root)
+        except ValueError:
+            relative_path = path
+        note_sections = get_sections_for_path(relative_path)
 
     # Get created date from file or parse from filename
     from nb.utils.dates import parse_date_from_filename
@@ -822,7 +827,7 @@ def add_todo_to_note(
             external=True,
             alias=linked.alias,
         )
-        notebook = linked.notebook or f"@{linked.alias}"
+        notebook = linked.notebook
     else:
         # Regular note
         from nb.core.notebooks import get_notebook_for_file

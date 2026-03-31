@@ -116,7 +116,7 @@ def get_notebook_notes_with_linked(
     # Build a map of paths to aliases for linked notes in this notebook
     path_to_alias: dict[str, str] = {}
     for ln in list_linked_notes():
-        ln_notebook = ln.notebook or f"@{ln.alias}"
+        ln_notebook = ln.notebook
         if ln_notebook == notebook:
             # For single-file links, map the file path
             if ln.path.is_file():
