@@ -7,7 +7,7 @@
 project = "nb"
 copyright = "2025"
 author = "Thomas Villani"
-release = "0.6.0"
+release = "0.6.1"
 
 # -- General configuration ---------------------------------------------------
 extensions = []
