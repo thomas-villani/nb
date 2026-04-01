@@ -158,6 +158,7 @@ todo_exclude: true
 - [ ] Add changelog to package and add `nb changelog` command
 - [ ] Add a command to refactor a tag (rename) that way they can be merged - should probably auto-detect similar ones and suggest too.
 - [ ] Tool to help/automatically schedule items without due date
+- [x] Add option to `nb record start` to stop recording after a given time.
 
 ### Phase 5: Wijjit TUI
 - [x] Full Wijjit-based todo list view with richer interactions #feature
@@ -205,3 +206,8 @@ todo_exclude: true
   - [x] Simplify `list_linked_files()` and `list_linked_notes()` to DB-only
 - [x] Optimize imports and startup speed of cli #performance
 - [x] Evaluate test suite and add e2e tests on actual CLI (if not existing) #testing
+
+---
+
+New ideas!
+- [x] Improve the record tool - allow user to add notes too (perhaps shell open the editor to allow notes for the meeting to be added?) also allow a timeout limit
