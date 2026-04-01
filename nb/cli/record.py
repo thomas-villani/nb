@@ -741,24 +741,26 @@ def record_test(save: bool) -> None:
     console.print(f"  loopback_device: {config.recorder.loopback_device}")
 
     # Check if config needs updating
-    needs_update = False
-    if working_mic and config.recorder.mic_device != working_mic.index:
-        needs_update = True
-    if working_loopback and config.recorder.loopback_device != working_loopback.index:
-        needs_update = True
+    new_mic = working_mic.index if working_mic else None
+    new_loopback = working_loopback.index if working_loopback else None
+    needs_update = (
+        config.recorder.mic_device != new_mic
+        or config.recorder.loopback_device != new_loopback
+    )
 
     if needs_update:
         if save:
-            # Save to config
-            _save_device_config(
-                working_mic.index if working_mic else None,
-                working_loopback.index if working_loopback else None,
-            )
+            # Save to config (clears stale devices that no longer work)
+            _save_device_config(new_mic, new_loopback)
             console.print("\n[green]Config updated![/green]")
             if working_mic:
                 console.print(f"  recorder.mic_device = {working_mic.index}")
+            else:
+                console.print("  recorder.mic_device = [dim]cleared[/dim]")
             if working_loopback:
                 console.print(f"  recorder.loopback_device = {working_loopback.index}")
+            else:
+                console.print("  recorder.loopback_device = [dim]cleared[/dim]")
         else:
             console.print("\n[yellow]Config update recommended.[/yellow]")
             console.print(
@@ -800,10 +802,9 @@ def _save_device_config(mic_device: int | None, loopback_device: int | None) -> 
     if "recorder" not in data:
         data["recorder"] = {}
 
-    if mic_device is not None:
-        data["recorder"]["mic_device"] = mic_device
-    if loopback_device is not None:
-        data["recorder"]["loopback_device"] = loopback_device
+    # Always set both keys — None clears stale device indices
+    data["recorder"]["mic_device"] = mic_device
+    data["recorder"]["loopback_device"] = loopback_device
 
     with config_path.open("w") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)

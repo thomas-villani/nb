@@ -189,10 +189,17 @@ def test_device(device_index: int, channels: int = 1, sample_rate: int = 16000) 
     import sounddevice as sd
 
     try:
+        # Use callback mode to match how start_recording() opens streams.
+        # Some Windows audio backends (e.g. WDM-KS) may accept blocking mode
+        # but reject callback mode with paInvalidDevice (-9996).
+        def _noop_callback(indata, frames, time_info, status):
+            pass
+
         stream = sd.InputStream(
             device=device_index,
             channels=channels,
             samplerate=sample_rate,
+            callback=_noop_callback,
         )
         stream.start()
         import time
@@ -599,15 +606,14 @@ def start_recording(
     require_recorder()
     import sounddevice as sd
 
-    # Find defaults if not specified
-    default_mic, default_loopback = find_default_devices()
-
-    # Apply defaults based on mode
-    if mode in (RecordingMode.BOTH, RecordingMode.MIC_ONLY):
-        if mic_device is None:
+    # Find validated defaults for any unspecified devices
+    if mic_device is None or loopback_device is None:
+        default_mic, default_loopback, _warnings = find_best_devices(
+            sample_rate=sample_rate, validate=True
+        )
+        if mode in (RecordingMode.BOTH, RecordingMode.MIC_ONLY) and mic_device is None:
             mic_device = default_mic
-    if mode in (RecordingMode.BOTH, RecordingMode.SYSTEM_ONLY):
-        if loopback_device is None:
+        if mode in (RecordingMode.BOTH, RecordingMode.SYSTEM_ONLY) and loopback_device is None:
             loopback_device = default_loopback
 
     # Validate we have required devices
@@ -659,31 +665,47 @@ def start_recording(
             )
 
         mic_channels = min(1, mic_info["max_input_channels"])
-        mic_stream = sd.InputStream(
-            device=mic_device,
-            channels=mic_channels,
-            samplerate=sample_rate,
-            callback=mic_callback,
-        )
-        mic_stream.start()
+        try:
+            mic_stream = sd.InputStream(
+                device=mic_device,
+                channels=mic_channels,
+                samplerate=sample_rate,
+                callback=mic_callback,
+            )
+            mic_stream.start()
+        except Exception as e:
+            raise ValueError(
+                f"Cannot open microphone [{mic_device}] '{mic_info['name']}': {e}"
+            ) from e
 
     if use_loopback:
         loopback_info = sd.query_devices(loopback_device)
         # Check if this is actually an input device
         if loopback_info["max_input_channels"] == 0:
+            if mic_stream is not None:
+                mic_stream.stop()
+                mic_stream.close()
             raise ValueError(
                 f"Device '{loopback_info['name']}' cannot capture audio (no input channels). "
                 "Use 'nb record devices' to find a valid loopback device like 'Stereo Mix'."
             )
 
         loopback_channels = min(2, loopback_info["max_input_channels"])
-        loopback_stream = sd.InputStream(
-            device=loopback_device,
-            channels=loopback_channels,
-            samplerate=sample_rate,
-            callback=loopback_callback,
-        )
-        loopback_stream.start()
+        try:
+            loopback_stream = sd.InputStream(
+                device=loopback_device,
+                channels=loopback_channels,
+                samplerate=sample_rate,
+                callback=loopback_callback,
+            )
+            loopback_stream.start()
+        except Exception as e:
+            if mic_stream is not None:
+                mic_stream.stop()
+                mic_stream.close()
+            raise ValueError(
+                f"Cannot open loopback [{loopback_device}] '{loopback_info['name']}': {e}"
+            ) from e
 
     if mic_stream is None and loopback_stream is None:
         raise ValueError("Failed to open any audio streams")
