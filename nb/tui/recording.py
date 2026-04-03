@@ -120,7 +120,7 @@ def run_recording_widget(
       {% text dim=true %}({{ mode }}){% endtext %}
     {% endhstack %}
 
-    {% textarea id="user_notes" height=8 width=80 placeholder="Type meeting notes here..." %}{% endtextarea %}
+    {% textarea id="user_notes" height=8 width=80 wrap=true placeholder="Type meeting notes here..." %}{% endtextarea %}
 
     {% hstack spacing=1 %}
       {% if has_timeout %}
