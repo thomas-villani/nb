@@ -174,6 +174,55 @@ def _is_loopback_device(name: str) -> bool:
     return any(kw in name_lower for kw in loopback_keywords)
 
 
+def _validate_configured_mic(device_index: int) -> int | None:
+    """Drop a configured mic_device if it's actually a loopback/system-audio source.
+
+    Returning None lets the caller fall back to auto-detection, so a stale config
+    value (e.g. Stereo Mix saved as mic_device) can't silently make both channels
+    of a stereo recording capture the same system audio.
+    """
+    import sys
+
+    import sounddevice as sd
+
+    try:
+        info = sd.query_devices(device_index)
+    except Exception:
+        return None
+
+    name = info["name"]
+    if _is_loopback_device(name):
+        print(
+            f"Warning: mic_device [{device_index}] '{name}' is a system-audio "
+            "loopback, not a microphone. Ignoring and auto-detecting instead.",
+            file=sys.stderr,
+        )
+        return None
+    return device_index
+
+
+def _validate_configured_loopback(device_index: int) -> int | None:
+    """Drop a configured loopback_device if it's clearly a physical microphone."""
+    import sys
+
+    import sounddevice as sd
+
+    try:
+        info = sd.query_devices(device_index)
+    except Exception:
+        return None
+
+    name = info["name"]
+    if _is_microphone_device(name):
+        print(
+            f"Warning: loopback_device [{device_index}] '{name}' looks like a "
+            "microphone, not a system-audio source. Ignoring and auto-detecting instead.",
+            file=sys.stderr,
+        )
+        return None
+    return device_index
+
+
 def test_device(device_index: int, channels: int = 1, sample_rate: int = 16000) -> bool:
     """Test if a device can actually be opened for recording.
 
@@ -605,6 +654,12 @@ def start_recording(
     """
     require_recorder()
     import sounddevice as sd
+
+    # Drop stale/mis-typed device indices before resolving defaults.
+    if mic_device is not None:
+        mic_device = _validate_configured_mic(mic_device)
+    if loopback_device is not None:
+        loopback_device = _validate_configured_loopback(loopback_device)
 
     # Find validated defaults for any unspecified devices
     if mic_device is None or loopback_device is None:

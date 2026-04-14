@@ -547,6 +547,55 @@ class TestAudioModule:
         # Date prefix format: YYYY-MM-DD
         assert path.name.count("-") >= 2
 
+    def _patch_sounddevice(self, monkeypatch: pytest.MonkeyPatch, device_name: str):
+        """Install a stub sounddevice module where query_devices returns device_name."""
+        import sys as _sys
+
+        fake_sd = type(
+            "FakeSD",
+            (),
+            {"query_devices": staticmethod(lambda idx: {"name": device_name})},
+        )()
+        monkeypatch.setitem(_sys.modules, "sounddevice", fake_sd)
+
+    def test_validate_configured_mic_rejects_loopback(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ):
+        from nb.recorder import audio
+
+        self._patch_sounddevice(monkeypatch, "Stereo Mix (Realtek(R) Audio)")
+
+        assert audio._validate_configured_mic(1) is None
+        assert "Stereo Mix" in capsys.readouterr().err
+
+    def test_validate_configured_mic_accepts_real_mic(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        from nb.recorder import audio
+
+        self._patch_sounddevice(monkeypatch, "Microphone Array (Intel SST)")
+
+        assert audio._validate_configured_mic(17) == 17
+
+    def test_validate_configured_loopback_rejects_microphone(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ):
+        from nb.recorder import audio
+
+        self._patch_sounddevice(monkeypatch, "Headset Microphone")
+
+        assert audio._validate_configured_loopback(5) is None
+        assert "Headset" in capsys.readouterr().err
+
+    def test_validate_configured_loopback_accepts_stereo_mix(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        from nb.recorder import audio
+
+        self._patch_sounddevice(monkeypatch, "Stereo Mix (Realtek(R) Audio)")
+
+        assert audio._validate_configured_loopback(1) == 1
+
 
 # =============================================================================
 # Recorder Package Tests
