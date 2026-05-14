@@ -103,7 +103,7 @@ class SearchConfig:
     """
 
     vector_weight: float = 0.7  # Hybrid search: 0=keyword only, 1=vector only
-    score_threshold: float = 0.4  # Minimum score to show results
+    score_threshold: float = 0.2  # Minimum score to show results
     recency_decay_days: int = 30  # Half-life for recency boost
     serper_api_key: str | None = None  # Loaded from SERPER_API_KEY env var (not config)
 
@@ -501,7 +501,7 @@ embeddings:
 # Search behavior
 search:
   vector_weight: 0.7      # Hybrid search balance (0=keyword only, 1=vector only)
-  score_threshold: 0.4    # Minimum score to show results
+  score_threshold: 0.2    # Minimum score to show results
   recency_decay_days: 30  # Half-life in days for recency boost
 
 # Todo behavior

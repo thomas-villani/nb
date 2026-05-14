@@ -172,7 +172,7 @@ def _parse_search(data: dict[str, Any] | None) -> SearchConfig:
 
     return SearchConfig(
         vector_weight=data.get("vector_weight", 0.7),
-        score_threshold=data.get("score_threshold", 0.4),
+        score_threshold=data.get("score_threshold", 0.2),
         recency_decay_days=data.get("recency_decay_days", 30),
         serper_api_key=os.environ.get("SERPER_API_KEY"),
     )

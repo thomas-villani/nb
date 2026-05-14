@@ -21,7 +21,7 @@ CONFIGURABLE_SETTINGS = {
     "embeddings.chunk_size": "Max tokens per chunk (e.g., 500)",
     "embeddings.chunking_method": "Chunking method (sentences, tokens, paragraphs, sections)",
     "search.vector_weight": "Hybrid search balance: 0=keyword, 1=vector (default 0.7)",
-    "search.score_threshold": "Minimum score to show search results (default 0.4)",
+    "search.score_threshold": "Minimum score to show search results (default 0.2)",
     "search.recency_decay_days": "Half-life in days for recency boost (default 30)",
     "todo.default_sort": "Default sort order (source, tag, priority, created)",
     "todo.inbox_file": "Name of inbox file in notes_root (default todo.md)",

@@ -18,6 +18,9 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
+SNIPPET_SEPARATOR = "  …  "
+
+
 @dataclass
 class SearchResult:
     """Result from a search query."""
@@ -29,6 +32,7 @@ class SearchResult:
     notebook: str | None = None
     date: str | None = None
     tags: list[str] | None = None
+    match_count: int = 1
 
 
 @dataclass
@@ -269,8 +273,9 @@ class NoteSearch:
             combined_filters["date"] = {"<=": date_end}
 
         try:
-            # Fetch more results if we're going to apply recency boost
-            fetch_k = k * 3 if recency_boost > 0 else k
+            # Fetch more chunks than k so we have enough material to collapse
+            # multi-chunk files into a single result per file.
+            fetch_k = max(k * 5, 30)
             results = self.db.query(
                 query,
                 search_type=search_type,
@@ -286,11 +291,11 @@ class NoteSearch:
                 return []
             raise
 
-        search_results = [
+        chunk_results = [
             SearchResult(
                 path=r.metadata.get("path", ""),
                 title=r.metadata.get("title"),
-                snippet=r.content or "",  # Store full chunk content
+                snippet=r.content or "",
                 score=r.score,
                 notebook=r.metadata.get("notebook"),
                 date=r.metadata.get("date"),
@@ -298,6 +303,8 @@ class NoteSearch:
             )
             for r in results
         ]
+
+        search_results = self._group_results_by_path(chunk_results)
 
         # Apply recency boost if requested
         if recency_boost > 0 and search_results:
@@ -357,8 +364,9 @@ class NoteSearch:
             combined_filters["date"] = {"<=": date_end}
 
         try:
-            # Fetch more results if we're going to apply recency boost
-            fetch_k = k * 3 if recency_boost > 0 else k
+            # Fetch more chunks than k so we have enough material to collapse
+            # multi-chunk files into a single result per file.
+            fetch_k = max(k * 5, 30)
             results = await self.db.query_async(
                 query,
                 search_type=search_type,
@@ -374,11 +382,11 @@ class NoteSearch:
                 return []
             raise
 
-        search_results = [
+        chunk_results = [
             SearchResult(
                 path=r.metadata.get("path", ""),
                 title=r.metadata.get("title"),
-                snippet=r.content or "",  # Store full chunk content
+                snippet=r.content or "",
                 score=r.score,
                 notebook=r.metadata.get("notebook"),
                 date=r.metadata.get("date"),
@@ -387,11 +395,52 @@ class NoteSearch:
             for r in results
         ]
 
+        search_results = self._group_results_by_path(chunk_results)
+
         # Apply recency boost if requested
         if recency_boost > 0 and search_results:
             search_results = self._apply_recency_boost(search_results, recency_boost)
 
         return search_results[:k]
+
+    @staticmethod
+    def _group_results_by_path(
+        chunks: list[SearchResult], max_snippets_per_file: int = 3
+    ) -> list[SearchResult]:
+        """Collapse multiple matching chunks from the same file into one result.
+
+        Snippets from the top-scoring chunks per file are joined with
+        SNIPPET_SEPARATOR so callers can split them back apart for display.
+        The combined result inherits the best chunk's score.
+        """
+        grouped: dict[str, list[SearchResult]] = {}
+        for chunk in chunks:
+            grouped.setdefault(chunk.path, []).append(chunk)
+
+        combined: list[SearchResult] = []
+        for path, chunk_list in grouped.items():
+            chunk_list.sort(key=lambda c: c.score, reverse=True)
+            snippets: list[str] = []
+            for c in chunk_list[:max_snippets_per_file]:
+                s = (c.snippet or "").replace("\n", " ").strip()
+                if s and s not in snippets:
+                    snippets.append(s)
+            best = chunk_list[0]
+            combined.append(
+                SearchResult(
+                    path=path,
+                    title=best.title,
+                    snippet=SNIPPET_SEPARATOR.join(snippets),
+                    score=best.score,
+                    notebook=best.notebook,
+                    date=best.date,
+                    tags=best.tags,
+                    match_count=len(chunk_list),
+                )
+            )
+
+        combined.sort(key=lambda r: r.score, reverse=True)
+        return combined
 
     def _apply_recency_boost(
         self, results: list[SearchResult], boost_weight: float

@@ -59,9 +59,9 @@ def register_search_commands(cli: click.Group) -> None:
 @click.option(
     "--threshold",
     "-T",
-    default=0.4,
+    default=None,
     type=float,
-    help="Return results above this score (default 0.4)",
+    help="Return results above this score (default from config.search.score_threshold)",
 )
 @click.option(
     "--files-only",
@@ -83,7 +83,7 @@ def search_cmd(
     until_date: str | None,
     recent: bool,
     limit: int,
-    threshold: float,
+    threshold: float | None,
     files_only: bool,
 ) -> None:
     """Search notes by keyword, semantic similarity, or both (hybrid).
@@ -265,6 +265,8 @@ def search_cmd(
 
     console.print(f"\n[bold]Found {len(results)} results:[/bold]\n")
 
+    from nb.index.search import SNIPPET_SEPARATOR
+
     for r in results:
         # Display path and title
         title = r.title or Path(r.path).stem
@@ -277,14 +279,24 @@ def search_cmd(
             meta_parts.append(f"notebook: {r.notebook}")
         if r.date:
             meta_parts.append(f"date: {r.date}")
+        if r.match_count > 1:
+            meta_parts.append(f"matches: {r.match_count}")
         console.print(f"  [dim]{' | '.join(meta_parts)}[/dim]")
 
-        # Display snippet
+        # Display snippet(s) — one line per matching chunk
         if r.snippet:
-            snippet = r.snippet.replace("\n", " ").strip()
-            if len(snippet) > 150:
-                snippet = snippet[:150] + "..."
-            console.print(f"  [dim]{snippet}[/dim]")
+            snippets = (
+                r.snippet.split(SNIPPET_SEPARATOR)
+                if SNIPPET_SEPARATOR in r.snippet
+                else [r.snippet]
+            )
+            for s in snippets:
+                s = s.replace("\n", " ").strip()
+                if not s:
+                    continue
+                if len(s) > 200:
+                    s = s[:200] + "..."
+                console.print(f"  [dim]{s}[/dim]")
 
         console.print()
 
