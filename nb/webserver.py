@@ -318,7 +318,16 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                     )
                     seen_notebooks.add(virtual_nb)
 
+            # When scoped to a single notebook, only return that one.
+            if _scope_notebook:
+                nbs = [nb for nb in nbs if nb["name"] == _scope_notebook]
+
             self.send_json(nbs)
+            return
+
+        # API: Startup info (scope, etc.) used by the frontend on first load
+        if path == "/api/startup":
+            self.send_json({"scopeNotebook": _scope_notebook})
             return
 
         # API: List notes in notebook
@@ -565,6 +574,11 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             from nb.core.tree import build_note_tree
 
             tree = build_note_tree(config)
+            # When scoped to a single notebook, only show that one in the tree.
+            if _scope_notebook:
+                tree["notebooks"] = [
+                    nb for nb in tree["notebooks"] if nb["name"] == _scope_notebook
+                ]
             # Resolve notebook colors to hex (linked-only notebooks default to cyan,
             # matching /api/notebooks behavior).
             for nb in tree["notebooks"]:
@@ -875,6 +889,13 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                         "priority": t.priority.value if t.priority else None,
                         "status": t.status.value,
                         "notebook": t.notebook or "unknown",
+                        # Source note path (relative for internal notes, absolute for
+                        # linked ones) so the web UI can open and display it.
+                        "path": (
+                            normalize_path(t.source.path)
+                            if t.source and t.source.path
+                            else None
+                        ),
                         "tags": t.tags or [],
                         "created": (
                             t.created_date.isoformat() if t.created_date else None
@@ -1357,12 +1378,24 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
 
 
 def run_server(
-    port: int = 3000, open_browser: bool = True, show_completed: bool = False
+    port: int = 3000,
+    open_browser: bool = True,
+    show_completed: bool = False,
+    notebook: str | None = None,
 ) -> None:
-    """Start the web server."""
-    # Store show_completed in a module-level variable for the handler
-    global _show_completed
+    """Start the web server.
+
+    Args:
+        port: TCP port to listen on.
+        open_browser: Open the default browser at startup.
+        show_completed: Include completed todos in the todo view.
+        notebook: If set, scope the viewer to this single notebook (the sidebar
+            tree, notebook list and initial view are limited to it).
+    """
+    # Store request-scoped options in module-level variables for the handler
+    global _show_completed, _scope_notebook
     _show_completed = show_completed
+    _scope_notebook = notebook
 
     # Use regular TCPServer (not threaded) to avoid SQLite threading issues
     class Server(socketserver.TCPServer):
@@ -1393,3 +1426,6 @@ def run_server(
 
 # Module-level flag for completed todos
 _show_completed = False
+
+# Module-level scope: when set, the viewer is limited to this single notebook.
+_scope_notebook: str | None = None

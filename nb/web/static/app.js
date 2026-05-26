@@ -63,7 +63,8 @@
         let notebooksCache = [];
         let notebookFilter = '';
         let notebookFilterTimeout = null;
-        let notebookSection = null;   // Selected section filter on the notebook overview (null = all)
+        let notebookSection = null;   // Selected section filter on the notebook overview (null = all, '__root__' = no section, else a '/'-joined section path)
+        let pendingNotebookSection = null; // Section to apply on the next notebook load (from the tree)
         let cachedNotebookNotes = []; // Cache notes for current notebook
         let treeData = null;          // Cached /api/tree response
         let treeExpanded = {};        // Map of expanded folder/notebook keys
@@ -249,8 +250,23 @@
                 const addBtn = childWritable
                     ? `<span class="tree-add" data-target="${escapeHtml(target)}" title="New note here">+</span>`
                     : '';
+                // Open target: notebooks open the notebook view; folders open the
+                // notebook scoped to their section path. "(root)" has no openable view.
+                let openNb = null, openSection = '';
+                if (isNotebook) {
+                    if (node.name !== '(root)') openNb = node.name;
+                } else {
+                    const slash = node.path.indexOf('/');
+                    if (slash !== -1) {
+                        openNb = node.path.slice(0, slash);
+                        openSection = node.path.slice(slash + 1);
+                    }
+                }
+                const openAttrs = openNb !== null
+                    ? ` data-open-nb="${escapeHtml(openNb)}" data-open-section="${escapeHtml(openSection)}"`
+                    : '';
                 return `
-                    <div class="tree-row tree-folder" data-key="${escapeHtml(key)}" data-expanded="${expanded ? 1 : 0}" style="padding-left:${depth * 12 + 4}px" title="${escapeHtml(labelTitle)}">
+                    <div class="tree-row tree-folder" data-key="${escapeHtml(key)}" data-expanded="${expanded ? 1 : 0}"${openAttrs} style="padding-left:${depth * 12 + 4}px" title="${escapeHtml(labelTitle)}">
                         <span class="tree-caret">${caret}</span>
                         <span class="tree-icon">${icon}</span>${dot}
                         <span class="tree-label">${escapeHtml(node.name)}</span>
@@ -326,6 +342,22 @@
                 if (folder) {
                     const key = folder.dataset.key;
                     const children = folder.nextElementSibling;
+                    const onCaret = !!e.target.closest('.tree-caret');
+                    const openNb = folder.dataset.openNb;
+                    // Clicking the label (not the caret) on an openable notebook/section
+                    // opens it in the main pane and expands it in the tree.
+                    if (!onCaret && openNb) {
+                        openNotebookSection(openNb, folder.dataset.openSection || '');
+                        if (folder.dataset.expanded !== '1') {
+                            if (children) children.style.display = 'block';
+                            setExpanded(key, true);
+                            const caretEl = folder.querySelector('.tree-caret');
+                            if (caretEl && caretEl.textContent !== '·') caretEl.textContent = '▾';
+                            folder.dataset.expanded = '1';
+                        }
+                        return;
+                    }
+                    // Otherwise toggle expand/collapse.
                     const isOpen = children && children.style.display !== 'none';
                     if (children) children.style.display = isOpen ? 'none' : 'block';
                     setExpanded(key, !isOpen);
@@ -411,7 +443,9 @@
 
             if (fetchNotes) {
                 cachedNotebookNotes = await api('/notebooks/' + encodeURIComponent(name));
-                notebookSection = null;  // reset section filter on fresh load
+                // Apply a section requested from the tree, otherwise reset the filter.
+                notebookSection = pendingNotebookSection;
+                pendingNotebookSection = null;
             }
 
             // Top-level section of a note (first subfolder), or null if directly in the notebook
@@ -426,23 +460,32 @@
                 else sectionCounts[s] = (sectionCounts[s] || 0) + 1;
             });
             const sectionNames = Object.keys(sectionCounts).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+            // A top-level chip is active when its section is selected directly or is the
+            // parent of a deeper section opened from the tree (e.g. "vizier" for "vizier/sub").
+            const isChipActive = (value) => {
+                if (value === '') return notebookSection === null;
+                if (value === '__root__') return notebookSection === '__root__';
+                return notebookSection === value || (!!notebookSection && notebookSection.startsWith(value + '/'));
+            };
             let chipsHtml = '';
             if (sectionNames.length > 0) {
-                const chip = (label, value, count, active) =>
-                    `<span class="section-chip${active ? ' active' : ''}" onclick="setNotebookSection('${escapeJs(value)}')">${escapeHtml(label)} <span class="chip-count">${count}</span></span>`;
+                const chip = (label, value, count) =>
+                    `<span class="section-chip${isChipActive(value) ? ' active' : ''}" onclick="setNotebookSection('${escapeJs(value)}')">${escapeHtml(label)} <span class="chip-count">${count}</span></span>`;
                 chipsHtml = '<div class="section-chips">'
-                    + chip('All', '', cachedNotebookNotes.length, notebookSection === null)
-                    + (rootCount ? chip('(no section)', '__root__', rootCount, notebookSection === '__root__') : '')
-                    + sectionNames.map(s => chip(s, s, sectionCounts[s], notebookSection === s)).join('')
+                    + chip('All', '', cachedNotebookNotes.length)
+                    + (rootCount ? chip('(no section)', '__root__', rootCount) : '')
+                    + sectionNames.map(s => chip(s, s, sectionCounts[s])).join('')
                     + '</div>';
             }
 
-            // Apply text filter, then section filter, then sort
+            // Apply text filter, then section filter, then sort. The section filter
+            // matches the selected section path exactly or any deeper path beneath it.
             let displayNotes = filterNotes(cachedNotebookNotes, notebookFilter);
             if (notebookSection !== null) {
                 displayNotes = displayNotes.filter(n => {
-                    const s = topSection(n);
-                    return notebookSection === '__root__' ? s === null : s === notebookSection;
+                    if (notebookSection === '__root__') return (n.sections || []).length === 0;
+                    const secPath = (n.sections || []).join('/');
+                    return secPath === notebookSection || secPath.startsWith(notebookSection + '/');
                 });
             }
             displayNotes = sortNotes(displayNotes, notebookSortBy);
@@ -548,6 +591,12 @@
         function setNotebookSection(value) {
             notebookSection = (value === '') ? null : value;
             loadNotebook(currentNotebook, false, false);
+        }
+
+        // Open a notebook (and optionally a section within it) from the sidebar tree.
+        function openNotebookSection(notebook, sectionPath) {
+            pendingNotebookSection = sectionPath ? sectionPath : null;
+            loadNotebook(notebook);
         }
 
         // Stream view state
@@ -708,20 +757,25 @@
                 `;
             }
 
-            // Build frontmatter panel if present
+            // Build frontmatter panel if present. Properties are laid out vertically
+            // (one per row); list values render as bullet lists inside the value cell.
             let frontmatterHtml = '';
             if (note.frontmatter && Object.keys(note.frontmatter).length > 0) {
-                const formatValue = (val) => {
-                    if (Array.isArray(val)) return val.join(', ');
-                    if (typeof val === 'object') return JSON.stringify(val);
-                    return String(val);
+                const scalarHtml = (v) =>
+                    escapeHtml(typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v));
+                const formatValueHtml = (val) => {
+                    if (Array.isArray(val)) {
+                        if (val.length === 0) return '<span class="fm-empty">—</span>';
+                        return '<ul class="fm-list">' + val.map(v => `<li>${scalarHtml(v)}</li>`).join('') + '</ul>';
+                    }
+                    return scalarHtml(val);
                 };
                 frontmatterHtml = `
                     <div class="frontmatter-panel">
                         <h4>Properties</h4>
                         <dl>
                             ${Object.entries(note.frontmatter).map(([key, val]) =>
-                                `<div class="fm-row"><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(formatValue(val))}</dd></div>`
+                                `<div class="fm-row"><dt>${escapeHtml(key)}</dt><dd>${formatValueHtml(val)}</dd></div>`
                             ).join('')}
                         </dl>
                     </div>
@@ -1019,6 +1073,11 @@
                     dueDateHtml = `<span class="due-date-edit" style="cursor:pointer;color:var(--text-dim)" onclick="editDueDate('${t.id}', '')" title="Click to add due date">No due date</span>`;
                 }
 
+                // Source note: full path with a click-to-open link.
+                const pathHtml = t.path
+                    ? `<div class="meta todo-source"><span class="todo-open-note" title="Open note: ${escapeHtml(t.path)}" onclick="event.stopPropagation(); loadNote('${escapeJs(t.path)}')">↗ ${escapeHtml(t.path)}</span></div>`
+                    : '';
+
                 return `
                     <div class="${cls}" data-id="${t.id}">
                         <div class="checkbox" onclick="toggleTodo('${t.id}')">${checkIcon}</div>
@@ -1030,6 +1089,7 @@
                                 ${dueDateHtml}
                                 · <span style="font-family:monospace;color:var(--text-dim);font-size:0.75rem" title="Todo ID">${t.id}</span>
                             </div>
+                            ${pathHtml}
                         </div>
                     </div>
                 `;
@@ -1709,37 +1769,71 @@
             });
         }
 
-        // Init - set initial state and load based on hash
-        loadTreeExpanded();
-        initTreeEvents();
-        initSidebarResizer();
-        loadTree();
-        const hash = location.hash;
-        if (hash.startsWith('#notebook/')) {
-            const name = decodeURIComponent(hash.slice(10));
-            history.replaceState({ view: 'notebook', name }, '', hash);
-            loadNotebook(name, false);
-        } else if (hash.startsWith('#note/')) {
-            const path = decodeURIComponent(hash.slice(6));
-            history.replaceState({ view: 'note', path }, '', hash);
-            loadNote(path, false);
-        } else if (hash === '#todos') {
-            history.replaceState({ view: 'todos' }, '', hash);
-            loadTodos(false);
-        } else if (hash === '#kanban') {
-            history.replaceState({ view: 'kanban' }, '', hash);
-            loadKanban(false);
-        } else if (hash === '#graph') {
-            history.replaceState({ view: 'graph' }, '', hash);
-            loadGraph(false);
-        } else if (hash === '#history') {
-            history.replaceState({ view: 'history' }, '', hash);
-            loadHistory(false);
-        } else if (hash.startsWith('#stream/')) {
-            const notebook = decodeURIComponent(hash.slice(8));
-            history.replaceState({ view: 'stream', notebook }, '', hash);
-            loadStream(notebook, false);
-        } else {
-            history.replaceState({ view: 'home' }, '', '#');
-            loadHome(false);
+        // ---- Content width toggle (full width vs. centered with gutters) ----
+
+        function applyContentWidth(reading) {
+            const main = document.querySelector('.main');
+            const toggle = document.getElementById('widthToggle');
+            if (main) main.classList.toggle('reading-width', reading);
+            if (toggle) toggle.textContent = reading ? '⤢ Full width' : '▭ Reading width';
         }
+
+        function initContentWidthToggle() {
+            let reading = false;
+            try { reading = localStorage.getItem('nb-web-reading-width') === '1'; } catch (e) {}
+            applyContentWidth(reading);
+        }
+
+        function toggleContentWidth() {
+            const main = document.querySelector('.main');
+            const reading = !(main && main.classList.contains('reading-width'));
+            try { localStorage.setItem('nb-web-reading-width', reading ? '1' : '0'); } catch (e) {}
+            applyContentWidth(reading);
+        }
+
+        // Init - set initial state and load based on hash
+        async function init() {
+            loadTreeExpanded();
+            initTreeEvents();
+            initSidebarResizer();
+            initContentWidthToggle();
+            loadTree();
+
+            // Notebook scope (from `nb web -n <notebook>`): default view is that notebook.
+            let scope = null;
+            try { scope = (await api('/startup')).scopeNotebook; } catch (e) {}
+
+            const hash = location.hash;
+            if (hash.startsWith('#notebook/')) {
+                const name = decodeURIComponent(hash.slice(10));
+                history.replaceState({ view: 'notebook', name }, '', hash);
+                loadNotebook(name, false);
+            } else if (hash.startsWith('#note/')) {
+                const path = decodeURIComponent(hash.slice(6));
+                history.replaceState({ view: 'note', path }, '', hash);
+                loadNote(path, false);
+            } else if (hash === '#todos') {
+                history.replaceState({ view: 'todos' }, '', hash);
+                loadTodos(false);
+            } else if (hash === '#kanban') {
+                history.replaceState({ view: 'kanban' }, '', hash);
+                loadKanban(false);
+            } else if (hash === '#graph') {
+                history.replaceState({ view: 'graph' }, '', hash);
+                loadGraph(false);
+            } else if (hash === '#history') {
+                history.replaceState({ view: 'history' }, '', hash);
+                loadHistory(false);
+            } else if (hash.startsWith('#stream/')) {
+                const notebook = decodeURIComponent(hash.slice(8));
+                history.replaceState({ view: 'stream', notebook }, '', hash);
+                loadStream(notebook, false);
+            } else if (scope) {
+                history.replaceState({ view: 'notebook', name: scope }, '', '#notebook/' + encodeURIComponent(scope));
+                loadNotebook(scope, false);
+            } else {
+                history.replaceState({ view: 'home' }, '', '#');
+                loadHome(false);
+            }
+        }
+        init();

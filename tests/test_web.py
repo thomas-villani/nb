@@ -330,6 +330,53 @@ class TestNBHandler:
             assert data[0]["due"] == "2025-12-01"
             assert data[0]["priority"] == 1
             assert data[0]["status"] == "pending"
+            # Source note path is exposed so the UI can open/show it.
+            assert data[0]["path"] == "projects/test.md"
+
+    def test_api_startup_no_scope(self, mock_web_config: Config):
+        """/api/startup reports no scope by default."""
+        import nb.webserver as webserver
+
+        webserver._scope_notebook = None
+        handler = MockHandler("/api/startup")
+        handler.do_GET()
+
+        assert handler.response_code == 200
+        assert handler.get_response_json() == {"scopeNotebook": None}
+
+    def test_api_startup_with_scope(self, mock_web_config: Config):
+        """/api/startup reports the scoped notebook when one is set."""
+        import nb.webserver as webserver
+
+        webserver._scope_notebook = "projects"
+        try:
+            handler = MockHandler("/api/startup")
+            handler.do_GET()
+
+            assert handler.response_code == 200
+            assert handler.get_response_json() == {"scopeNotebook": "projects"}
+        finally:
+            webserver._scope_notebook = None
+
+    def test_api_notebooks_scoped(self, mock_web_config: Config):
+        """When scoped, /api/notebooks returns only the scoped notebook."""
+        import nb.webserver as webserver
+
+        root = mock_web_config.notes_root
+        for notebook in ("projects", "work"):
+            (root / notebook).mkdir(exist_ok=True)
+            (root / notebook / "n1.md").write_text("# N1", encoding="utf-8")
+
+        webserver._scope_notebook = "projects"
+        try:
+            handler = MockHandler("/api/notebooks")
+            handler.do_GET()
+
+            assert handler.response_code == 200
+            names = {nb["name"] for nb in handler.get_response_json()}
+            assert names == {"projects"}
+        finally:
+            webserver._scope_notebook = None
 
     def test_404_unknown_path(self, mock_web_config: Config):
         """Test 404 for unknown paths."""

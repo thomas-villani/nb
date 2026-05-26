@@ -3,6 +3,56 @@ todo_exclude: true
 ---
 # nb-cli Development Todo
 
+
+# ISSUES:
+
+## Issue while running `nb index --force`:
+
+localvectordb.exceptions.EmbeddingError: Error retrieving embeddings: Client error '400 Bad Request' for url
+'https://api.openai.com/v1/embeddings'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+Failed to index note
+C:\Users\thomas.villani\notes\personal\megalodon\wiki\syntheses\dd-passes\pre-dd-gap-analysis-and-research-agenda-2
+60516.md: while parsing a block collection
+  in "<unicode string>", line 7, column 3
+did not find expected '-' indicator
+  in "<unicode string>", line 12, column 15
+Failed to index note
+C:\Users\thomas.villani\notes\personal\megalodon\wiki\syntheses\decisions\mackay-conflict-analysis-260517.md: while
+parsing a block collection
+  in "<unicode string>", line 7, column 3
+did not find expected '-' indicator
+  in "<unicode string>", line 14, column 15
+
+
+Current:
+
+- [x] Make the Properties in `nb web` vertical rather than horizontal, and allow lists in the cells
+- [x] Make tree in `nb web` allow to open sections / notebooks from the tree, rather than only for finding notes.
+- [x] Add `nb web -n notebook` to show only a specific notebook
+- [x] In todo section of `nb web`, need to have a way to open the note containing the todo, and show the full path to the note.
+- [x] In `nb web` a clickable way to toggle full screen width vs with gutters
+- [ ] Need a way to archive notebooks
+- [ ] Automatically cross link notes from within a week, and set them linearly so they link the previous note in the notebook?
+
+- [x] Need a command to see which notebooks/notes are todo_excluded
+
+- [ ] Make sure pinned notes are included in todos while pinned
+- [ ] Add changelog to package and add `nb changelog` command to view
+- [ ] Add a command to refactor a tag (rename) that way they can be merged - should probably auto-detect similar ones and suggest too.
+- [ ] Tool to help/automatically schedule items without due date
+- [ ] Calendar view for due dates #feature
+- [ ] Due date reminders (optional notifications) #feature
+  These can use the `win11toast` library which is dead simple.
+- [ ] Add '@startby' to todos #feature
+- [x] Web clipper via integration with raindrop
+- [ ] Add dependencies and gantt functionality, making blocked items visible.
+- [x] Need to update the `nb web` ui to be subproject aware. 
+
+
+---
+
+
 ## Completed
 
 ### Phase 1: Core Foundation ✅
@@ -152,12 +202,6 @@ todo_exclude: true
 - [x] Make sure 'nb todo add; handles relative due dates
 - [x] Make sure to properly use pyyaml to generate frontmatter for the notes for the `clip` command
 - [x] Add `--copy` to `nb plan ...` commands and other ai commands that give output
-- [ ] Need a command to see which notebooks/notes are todo_excluded
-- [ ] Need a way to archive notebooks
-- [ ] Make sure pinned notes are included in todos while pinned
-- [ ] Add changelog to package and add `nb changelog` command
-- [ ] Add a command to refactor a tag (rename) that way they can be merged - should probably auto-detect similar ones and suggest too.
-- [ ] Tool to help/automatically schedule items without due date
 - [x] Add option to `nb record start` to stop recording after a given time.
 
 ### Phase 5: Wijjit TUI
@@ -176,14 +220,6 @@ todo_exclude: true
 - [ ] Contextual views - e.g. set time windows when `nbt` shows certain notebooks (e.g. work notebooks from 9-5p)
 - [x] Auto TL;DR generation and stash in frontmatter, especially for `inbox` feature
 - [x] Export to various formats (HTML, PDF) #feature
-- [ ] Calendar view for due dates #feature
-- [ ] Due date reminders (optional notifications) #feature
-  These can use the `win11toast` library which is dead simple.
-- [ ] Add '@startby' to todos #feature
-- [x] Web clipper via integration with raindrop
-- [ ] Add dependencies and gantt functionality, making blocked items visible.
-
-- [ ] Need to update the `nb web` ui to be subproject aware. 
 
 ### AI Ideas:
 - [x] Generate narrative of what was completed in the week
