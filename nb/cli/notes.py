@@ -7,7 +7,7 @@ from pathlib import Path
 
 import click
 
-from nb.cli.completion import complete_notebook
+from nb.cli.completion import complete_note_ref, complete_notebook
 from nb.cli.utils import (
     console,
     copy_to_clipboard,
@@ -502,7 +502,7 @@ def history_cmd(
 
 
 @click.command("open")
-@click.argument("note_ref")
+@click.argument("note_ref", shell_complete=complete_note_ref)
 @click.option(
     "--notebook",
     "-n",
@@ -647,7 +647,7 @@ def open_date(
 
 
 @click.command("show")
-@click.argument("note_ref", required=False)
+@click.argument("note_ref", required=False, shell_complete=complete_note_ref)
 @click.option(
     "--notebook",
     "-n",
@@ -827,7 +827,7 @@ def new_note(
 
 
 @click.command("edit")
-@click.argument("path")
+@click.argument("path", shell_complete=complete_note_ref)
 def edit_note(path: str) -> None:
     """Open an existing note in the editor.
 
@@ -1492,7 +1492,7 @@ def list_notes_cmd(
 
 @click.command("alias")
 @click.argument("alias_name")
-@click.argument("note_ref")
+@click.argument("note_ref", shell_complete=complete_note_ref)
 @click.option(
     "--notebook",
     "-n",
@@ -1575,7 +1575,7 @@ def list_aliases_cmd() -> None:
 
 
 @click.command("delete")
-@click.argument("note_ref")
+@click.argument("note_ref", shell_complete=complete_note_ref)
 @click.option(
     "--notebook",
     "-n",
@@ -1641,7 +1641,7 @@ def delete_note_cmd(note_ref: str, notebook: str | None, force: bool) -> None:
 
 
 @click.command("where")
-@click.argument("ref")
+@click.argument("ref", shell_complete=complete_note_ref)
 @click.option(
     "--notebook",
     "-n",
@@ -1717,7 +1717,7 @@ def where_cmd(ref: str, notebook: str | None) -> None:
 
 
 @click.command("mv")
-@click.argument("source_ref")
+@click.argument("source_ref", shell_complete=complete_note_ref)
 @click.argument("dest_ref")
 @click.option("--force", "-f", is_flag=True, help="Overwrite destination if exists")
 def mv_cmd(source_ref: str, dest_ref: str, force: bool) -> None:
@@ -1785,7 +1785,7 @@ def mv_cmd(source_ref: str, dest_ref: str, force: bool) -> None:
 
 
 @click.command("cp")
-@click.argument("source_ref")
+@click.argument("source_ref", shell_complete=complete_note_ref)
 @click.argument("dest_ref")
 def cp_cmd(source_ref: str, dest_ref: str) -> None:
     """Copy a note to a new location.
@@ -1849,7 +1849,7 @@ def cp_cmd(source_ref: str, dest_ref: str) -> None:
 
 
 @click.command("pin")
-@click.argument("note_ref")
+@click.argument("note_ref", shell_complete=complete_note_ref)
 @click.option(
     "--notebook",
     "-n",
@@ -1890,7 +1890,7 @@ def pin_note_cmd(note_ref: str, notebook: str | None) -> None:
 
 
 @click.command("unpin")
-@click.argument("note_ref")
+@click.argument("note_ref", shell_complete=complete_note_ref)
 @click.option(
     "--notebook",
     "-n",

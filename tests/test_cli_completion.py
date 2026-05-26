@@ -11,7 +11,10 @@ from nb import config as config_module
 from nb.cli import cli
 from nb.cli import utils as cli_utils_module
 from nb.cli.completion import (
+    MAX_NOTE_COMPLETIONS,
+    NOTEBOOK_COMPLETION_TYPE,
     _get_powershell_source,
+    complete_note_ref,
     complete_notebook,
     complete_tag,
     complete_view,
@@ -167,6 +170,11 @@ class TestPowerShellSource:
         assert '"file" { "ProviderItem" }' in script
         assert 'default { "ParameterValue" }' in script
 
+    def test_namespace_type_mapped_in_both_blocks(self):
+        """The custom 'namespace' type maps to ProviderContainer in nb and nbt."""
+        script = _get_powershell_source()
+        assert script.count('"namespace" { "ProviderContainer" }') == 2
+
 
 class TestNotebookCompleter:
     """Tests for the notebook completer function."""
@@ -244,3 +252,126 @@ class TestTagCompleter:
         # Should return empty list on error, not raise
         completions = complete_tag(None, None, "")
         assert completions == []
+
+
+class TestNoteRefCompleter:
+    """Tests for the note-reference completer used by `nb open` et al."""
+
+    def test_empty_returns_notebooks_and_notes(self, mock_cli_config, indexed_note):
+        """Empty incomplete returns notebook drill-in entries (cwd-fallback guard)."""
+        indexed_note("projects", "alpha.md", "# Alpha")
+        indexed_note("work", "beta.md", "# Beta")
+        completions = complete_note_ref(None, None, "")
+        values = [c.value for c in completions]
+        # Must be non-empty so PowerShell does not fall back to listing cwd files
+        assert values
+        # Notebook drill-in entries present, with the custom namespace type
+        assert "projects/" in values
+        assert "work/" in values
+        nb_item = next(c for c in completions if c.value == "projects/")
+        assert nb_item.type == NOTEBOOK_COMPLETION_TYPE
+        # Notes present as <notebook>/<stem>
+        assert "projects/alpha" in values
+        assert "work/beta" in values
+
+    def test_prefix_filters_values(self, mock_cli_config, indexed_note):
+        """All returned values start with the typed prefix (PS prefix-filtering)."""
+        indexed_note("projects", "alpha.md", "# Alpha")
+        indexed_note("work", "beta.md", "# Beta")
+        completions = complete_note_ref(None, None, "work")
+        values = [c.value for c in completions]
+        assert all(v.lower().startswith("work") for v in values)
+        assert "work/" in values
+        assert "work/beta" in values
+        assert "projects/alpha" not in values
+
+    def test_drill_in_returns_full_paths(self, mock_cli_config, indexed_note):
+        """Typing 'work/' scopes to that notebook and returns full paths."""
+        indexed_note("work", "beta.md", "# Beta")
+        indexed_note("work", "gamma.md", "# Gamma")
+        completions = complete_note_ref(None, None, "work/")
+        values = [c.value for c in completions]
+        assert "work/beta" in values
+        assert "work/gamma" in values
+        assert all(v.startswith("work/") for v in values)
+
+    def test_typed_notebook_name_scopes_to_it(self, mock_cli_config, indexed_note):
+        """Typing a valid notebook name filters to that notebook's notes."""
+        indexed_note("projects", "alpha.md", "# Alpha")
+        indexed_note("work", "beta.md", "# Beta")
+        completions = complete_note_ref(None, None, "work")
+        values = [c.value for c in completions]
+        assert "work/beta" in values
+        assert "projects/alpha" not in values
+
+    def test_notebook_context_returns_bare_stems(self, mock_cli_config, indexed_note):
+        """With -n/--notebook supplied, values are bare note names."""
+        import types
+
+        indexed_note("work", "beta.md", "# Beta")
+        indexed_note("work", "gamma.md", "# Gamma")
+        ctx = types.SimpleNamespace(params={"notebook": "work"})
+        completions = complete_note_ref(ctx, None, "")
+        values = [c.value for c in completions]
+        assert "beta" in values
+        assert "gamma" in values
+        # Bare stems, not notebook-prefixed
+        assert "work/beta" not in values
+
+    def test_notebook_context_prefix(self, mock_cli_config, indexed_note):
+        """With -n supplied, the token prefix filters bare note names."""
+        import types
+
+        indexed_note("work", "beta.md", "# Beta")
+        indexed_note("work", "gamma.md", "# Gamma")
+        ctx = types.SimpleNamespace(params={"notebook": "work"})
+        completions = complete_note_ref(ctx, None, "be")
+        values = [c.value for c in completions]
+        assert "beta" in values
+        assert "gamma" not in values
+
+    def test_alias_completion_and_roundtrip(self, mock_cli_config, indexed_note):
+        """Aliases are completed and round-trip through resolve_note_ref."""
+        from nb.cli.utils import resolve_note_ref
+        from nb.core.aliases import add_note_alias
+
+        path = indexed_note("projects", "alpha.md", "# Alpha")
+        add_note_alias("myalias", path)
+        completions = complete_note_ref(None, None, "my")
+        values = [c.value for c in completions]
+        assert "myalias" in values
+        resolved = resolve_note_ref("myalias")
+        assert resolved is not None
+        assert resolved.resolve() == path.resolve()
+
+    def test_note_value_roundtrips(self, mock_cli_config, indexed_note):
+        """A returned note value resolves back to the note path."""
+        from nb.cli.utils import resolve_note_ref
+
+        path = indexed_note("projects", "alpha.md", "# Alpha")
+        completions = complete_note_ref(None, None, "projects/")
+        values = [c.value for c in completions]
+        assert "projects/alpha" in values
+        resolved = resolve_note_ref("projects/alpha")
+        assert resolved is not None
+        assert resolved.resolve() == path.resolve()
+
+    def test_cap_limits_results(self, mock_cli_config, cli_runner):
+        """Results never exceed MAX_NOTE_COMPLETIONS even with many notes."""
+        projects_dir = mock_cli_config.notes_root / "projects"
+        for i in range(MAX_NOTE_COMPLETIONS + 30):
+            (projects_dir / f"note{i:03d}.md").write_text(
+                f"# Note {i}", encoding="utf-8"
+            )
+        cli_runner.invoke(cli, ["index"])
+        completions = complete_note_ref(None, None, "projects/")
+        assert 0 < len(completions) <= MAX_NOTE_COMPLETIONS
+
+    def test_handles_errors_gracefully(self, monkeypatch):
+        """A failure inside the completer returns [] instead of raising."""
+
+        def boom():
+            raise Exception("config error")
+
+        monkeypatch.setattr("nb.config.get_config", boom)
+        assert complete_note_ref(None, None, "") == []

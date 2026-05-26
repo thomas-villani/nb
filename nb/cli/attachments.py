@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from nb.cli.completion import complete_notebook
+from nb.cli.completion import complete_note_ref, complete_notebook
 from nb.cli.utils import console, ensure_note_path, resolve_attachment_target
 
 
@@ -25,7 +25,12 @@ def attach() -> None:
 
 @attach.command("file")
 @click.argument("file_path", type=click.Path(exists=True))
-@click.option("--to", "target", help="Note path or todo ID to attach to")
+@click.option(
+    "--to",
+    "target",
+    help="Note path or todo ID to attach to",
+    shell_complete=complete_note_ref,
+)
 @click.option("--title", "-t", help="Display title for the attachment")
 @click.option("--copy", "-c", is_flag=True, help="Copy file to attachments directory")
 def attach_file(
@@ -75,7 +80,12 @@ def attach_file(
 
 @attach.command("url")
 @click.argument("url")
-@click.option("--to", "target", help="Note path or todo ID to attach to")
+@click.option(
+    "--to",
+    "target",
+    help="Note path or todo ID to attach to",
+    shell_complete=complete_note_ref,
+)
 @click.option("--title", "-t", help="Display title for the URL")
 def attach_url(url: str, target: str | None, title: str | None) -> None:
     """Attach a URL to a note or todo.

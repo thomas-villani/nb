@@ -6,7 +6,7 @@ from pathlib import Path
 
 import click
 
-from nb.cli.completion import complete_notebook
+from nb.cli.completion import complete_note_ref, complete_notebook
 from nb.cli.utils import console, resolve_note_ref
 from nb.config import get_config
 from nb.utils.hashing import normalize_path
@@ -18,7 +18,7 @@ def register_graph_commands(cli: click.Group) -> None:
 
 
 @click.command("graph")
-@click.argument("note_ref", required=False)
+@click.argument("note_ref", required=False, shell_complete=complete_note_ref)
 @click.option(
     "--notebook",
     "-n",

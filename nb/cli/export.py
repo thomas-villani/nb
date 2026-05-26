@@ -6,7 +6,7 @@ from pathlib import Path
 
 import click
 
-from nb.cli.completion import complete_notebook
+from nb.cli.completion import complete_note_ref, complete_notebook
 from nb.cli.utils import console, get_display_path, resolve_note_ref
 from nb.config import get_config
 from nb.utils.fuzzy import UserCancelled
@@ -18,7 +18,7 @@ def register_export_commands(cli: click.Group) -> None:
 
 
 @click.command("export")
-@click.argument("note_ref")
+@click.argument("note_ref", shell_complete=complete_note_ref)
 @click.argument("output")
 @click.option(
     "--format",
