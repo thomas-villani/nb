@@ -1,3 +1,67 @@
+# v0.6.5 - 2026-05-26
+
+Patch release with several `nb web` enhancements: single-notebook scoping, tree-based navigation, a vertical properties panel, todo source links, and a layout width toggle. No breaking changes.
+
+## New Features
+
+- [0ec49df] Add `nb web` viewer enhancements
+  - `nb web -n/--notebook <name>` scopes the viewer to a single notebook (filters the sidebar tree and notebook list; new `/api/startup` endpoint drives the initial view)
+  - Open a notebook or section directly from the sidebar tree — the caret still toggles expand/collapse
+  - Notebook section filtering now supports nested section paths
+  - Note properties (frontmatter) render vertically, with list values shown as bullet lists
+  - Each todo links to and shows the full path of its source note
+  - Clickable toggle switches the content area between full-width and centered reading-width (persisted in `localStorage`)
+
+## Documentation
+
+- [40eab21] Document the new `nb web` features in README, the technical overview, and the command reference
+
+# v0.6.4 - 2026-05-26
+
+Patch release reworking `nb web` into a hierarchical, fully offline note browser/editor. No breaking changes.
+
+## New Features
+
+- [14ddcc7] Rework `nb web` into a hierarchical, offline note browser/editor
+  - New `GET /api/tree` builds a nested notebook → section → note hierarchy from the index (handles internal vs. external/linked paths, config ordering, empty notebooks, and a synthetic `(root)` node)
+  - Collapsible sidebar file tree with persisted expand state, smart leaf labels (date for date-based notebooks), icons/color dots, active-note highlight, and inline new-note creation
+  - EasyMDE editor replaces the plain textarea: persistent edit mode, live preview that keeps wiki/internal links, Ctrl+S save, auto-save on navigate-away, and read-only linked notes
+  - Two-pane resizable layout; section chips on the notebook overview filter by subfolder
+  - Vendor marked / highlight.js / d3 / EasyMDE / FontAwesome locally and serve them via a path-traversal-guarded `/static/` route, so the viewer works fully offline
+  - New `nb web --dev` reloads templates from disk without restarting
+
+# v0.6.3 - 2026-05-14
+
+Patch release improving hybrid search result grouping. No breaking changes.
+
+## Bug Fixes
+
+- [0a562a7] Group hybrid search results by file and surface more matches
+  - Hybrid search was dropping strong keyword-only chunks whose combined score couldn't clear the 0.4 threshold, and rendered each surviving chunk as its own result entry
+  - Chunks are now grouped per file (top-3 snippets joined), the default score threshold is lowered to 0.2, and the CLI shows one entry per file with a match count
+
+# v0.6.2 - 2026-04-14
+
+Patch release with audio recording device-validation fixes. No breaking changes.
+
+## Bug Fixes
+
+- [741c5a0] Reject misconfigured mic/loopback devices at recording start
+  - Prevents a stale `mic_device` pointing at a loopback (e.g. Stereo Mix) from silently making both channels of a BOTH-mode recording capture system audio, which caused Deepgram to transcribe the same utterances twice
+
+- [249d7e8] Enable wrapping for the recording notes textarea
+
+# v0.6.1 - 2026-04-01
+
+Patch release fixing audio recording device validation on Windows. No breaking changes.
+
+## Bug Fixes
+
+- [cac9571] Fix recording device validation to use callback mode and clear stale config
+  - `test_device()` now uses callback mode to match actual recording behavior (some Windows backends like WDM-KS Stereo Mix accept blocking mode but reject callback mode with `paInvalidDevice`)
+  - `start_recording()` validates unspecified devices via `find_best_devices()` instead of name-matching `find_default_devices()`
+  - Device config always writes both keys so stale indices get cleared; stream-open errors now report which device failed and clean up on failure
+
 # v0.6.0 - 2026-03-31
 
 Minor release integrating linked notes into the notebook sections system. Linked notes now require a target notebook and can be assigned to sections for proper organization and filtering.
