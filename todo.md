@@ -183,6 +183,8 @@ todo_exclude: true
 - [x] Web clipper via integration with raindrop
 - [ ] Add dependencies and gantt functionality, making blocked items visible.
 
+- [ ] Need to update the `nb web` ui to be subproject aware. 
+
 ### AI Ideas:
 - [x] Generate narrative of what was completed in the week
 - [x] Summarize notes, generate TL;DR
