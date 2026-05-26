@@ -63,7 +63,10 @@
         let notebooksCache = [];
         let notebookFilter = '';
         let notebookFilterTimeout = null;
+        let notebookSection = null;   // Selected section filter on the notebook overview (null = all)
         let cachedNotebookNotes = []; // Cache notes for current notebook
+        let treeData = null;          // Cached /api/tree response
+        let treeExpanded = {};        // Map of expanded folder/notebook keys
 
         // Load preferences from localStorage with defaults
         function loadPreferences() {
@@ -191,14 +194,149 @@
             return res.json();
         }
 
-        async function loadNotebooks() {
-            notebooksCache = await api('/notebooks');
-            document.getElementById('notebooks').innerHTML = notebooksCache
-                .map(nb => {
-                    const dot = nb.color ? `<span class="color-dot" style="background:${nb.color}"></span>` : '';
-                    return `<a class="nav-link" onclick="loadNotebook('${escapeJs(nb.name)}')">${dot}${escapeHtml(nb.name)} <span style="color:var(--text-dim)">(${nb.count})</span></a>`;
-                })
-                .join('');
+        // ---- File tree (sidebar) ----
+
+        function loadTreeExpanded() {
+            try { treeExpanded = JSON.parse(localStorage.getItem('nb-web-tree-expanded') || '{}'); }
+            catch (e) { treeExpanded = {}; }
+        }
+
+        function isExpanded(key) { return !!treeExpanded[key]; }
+
+        function setExpanded(key, val) {
+            if (val) treeExpanded[key] = true; else delete treeExpanded[key];
+            try { localStorage.setItem('nb-web-tree-expanded', JSON.stringify(treeExpanded)); } catch (e) {}
+        }
+
+        function cssEscape(s) {
+            return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&');
+        }
+
+        // Load the tree (and notebooksCache, used for color lookups elsewhere)
+        async function loadTree() {
+            const [nbs, tree] = await Promise.all([api('/notebooks'), api('/tree')]);
+            notebooksCache = nbs;
+            treeData = tree;
+            renderTree();
+        }
+
+        function renderTreeDom() {
+            if (!treeData) return;
+            document.getElementById('tree').innerHTML = renderTreeNodes(treeData.notebooks, 0, null, false);
+        }
+
+        function renderTree() {
+            renderTreeDom();
+            highlightActiveNote();
+        }
+
+        function renderTreeNodes(children, depth, dateMode, writable) {
+            return children.map(node => {
+                if (node.type === 'note') return renderNoteRow(node, depth, dateMode);
+
+                const isNotebook = node.type === 'notebook';
+                const key = isNotebook ? ('nb:' + node.name) : node.path;
+                const expanded = isExpanded(key);
+                const childDateMode = isNotebook ? node.dateMode : dateMode;
+                // Notebooks decide writability; folders inherit it.
+                const childWritable = isNotebook ? (!node.isLinked && !node.isExternal) : writable;
+                const target = isNotebook ? (node.name === '(root)' ? '' : node.name) : node.path;
+                const dot = node.color ? `<span class="color-dot" style="background:${node.color}"></span>` : '';
+                const icon = isNotebook ? (node.icon || (node.isLinked ? '🔗' : '📓')) : '📁';
+                const hasChildren = node.children && node.children.length > 0;
+                const caret = hasChildren ? (expanded ? '▾' : '▸') : '·';
+                const labelTitle = isNotebook ? node.name : node.path;
+                const addBtn = childWritable
+                    ? `<span class="tree-add" data-target="${escapeHtml(target)}" title="New note here">+</span>`
+                    : '';
+                return `
+                    <div class="tree-row tree-folder" data-key="${escapeHtml(key)}" data-expanded="${expanded ? 1 : 0}" style="padding-left:${depth * 12 + 4}px" title="${escapeHtml(labelTitle)}">
+                        <span class="tree-caret">${caret}</span>
+                        <span class="tree-icon">${icon}</span>${dot}
+                        <span class="tree-label">${escapeHtml(node.name)}</span>
+                        ${addBtn}
+                        <span class="tree-count">${node.count}</span>
+                    </div>
+                    <div class="tree-children" style="display:${expanded ? 'block' : 'none'}">
+                        ${renderTreeNodes(node.children, depth + 1, childDateMode, childWritable)}
+                    </div>`;
+            }).join('');
+        }
+
+        function renderNoteRow(node, depth, dateMode) {
+            // Smart label: date-based notebooks show the date/filename instead of a long title
+            let label;
+            if (dateMode && dateMode !== 'none') {
+                label = node.date || node.name.replace(/\.md$/, '');
+            } else {
+                label = node.title || node.name;
+            }
+            const icon = node.isLinked ? '↗' : '📄';
+            return `<div class="tree-row tree-note" data-path="${escapeHtml(node.path)}" style="padding-left:${depth * 12 + 4}px" title="${escapeHtml(node.path)}">
+                        <span class="tree-icon">${icon}</span>
+                        <span class="tree-label">${escapeHtml(label)}</span>
+                    </div>`;
+        }
+
+        // Find the ancestor folder/notebook keys leading to a note path (for auto-expand)
+        function findAncestorKeys(path) {
+            let found = null;
+            function walk(nodes, trail) {
+                for (const node of nodes) {
+                    if (node.type === 'note') {
+                        if (node.path === path) { found = trail.slice(); return true; }
+                    } else {
+                        const key = node.type === 'notebook' ? ('nb:' + node.name) : node.path;
+                        if (walk(node.children || [], trail.concat(key))) return true;
+                    }
+                }
+                return false;
+            }
+            walk(treeData ? treeData.notebooks : [], []);
+            return found || [];
+        }
+
+        function highlightActiveNote(autoExpand = true) {
+            document.querySelectorAll('#tree .tree-note.active').forEach(el => el.classList.remove('active'));
+            if (!currentNotePath || !treeData) return;
+            const sel = '#tree .tree-note[data-path="' + cssEscape(currentNotePath) + '"]';
+            let el = document.querySelector(sel);
+            if (!el && autoExpand) {
+                const ancestors = findAncestorKeys(currentNotePath);
+                if (ancestors.length) {
+                    ancestors.forEach(k => setExpanded(k, true));
+                    renderTreeDom();
+                    el = document.querySelector(sel);
+                }
+            }
+            if (el) { el.classList.add('active'); el.scrollIntoView({ block: 'nearest' }); }
+        }
+
+        // Delegated click handling for the tree
+        function initTreeEvents() {
+            const tree = document.getElementById('tree');
+            tree.addEventListener('click', (e) => {
+                const add = e.target.closest('.tree-add');
+                if (add) {
+                    e.stopPropagation();
+                    promptNewNote(add.dataset.target);
+                    return;
+                }
+                const folder = e.target.closest('.tree-folder');
+                if (folder) {
+                    const key = folder.dataset.key;
+                    const children = folder.nextElementSibling;
+                    const isOpen = children && children.style.display !== 'none';
+                    if (children) children.style.display = isOpen ? 'none' : 'block';
+                    setExpanded(key, !isOpen);
+                    const caret = folder.querySelector('.tree-caret');
+                    if (caret && caret.textContent !== '·') caret.textContent = isOpen ? '▸' : '▾';
+                    folder.dataset.expanded = isOpen ? 0 : 1;
+                    return;
+                }
+                const note = e.target.closest('.tree-note');
+                if (note) loadNote(note.dataset.path);
+            });
         }
 
         function escapeHtml(str) {
@@ -222,9 +360,9 @@
         }
 
         async function loadHome(pushHistory = true, fetchNotebooks = true) {
+            teardownEditor();
             currentNotebook = null;
             currentNotePath = null;
-            document.getElementById('notes-section').style.display = 'none';
             if (pushHistory) history.pushState({ view: 'home' }, '', '#');
 
             if (fetchNotebooks || !notebooksCache.length) {
@@ -266,26 +404,48 @@
         }
 
         async function loadNotebook(name, pushHistory = true, fetchNotes = true) {
+            teardownEditor();
             currentNotebook = name;
             currentNotePath = null;
             if (pushHistory) history.pushState({ view: 'notebook', name }, '', '#notebook/' + encodeURIComponent(name));
 
             if (fetchNotes) {
                 cachedNotebookNotes = await api('/notebooks/' + encodeURIComponent(name));
+                notebookSection = null;  // reset section filter on fresh load
             }
 
-            // Apply filter and sort
-            let displayNotes = filterNotes(cachedNotebookNotes, notebookFilter);
-            displayNotes = sortNotes(displayNotes, notebookSortBy);
+            // Top-level section of a note (first subfolder), or null if directly in the notebook
+            const topSection = (n) => (n.sections && n.sections.length) ? n.sections[0] : null;
 
-            document.getElementById('notes-section').style.display = 'block';
-            document.getElementById('notes').innerHTML = displayNotes
-                .map(n => {
-                    const aliasTag = n.alias ? ` <span style="color:var(--accent);font-size:0.8em">@${escapeHtml(n.alias)}</span>` : '';
-                    const linkedIcon = n.isLinked ? '<span style="color:var(--text-dim)" title="Linked note">↗</span> ' : '';
-                    return `<a class="nav-link" onclick="loadNote('${escapeJs(n.path)}')">${linkedIcon}${escapeHtml(n.title)}${aliasTag}</a>`;
-                })
-                .join('');
+            // Build section chips from the (text-unfiltered) notes so structure is always visible
+            const sectionCounts = {};
+            let rootCount = 0;
+            cachedNotebookNotes.forEach(n => {
+                const s = topSection(n);
+                if (s === null) rootCount++;
+                else sectionCounts[s] = (sectionCounts[s] || 0) + 1;
+            });
+            const sectionNames = Object.keys(sectionCounts).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+            let chipsHtml = '';
+            if (sectionNames.length > 0) {
+                const chip = (label, value, count, active) =>
+                    `<span class="section-chip${active ? ' active' : ''}" onclick="setNotebookSection('${escapeJs(value)}')">${escapeHtml(label)} <span class="chip-count">${count}</span></span>`;
+                chipsHtml = '<div class="section-chips">'
+                    + chip('All', '', cachedNotebookNotes.length, notebookSection === null)
+                    + (rootCount ? chip('(no section)', '__root__', rootCount, notebookSection === '__root__') : '')
+                    + sectionNames.map(s => chip(s, s, sectionCounts[s], notebookSection === s)).join('')
+                    + '</div>';
+            }
+
+            // Apply text filter, then section filter, then sort
+            let displayNotes = filterNotes(cachedNotebookNotes, notebookFilter);
+            if (notebookSection !== null) {
+                displayNotes = displayNotes.filter(n => {
+                    const s = topSection(n);
+                    return notebookSection === '__root__' ? s === null : s === notebookSection;
+                });
+            }
+            displayNotes = sortNotes(displayNotes, notebookSortBy);
 
             const nb = notebooksCache.find(x => x.name === name);
             const colorBar = nb && nb.color ? `<span class="color-dot" style="background:${nb.color};width:12px;height:12px"></span> ` : '';
@@ -295,9 +455,10 @@
                 <h1>${colorBar}${escapeHtml(name)}</h1>
                 <div class="header-actions">
                     <button class="btn" onclick="loadStream('${escapeJs(name)}')">Stream</button>
-                    ${!isVirtualNb ? `<button class="btn btn-primary" onclick="showNewNoteForm('${escapeJs(name)}')">+ New Note</button>` : ''}
+                    ${!isVirtualNb ? `<button class="btn btn-primary" onclick="promptNewNote('${escapeJs(name)}')">+ New Note</button>` : ''}
                 </div>
                 <input type="text" class="search-box" id="notebookFilterInput" placeholder="Filter notes by title, filename, alias, or tag..." value="${escapeHtml(notebookFilter)}" style="margin:0.5rem 0">
+                ${chipsHtml}
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
                     <p style="color:var(--text-dim)">${displayNotes.length} of ${cachedNotebookNotes.length} notes</p>
                     <select id="notebookSort" style="padding:0.3rem 0.5rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem">
@@ -384,6 +545,11 @@
 
         }
 
+        function setNotebookSection(value) {
+            notebookSection = (value === '') ? null : value;
+            loadNotebook(currentNotebook, false, false);
+        }
+
         // Stream view state
         let streamNotebook = null;
         let streamOffset = 0;
@@ -392,12 +558,12 @@
         const STREAM_PAGE_SIZE = 15;
 
         async function loadStream(notebook, pushHistory = true) {
+            teardownEditor();
             currentNotebook = notebook;
             currentNotePath = null;
             streamNotebook = notebook;
             streamOffset = 0;
             streamTotal = 0;
-            document.getElementById('notes-section').style.display = 'none';
             if (pushHistory) history.pushState({ view: 'stream', notebook }, '', '#stream/' + encodeURIComponent(notebook));
 
             const nb = notebooksCache.find(x => x.name === notebook);
@@ -430,15 +596,17 @@
         function handleStreamScroll() {
             if (streamLoading || streamOffset >= streamTotal) return;
             const loader = document.getElementById('streamLoader');
-            if (!loader) {
+            const mainEl = document.querySelector('.main');
+            if (!loader || !mainEl) {
                 // View changed, clean up
+                if (mainEl) mainEl.removeEventListener('scroll', handleStreamScroll);
                 window.removeEventListener('scroll', handleStreamScroll);
                 return;
             }
-            // Check if user scrolled near bottom (within 500px)
-            const scrollTop = window.scrollY || document.documentElement.scrollTop;
-            const scrollHeight = document.documentElement.scrollHeight;
-            const clientHeight = document.documentElement.clientHeight;
+            // The .main pane is the scroll container in the two-pane layout.
+            const scrollTop = mainEl.scrollTop;
+            const scrollHeight = mainEl.scrollHeight;
+            const clientHeight = mainEl.clientHeight;
             if (scrollHeight - scrollTop - clientHeight < 500) {
                 loadStreamPage();
             }
@@ -487,8 +655,13 @@
         }
 
         let currentNoteMarkdown = ''; // Store markdown for copy function
+        let mde = null;               // Active EasyMDE editor instance
+        let mdeDirty = false;         // Unsaved-changes flag
+        let editingPath = null;       // Path currently open in the editor
+        let mdeSaveHandler = null;    // window keydown handler (Ctrl/Cmd+S) while editing
 
         async function loadNote(path, pushHistory = true) {
+            teardownEditor();
             currentNotePath = path;
             if (pushHistory) history.pushState({ view: 'note', path }, '', '#note/' + encodeURIComponent(path));
 
@@ -555,9 +728,13 @@
                 `;
             }
 
+            const editBtn = note.isLinked
+                ? '<span class="btn" style="opacity:0.5;cursor:default" title="Linked notes are read-only">Read-only</span>'
+                : `<button class="btn" onclick="enterEdit('${escapeJs(path)}')">Edit</button>`;
+
             document.getElementById('content').innerHTML = `
                 <div class="header-actions">
-                    <button class="btn" onclick="editNote('${escapeJs(path)}')">Edit</button>
+                    ${editBtn}
                     <button class="btn" id="copyNoteBtn" onclick="copyNote()">Copy</button>
                 </div>
                 ${frontmatterHtml}
@@ -565,10 +742,8 @@
                 ${backlinksHtml}
             `;
 
-            // Update active state in sidebar
-            document.querySelectorAll('#notes .nav-link').forEach(el => {
-                el.classList.toggle('active', el.textContent === note.title);
-            });
+            // Update active state in the file tree
+            highlightActiveNote();
         }
 
         async function copyNote() {
@@ -612,68 +787,132 @@
             }
         }
 
-        async function editNote(path) {
+        // ---- EasyMDE editor lifecycle ----
+
+        // Render markdown for the editor preview, stripping frontmatter and keeping
+        // the configured marked pipeline (wiki links + internal-link navigation).
+        function renderMarkdownWithLinks(plainText) {
+            let body = plainText;
+            if (body.startsWith('---')) {
+                const parts = body.split('---');
+                if (parts.length >= 3) body = parts.slice(2).join('---').trim();
+            }
+            return marked.parse(body);
+        }
+
+        function setSaveStatus(state, msg) {
+            const el = document.getElementById('saveStatus');
+            if (!el) return;
+            if (state === 'saving') { el.textContent = 'Saving…'; el.style.color = 'var(--text-dim)'; }
+            else if (state === 'saved') { el.textContent = 'Saved'; el.style.color = 'var(--green)'; }
+            else if (state === 'unsaved') { el.textContent = '● Unsaved'; el.style.color = 'var(--orange)'; }
+            else if (state === 'error') { el.textContent = 'Error: ' + (msg || ''); el.style.color = 'var(--red)'; }
+            else { el.textContent = ''; }
+        }
+
+        // Tear down the active editor. Auto-saves unsaved changes (Obsidian-like)
+        // so navigating away never loses edits.
+        function teardownEditor() {
+            if (mde) {
+                if (mdeDirty && editingPath) {
+                    const content = mde.value();
+                    api('/note', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path: editingPath, content: content })
+                    });
+                }
+                try { mde.toTextArea(); } catch (e) {}
+                mde = null;
+            }
+            mdeDirty = false;
+            editingPath = null;
+            if (mdeSaveHandler) {
+                window.removeEventListener('keydown', mdeSaveHandler);
+                mdeSaveHandler = null;
+            }
+        }
+
+        async function enterEdit(path) {
+            teardownEditor();
+            editingPath = path;
+            currentNotePath = path;
+
+            // Re-fetch RAW content (with frontmatter) so saves round-trip faithfully
             const note = await api('/note?path=' + encodeURIComponent(path));
+            if (note.isLinked) { loadNote(path); return; }  // safety: linked notes are read-only
 
             document.getElementById('content').innerHTML = `
-                <h1>Edit Note</h1>
-                <div class="note-editor">
-                    <textarea id="noteContent">${escapeHtml(note.content)}</textarea>
-                    <div class="editor-actions">
-                        <button class="btn btn-primary" onclick="saveNote('${escapeJs(path)}')">Save</button>
-                        <button class="btn" onclick="loadNote('${escapeJs(path)}')">Cancel</button>
-                    </div>
+                <div class="header-actions">
+                    <button class="btn btn-primary" onclick="saveNote('${escapeJs(path)}')">Save</button>
+                    <button class="btn" onclick="exitEdit('${escapeJs(path)}')">Done</button>
+                    <span id="saveStatus" class="save-status"></span>
                 </div>
+                <textarea id="mdeArea"></textarea>
             `;
+            const ta = document.getElementById('mdeArea');
+            ta.value = note.content;
+
+            mde = new EasyMDE({
+                element: ta,
+                autofocus: true,
+                spellChecker: false,
+                autoDownloadFontAwesome: false,  // FontAwesome is vendored locally
+                previewRender: (plainText) => renderMarkdownWithLinks(plainText),
+                toolbar: ['bold', 'italic', 'heading', '|', 'quote', 'unordered-list', 'ordered-list', '|',
+                          'link', 'image', 'code', 'table', '|', 'preview', 'side-by-side', 'fullscreen', '|', 'guide'],
+                status: ['lines', 'words'],
+            });
+            mdeDirty = false;
+            mde.codemirror.on('change', () => { mdeDirty = true; setSaveStatus('unsaved'); });
+
+            // Ctrl/Cmd+S → save (prevent the browser save dialog)
+            mdeSaveHandler = (e) => {
+                if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+                    e.preventDefault();
+                    saveNote(path);
+                }
+            };
+            window.addEventListener('keydown', mdeSaveHandler);
         }
 
         async function saveNote(path) {
-            const content = document.getElementById('noteContent').value;
-            await api('/note', {
+            if (!mde) return;
+            const content = mde.value();
+            setSaveStatus('saving');
+            const res = await api('/note', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: path, content: content })
             });
-            loadNote(path);
+            if (res && res.error) { setSaveStatus('error', res.error); return; }
+            mdeDirty = false;
+            setSaveStatus('saved');
         }
 
-        function showNewNoteForm(notebook) {
-            document.getElementById('content').innerHTML = `
-                <h1>New Note in ${escapeHtml(notebook)}</h1>
-                <div style="margin-bottom:1rem">
-                    <label style="display:block;margin-bottom:0.5rem;color:var(--text-dim)">Filename (without .md)</label>
-                    <input type="text" id="newNoteFilename" style="width:100%;max-width:400px;padding:0.5rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text)" placeholder="my-note">
-                </div>
-                <div class="note-editor">
-                    <textarea id="noteContent" placeholder="# Title\\n\\nStart writing..."></textarea>
-                    <div class="editor-actions">
-                        <button class="btn btn-primary" onclick="createNote('${escapeJs(notebook)}')">Create</button>
-                        <button class="btn" onclick="loadNotebook('${escapeJs(notebook)}')">Cancel</button>
-                    </div>
-                </div>
-            `;
+        async function exitEdit(path) {
+            teardownEditor();
+            await loadNote(path, false);
+            loadTree();  // best-effort: reflect any title/structure changes
         }
 
-        async function createNote(notebook) {
-            const filename = document.getElementById('newNoteFilename').value.trim();
-            if (!filename) {
-                alert('Please enter a filename');
-                return;
-            }
-            const content = document.getElementById('noteContent').value;
-            const path = notebook + '/' + filename + '.md';
+        // Create a new note under a notebook/section target ("" = notes root).
+        async function promptNewNote(target) {
+            const raw = prompt('New note filename (without .md):');
+            if (raw === null) return;
+            let fn = raw.trim();
+            if (!fn) return;
+            if (!fn.toLowerCase().endsWith('.md')) fn += '.md';
+            const path = target ? (target + '/' + fn) : fn;
 
-            const result = await api('/note', {
+            const res = await api('/note', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: path, content: content, create: true })
+                body: JSON.stringify({ path: path, content: '', create: true })
             });
-
-            if (result.error) {
-                alert(result.error);
-            } else {
-                loadNotebook(notebook);
-            }
+            if (res && res.error) { alert(res.error); return; }
+            await loadTree();
+            enterEdit(path);
         }
 
         let todoFilter = ''; // Filter text for todos
@@ -705,9 +944,9 @@
         }
 
         async function loadTodos(pushHistory = true) {
+            teardownEditor();
             currentNotebook = null;
             currentNotePath = null;
-            document.getElementById('notes-section').style.display = 'none';
             if (pushHistory) history.pushState({ view: 'todos' }, '', '#todos');
 
             let todos = await api('/todos');
@@ -945,9 +1184,9 @@
         let draggedTodoId = null;
 
         async function loadKanban(pushHistory = true) {
+            teardownEditor();
             currentNotebook = null;
             currentNotePath = null;
-            document.getElementById('notes-section').style.display = 'none';
             if (pushHistory) history.pushState({ view: 'kanban' }, '', '#kanban');
 
             // Load board configuration
@@ -1097,9 +1336,9 @@
         let graphShowNotebooks = true;
 
         async function loadGraph(pushHistory = true) {
+            teardownEditor();
             currentNotebook = null;
             currentNotePath = null;
-            document.getElementById('notes-section').style.display = 'none';
             if (pushHistory) history.pushState({ view: 'graph' }, '', '#graph');
 
             document.getElementById('content').innerHTML = `
@@ -1314,9 +1553,9 @@
         }
 
         async function loadHistory(pushHistory = true) {
+            teardownEditor();
             currentNotebook = null;
             currentNotePath = null;
-            document.getElementById('notes-section').style.display = 'none';
             if (pushHistory) history.pushState({ view: 'history' }, '', '#history');
 
             const historyData = await api('/history?type=' + historySortBy + '&limit=100');
@@ -1376,6 +1615,7 @@
         }
 
         async function doSearch(query) {
+            teardownEditor();
             if (!query.trim()) {
                 loadHome();
                 return;
@@ -1388,7 +1628,6 @@
             }
 
             const results = await api(searchUrl);
-            document.getElementById('notes-section').style.display = 'none';
 
             // Show scoped search indicator
             const scopeIndicator = currentNotebook
@@ -1425,6 +1664,7 @@
 
         // Handle browser back/forward
         window.addEventListener('popstate', (e) => {
+            teardownEditor();
             const state = e.state;
             if (!state || state.view === 'home') loadHome(false);
             else if (state.view === 'notebook') loadNotebook(state.name, false);
@@ -1436,8 +1676,44 @@
             else if (state.view === 'stream') loadStream(state.notebook, false);
         });
 
+        // Draggable sidebar width
+        function initSidebarResizer() {
+            const resizer = document.getElementById('sidebar-resizer');
+            const app = document.querySelector('.app');
+            if (!resizer || !app) return;
+            try {
+                const saved = localStorage.getItem('nb-web-sidebar-width');
+                if (saved) app.style.setProperty('--sidebar-w', saved + 'px');
+            } catch (e) {}
+            let dragging = false;
+            let lastWidth = 0;
+            resizer.addEventListener('mousedown', (e) => {
+                dragging = true;
+                document.body.style.userSelect = 'none';
+                document.body.style.cursor = 'col-resize';
+                e.preventDefault();
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (!dragging) return;
+                lastWidth = Math.max(180, Math.min(600, e.clientX));
+                app.style.setProperty('--sidebar-w', lastWidth + 'px');
+            });
+            window.addEventListener('mouseup', () => {
+                if (!dragging) return;
+                dragging = false;
+                document.body.style.userSelect = '';
+                document.body.style.cursor = '';
+                if (lastWidth) {
+                    try { localStorage.setItem('nb-web-sidebar-width', lastWidth); } catch (e) {}
+                }
+            });
+        }
+
         // Init - set initial state and load based on hash
-        loadNotebooks();
+        loadTreeExpanded();
+        initTreeEvents();
+        initSidebarResizer();
+        loadTree();
         const hash = location.hash;
         if (hash.startsWith('#notebook/')) {
             const name = decodeURIComponent(hash.slice(10));

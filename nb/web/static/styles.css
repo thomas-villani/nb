@@ -17,20 +17,23 @@
             line-height: 1.6;
         }
 
-        /* Layout */
-        .app { display: flex; min-height: 100vh; }
+        /* Layout - two-pane, resizable sidebar */
+        .app { display: flex; height: 100vh; overflow: hidden; }
         .sidebar {
-            width: 260px;
+            width: var(--sidebar-w, 280px);
+            min-width: 180px;
+            max-width: 600px;
             background: var(--surface);
             border-right: 1px solid var(--border);
             padding: 1rem;
             overflow-y: auto;
-            position: fixed;
             height: 100vh;
+            flex-shrink: 0;
         }
         .main {
-            margin-left: 260px;
             flex: 1;
+            height: 100vh;
+            overflow-y: auto;
             padding: 2rem 3rem;
         }
 
@@ -56,6 +59,76 @@
         .nav-link:hover { background: var(--border); color: var(--text); }
         .nav-link.active { background: var(--accent); color: var(--bg); }
         .note-list { max-height: 50vh; overflow-y: auto; }
+
+        /* File tree */
+        .nav-section-tree h3 {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .tree-refresh {
+            cursor: pointer;
+            color: var(--text-dim);
+            font-size: 0.9rem;
+            line-height: 1;
+        }
+        .tree-refresh:hover { color: var(--text); }
+        .tree { font-size: 0.85rem; }
+        .tree-row {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.18rem 0.4rem 0.18rem 0;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            user-select: none;
+        }
+        .tree-row:hover { background: var(--border); }
+        .tree-caret {
+            width: 0.9em;
+            flex-shrink: 0;
+            color: var(--text-dim);
+            text-align: center;
+            font-size: 0.7rem;
+        }
+        .tree-icon { flex-shrink: 0; font-size: 0.85em; }
+        .tree-label {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--text);
+        }
+        .tree-folder > .tree-label { color: var(--text-dim); }
+        .tree-count {
+            flex-shrink: 0;
+            color: var(--text-dim);
+            font-size: 0.72rem;
+            opacity: 0.7;
+        }
+        .tree-add {
+            flex-shrink: 0;
+            display: none;
+            color: var(--text-dim);
+            font-weight: 700;
+            padding: 0 0.3rem;
+            border-radius: 3px;
+        }
+        .tree-add:hover { color: var(--accent); background: var(--bg); }
+        .tree-row:hover .tree-add { display: inline; }
+        .tree-note.active { background: var(--accent); }
+        .tree-note.active .tree-label,
+        .tree-note.active .tree-icon { color: var(--bg); }
+
+        /* Sidebar resizer */
+        .resizer {
+            width: 5px;
+            flex-shrink: 0;
+            cursor: col-resize;
+            background: var(--border);
+        }
+        .resizer:hover { background: var(--accent); }
 
         /* Color indicator */
         .color-dot {
@@ -343,31 +416,89 @@
         .btn:hover { border-color: var(--accent); }
         .btn-primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 
-        /* Note editor */
-        .note-editor {
-            margin-top: 1rem;
+        /* Save status indicator (editor) */
+        .save-status {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            align-self: center;
         }
-        .note-editor textarea {
-            width: 100%;
-            min-height: 400px;
-            padding: 1rem;
+
+        /* EasyMDE editor (dark theme overrides) */
+        .EasyMDEContainer { color: var(--text); }
+        .EasyMDEContainer .CodeMirror {
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 0 0 6px 6px;
+            min-height: calc(100vh - 220px);
+        }
+        .EasyMDEContainer .CodeMirror-cursor { border-left-color: var(--text); }
+        .EasyMDEContainer .CodeMirror-selected { background: var(--border) !important; }
+        .EasyMDEContainer .CodeMirror-focused .CodeMirror-selected { background: var(--border) !important; }
+        .editor-toolbar {
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 6px;
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            opacity: 1;
+        }
+        .editor-toolbar button {
+            color: var(--text) !important;
+        }
+        .editor-toolbar button:hover,
+        .editor-toolbar button.active {
+            background: var(--border);
+            border-color: var(--border);
+        }
+        .editor-toolbar i.separator { border-color: var(--border); }
+        .editor-statusbar { color: var(--text-dim); }
+        .editor-preview,
+        .editor-preview-side {
+            background: var(--bg);
             color: var(--text);
-            font-family: monospace;
-            font-size: 0.9rem;
-            resize: vertical;
+            border-color: var(--border);
         }
-        .note-editor textarea:focus { outline: none; border-color: var(--accent); }
-        .editor-actions {
-            display: flex;
-            gap: 0.5rem;
-            margin-top: 0.75rem;
+        .editor-preview a, .editor-preview-side a { color: var(--accent); }
+        .editor-preview pre, .editor-preview-side pre {
+            background: var(--surface);
+            padding: 1rem;
+            border-radius: 6px;
         }
+        .CodeMirror-fullscreen, .editor-preview-active-side { z-index: 9; }
 
         /* Loading state */
         .loading { color: var(--text-dim); }
+
+        /* Section chips (notebook overview) */
+        .section-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin: 0.25rem 0 1rem;
+        }
+        .section-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.2rem 0.6rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .section-chip:hover { border-color: var(--accent); color: var(--text); }
+        .section-chip.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: var(--bg);
+        }
+        .section-chip .chip-count {
+            font-size: 0.72rem;
+            opacity: 0.75;
+        }
 
         /* Note table rows */
         .note-row { cursor: pointer; transition: background 0.15s; }
@@ -375,9 +506,17 @@
 
         /* Mobile */
         @media (max-width: 768px) {
-            .sidebar { width: 100%; height: auto; position: relative; border-right: none; border-bottom: 1px solid var(--border); }
-            .main { margin-left: 0; padding: 1rem; }
-            .app { flex-direction: column; }
+            .app { flex-direction: column; height: auto; overflow: visible; }
+            .sidebar {
+                width: 100%;
+                max-width: none;
+                height: auto;
+                max-height: 45vh;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+            }
+            .resizer { display: none; }
+            .main { height: auto; padding: 1rem; }
             .note-list { max-height: 30vh; }
         }
 

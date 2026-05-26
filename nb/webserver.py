@@ -180,6 +180,46 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
         body = self.rfile.read(content_length)
         return json.loads(body) if body else {}
 
+    def serve_static(self, path: str) -> None:
+        """Serve a file from nb/web/static (vendored libraries, fonts, etc.).
+
+        Guards against path traversal; only files under the static dir are served.
+        """
+        import mimetypes
+        from urllib.parse import unquote
+
+        rel = unquote(path[len("/static/") :])
+        static_root = (Path(__file__).parent / "web" / "static").resolve()
+        target = (static_root / rel).resolve()
+        try:
+            target.relative_to(static_root)
+        except ValueError:
+            self.send_response(403)
+            self.end_headers()
+            return
+        if not target.is_file():
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        ctype = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+        # Ensure correct types for assets mimetypes may miss on some platforms
+        suffix = target.suffix.lower()
+        if suffix == ".js":
+            ctype = "application/javascript"
+        elif suffix == ".css":
+            ctype = "text/css"
+        elif suffix == ".woff2":
+            ctype = "font/woff2"
+
+        data = target.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "max-age=86400")
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
@@ -189,6 +229,11 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
         # Serve main page
         if path == "/" or path == "/index.html":
             self.send_html(get_template())
+            return
+
+        # Serve bundled static assets (vendored JS/CSS/fonts) so the app works offline
+        if path.startswith("/static/"):
+            self.serve_static(path)
             return
 
         # API: List notebooks
@@ -515,6 +560,21 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
             self.send_json(result)
             return
 
+        # API: Hierarchical notebook -> section -> note tree
+        if path == "/api/tree":
+            from nb.core.tree import build_note_tree
+
+            tree = build_note_tree(config)
+            # Resolve notebook colors to hex (linked-only notebooks default to cyan,
+            # matching /api/notebooks behavior).
+            for nb in tree["notebooks"]:
+                if nb.get("isLinked") and not nb.get("color"):
+                    nb["color"] = "#39c5cf"
+                else:
+                    nb["color"] = get_color_hex(nb.get("color"))
+            self.send_json(tree)
+            return
+
         # API: Get note content
         if path == "/api/note":
             note_path_str = query.get("path", [None])[0]
@@ -574,6 +634,9 @@ class NBHandler(http.server.BaseHTTPRequestHandler):
                     "path": note_path_str,
                     "alias": note_alias,
                     "frontmatter": frontmatter_dict,
+                    # Linked/external notes use absolute paths; they are read-only in
+                    # the web editor (the POST handler rejects absolute paths).
+                    "isLinked": Path(note_path_str).is_absolute(),
                 }
             )
             return

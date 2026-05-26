@@ -4,13 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>nb</title>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/languages/python.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/languages/sql.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/languages/yaml.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark.min.css">
+    <!-- Libraries are vendored locally (served from /static/vendor) so the viewer works offline -->
+    <script src="/static/vendor/marked.min.js"></script>
+    <script src="/static/vendor/highlight.min.js"></script>
+    <script src="/static/vendor/highlight-python.min.js"></script>
+    <script src="/static/vendor/highlight-sql.min.js"></script>
+    <script src="/static/vendor/highlight-yaml.min.js"></script>
+    <script src="/static/vendor/d3.min.js"></script>
+    <link rel="stylesheet" href="/static/vendor/github-dark.min.css">
+    <link rel="stylesheet" href="/static/vendor/font-awesome/css/font-awesome.min.css">
+    <link rel="stylesheet" href="/static/vendor/easymde.min.css">
+    <script src="/static/vendor/easymde.min.js"></script>
     <style>/* STYLES_PLACEHOLDER */</style>
 </head>
 <body>
@@ -26,15 +30,15 @@
                 <a class="nav-link" onclick="loadKanban()">Kanban</a>
                 <a class="nav-link" onclick="loadGraph()">Graph</a>
             </div>
-            <div class="nav-section">
-                <h3>Notebooks</h3>
-                <div id="notebooks"></div>
-            </div>
-            <div class="nav-section" id="notes-section" style="display:none">
-                <h3>Notes</h3>
-                <div id="notes" class="note-list"></div>
+            <div class="nav-section nav-section-tree">
+                <h3>
+                    <span>Notebooks</span>
+                    <span class="tree-refresh" onclick="loadTree()" title="Refresh tree">⟳</span>
+                </h3>
+                <div id="tree" class="tree"></div>
             </div>
         </nav>
+        <div id="sidebar-resizer" class="resizer"></div>
         <main class="main">
             <div id="content"><p class="loading">Loading...</p></div>
         </main>

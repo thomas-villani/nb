@@ -338,6 +338,29 @@ class TestNBHandler:
 
         assert handler.response_code == 404
 
+    def test_serve_static_vendor_asset(self, mock_web_config: Config):
+        """Vendored libraries are served locally (so the viewer works offline)."""
+        handler = MockHandler("/static/vendor/marked.min.js")
+        handler.do_GET()
+
+        assert handler.response_code == 200
+        assert handler.response_headers["Content-Type"] == "application/javascript"
+        assert len(handler.wfile.getvalue()) > 0
+
+    def test_serve_static_path_traversal_blocked(self, mock_web_config: Config):
+        """Static serving must reject path traversal outside the static dir."""
+        handler = MockHandler("/static/../webserver.py")
+        handler.do_GET()
+
+        assert handler.response_code == 403
+
+    def test_serve_static_missing_file(self, mock_web_config: Config):
+        """Missing static files return 404."""
+        handler = MockHandler("/static/vendor/does-not-exist.js")
+        handler.do_GET()
+
+        assert handler.response_code == 404
+
 
 class TestNBHandlerPOST:
     """Tests for POST endpoints."""
@@ -480,19 +503,22 @@ class TestTemplate:
     """Tests for the HTML template."""
 
     def test_template_contains_key_elements(self):
-        """Test template has required HTML structure."""
+        """Test template has required HTML structure (libraries vendored locally)."""
         template = get_template()
         assert "<!DOCTYPE html>" in template
         assert "<title>nb</title>" in template
-        assert "marked.min.js" in template
-        assert "highlight.js" in template
+        assert "/static/vendor/marked.min.js" in template
+        assert "/static/vendor/highlight.min.js" in template
+        assert "/static/vendor/easymde.min.js" in template
+        # No external CDN dependencies (works offline)
+        assert "cdn.jsdelivr.net" not in template
+        assert "bootstrapcdn" not in template
 
     def test_template_has_navigation(self):
         """Test template has navigation elements."""
         template = get_template()
         assert 'class="sidebar"' in template
-        assert 'id="notebooks"' in template
-        assert 'id="notes"' in template
+        assert 'id="tree"' in template
         assert 'id="content"' in template
 
     def test_template_has_search(self):
