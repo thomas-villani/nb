@@ -91,7 +91,9 @@ class TestLinkAdd:
         self, cli_runner: CliRunner, mock_cli_config: Config
     ):
         """Test linking non-existent file."""
-        result = cli_runner.invoke(cli, ["link", "add", "/nonexistent/file.md", "projects"])
+        result = cli_runner.invoke(
+            cli, ["link", "add", "/nonexistent/file.md", "projects"]
+        )
         assert result.exit_code != 0
 
     def test_link_add_with_section(
@@ -239,9 +241,7 @@ class TestLinkSyncToggle:
         """Test disabling sync for a link."""
         ext_file = tmp_path / "disable.md"
         ext_file.write_text("# Disable\n")
-        cli_runner.invoke(
-            cli, ["link", "add", str(ext_file), "projects", "-a", "dis"]
-        )
+        cli_runner.invoke(cli, ["link", "add", str(ext_file), "projects", "-a", "dis"])
 
         result = cli_runner.invoke(cli, ["link", "disable-sync", "dis"])
         assert result.exit_code == 0
@@ -257,9 +257,7 @@ class TestLinkTodoToggle:
         """Test excluding todos from a link."""
         ext_file = tmp_path / "exclude.md"
         ext_file.write_text("# Exclude\n- [ ] Task\n")
-        cli_runner.invoke(
-            cli, ["link", "add", str(ext_file), "projects", "-a", "excl"]
-        )
+        cli_runner.invoke(cli, ["link", "add", str(ext_file), "projects", "-a", "excl"])
 
         result = cli_runner.invoke(cli, ["link", "exclude-todos", "excl"])
         assert result.exit_code == 0
@@ -272,7 +270,8 @@ class TestLinkTodoToggle:
         ext_file = tmp_path / "include.md"
         ext_file.write_text("# Include\n- [ ] Task\n")
         cli_runner.invoke(
-            cli, ["link", "add", str(ext_file), "projects", "-a", "incl", "--todo-exclude"]
+            cli,
+            ["link", "add", str(ext_file), "projects", "-a", "incl", "--todo-exclude"],
         )
 
         result = cli_runner.invoke(cli, ["link", "include-todos", "incl"])

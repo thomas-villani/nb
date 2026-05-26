@@ -321,12 +321,16 @@ def add_linked_note(
 
     # Auto-create section config if it doesn't exist
     if section:
-        existing_section = next((s for s in nb_config.sections if s.name == section), None)
+        existing_section = next(
+            (s for s in nb_config.sections if s.name == section), None
+        )
         if not existing_section:
             from nb.config.io import save_config as _save_config
             from nb.config.models import SectionConfig
 
-            nb_config.sections.append(SectionConfig(name=section, todo_exclude=todo_exclude))
+            nb_config.sections.append(
+                SectionConfig(name=section, todo_exclude=todo_exclude)
+            )
             _save_config(config)
 
     linked = LinkedNoteConfig(
@@ -346,7 +350,15 @@ def add_linked_note(
         INSERT OR REPLACE INTO linked_notes (alias, path, notebook, recursive, todo_exclude, sync, section)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (alias, str(path), notebook, int(recursive), int(todo_exclude), int(sync), section),
+        (
+            alias,
+            str(path),
+            notebook,
+            int(recursive),
+            int(todo_exclude),
+            int(sync),
+            section,
+        ),
     )
     db.commit()
 

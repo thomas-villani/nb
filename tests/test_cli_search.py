@@ -190,7 +190,6 @@ class TestGrepCommand:
         assert "api.md" not in result.output
 
 
-
 class TestSearchSectionFilter:
     """Tests for section filtering in search."""
 
@@ -201,14 +200,10 @@ class TestSearchSectionFilter:
         # Just verify the CLI accepts the options without "no such option" errors.
         # Actual search may fail without embeddings infrastructure, so we don't
         # assert exit_code == 0 -- we just verify the option is recognized.
-        result = cli_runner.invoke(
-            cli, ["search", "--keyword", "test", "-S", "docs"]
-        )
+        result = cli_runner.invoke(cli, ["search", "--keyword", "test", "-S", "docs"])
         assert "No such option" not in result.output
 
-        result = cli_runner.invoke(
-            cli, ["search", "--keyword", "test", "-xs", "docs"]
-        )
+        result = cli_runner.invoke(cli, ["search", "--keyword", "test", "-xs", "docs"])
         assert "No such option" not in result.output
 
 

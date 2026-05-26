@@ -79,7 +79,9 @@ class TestLinkedNoteConfig:
     """Tests for LinkedNoteConfig dataclass."""
 
     def test_basic(self):
-        linked = LinkedNoteConfig(path=Path("/docs/wiki"), alias="wiki", notebook="projects")
+        linked = LinkedNoteConfig(
+            path=Path("/docs/wiki"), alias="wiki", notebook="projects"
+        )
 
         assert linked.path == Path("/docs/wiki")
         assert linked.alias == "wiki"

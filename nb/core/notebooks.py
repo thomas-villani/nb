@@ -414,7 +414,9 @@ def merge_notebook(
 
     if conflicts:
         conflict_list = "\n  ".join(str(c) for c in conflicts[:10])
-        suffix = f"\n  ... and {len(conflicts) - 10} more" if len(conflicts) > 10 else ""
+        suffix = (
+            f"\n  ... and {len(conflicts) - 10} more" if len(conflicts) > 10 else ""
+        )
         raise FileExistsError(
             f"Destination conflicts ({len(conflicts)} files):\n  {conflict_list}{suffix}\n"
             "Use --force to overwrite."

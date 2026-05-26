@@ -668,7 +668,10 @@ def start_recording(
         )
         if mode in (RecordingMode.BOTH, RecordingMode.MIC_ONLY) and mic_device is None:
             mic_device = default_mic
-        if mode in (RecordingMode.BOTH, RecordingMode.SYSTEM_ONLY) and loopback_device is None:
+        if (
+            mode in (RecordingMode.BOTH, RecordingMode.SYSTEM_ONLY)
+            and loopback_device is None
+        ):
             loopback_device = default_loopback
 
     # Validate we have required devices

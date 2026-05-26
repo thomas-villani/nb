@@ -133,7 +133,9 @@ def link_add(
         )
         note_count = index_single_linked_note(linked.alias)
 
-        display_target = f"{linked.notebook}/{linked.section}" if linked.section else linked.notebook
+        display_target = (
+            f"{linked.notebook}/{linked.section}" if linked.section else linked.notebook
+        )
         console.print(f"[green]Linked:[/green] {linked.alias} -> {display_target}")
         console.print(f"[dim]Indexed {note_count} notes.[/dim]")
         if todo_exclude:

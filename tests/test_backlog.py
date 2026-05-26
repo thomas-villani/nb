@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import datetime
 
 from nb.core.ai.backlog import (
     BacklogConfig,
@@ -113,7 +113,9 @@ class TestDetectLightDay:
             ),  # 2 hours
         ]
         config = BacklogConfig(min_free_hours=2.0, max_urgent_items=5)
-        result = detect_light_day(blocks, overdue_count=3, due_today_count=2, config=config)
+        result = detect_light_day(
+            blocks, overdue_count=3, due_today_count=2, config=config
+        )
 
         assert result.is_light is True  # Now meets threshold
 
@@ -232,7 +234,9 @@ class TestScoreBacklogItem:
             is_in_progress=False,
         )
         # old: 30, new: 1+21=22
-        assert score_backlog_item(old_no_priority) > score_backlog_item(new_high_priority)
+        assert score_backlog_item(old_no_priority) > score_backlog_item(
+            new_high_priority
+        )
 
 
 class TestGetBacklogSuggestions:
@@ -361,7 +365,9 @@ class TestGetBacklogSuggestions:
         """Results sorted by score (highest first)."""
         old_no_priority = self._make_todo("old", age_days=20)
         new_high_priority = self._make_todo("new", age_days=1, priority=Priority.HIGH)
-        medium_age_medium_priority = self._make_todo("mid", age_days=10, priority=Priority.MEDIUM)
+        medium_age_medium_priority = self._make_todo(
+            "mid", age_days=10, priority=Priority.MEDIUM
+        )
         todos = [new_high_priority, old_no_priority, medium_age_medium_priority]
 
         result = get_backlog_suggestions(

@@ -108,8 +108,18 @@ def notebooks_list(verbose: bool) -> None:
 @notebooks_cmd.command("create")
 @click.argument("name")
 @click.option("--from", "from_path", help="External path to use as notebook")
-@click.option("--date-based", "-d", is_flag=True, help="Use daily date-based organization (one file per day)")
-@click.option("--weekly", "-w", is_flag=True, help="Use weekly organization (one file per week with daily sections)")
+@click.option(
+    "--date-based",
+    "-d",
+    is_flag=True,
+    help="Use daily date-based organization (one file per day)",
+)
+@click.option(
+    "--weekly",
+    "-w",
+    is_flag=True,
+    help="Use weekly organization (one file per week with daily sections)",
+)
 @click.option(
     "--todo-exclude", "-x", is_flag=True, help="Exclude from nb todo by default"
 )
@@ -134,7 +144,9 @@ def notebooks_create(
 
     # Validate mutually exclusive flags
     if date_based and weekly:
-        console.print("[red]Error:[/red] --date-based and --weekly are mutually exclusive")
+        console.print(
+            "[red]Error:[/red] --date-based and --weekly are mutually exclusive"
+        )
         raise SystemExit(1)
 
     # Determine date_based value
@@ -228,9 +240,18 @@ def notebooks_remove(name: str, force: bool) -> None:
 @notebooks_cmd.command("merge")
 @click.argument("source", shell_complete=complete_notebook)
 @click.argument("target", shell_complete=complete_notebook)
-@click.option("--section", "-s", help="Place notes into a subfolder/section in the target")
-@click.option("--dry-run", is_flag=True, help="Preview what would be moved without doing it")
-@click.option("--force", "-f", is_flag=True, help="Overwrite files if they already exist at destination")
+@click.option(
+    "--section", "-s", help="Place notes into a subfolder/section in the target"
+)
+@click.option(
+    "--dry-run", is_flag=True, help="Preview what would be moved without doing it"
+)
+@click.option(
+    "--force",
+    "-f",
+    is_flag=True,
+    help="Overwrite files if they already exist at destination",
+)
 @click.option(
     "--keep-source",
     is_flag=True,
@@ -270,7 +291,9 @@ def notebooks_merge(
         dest_desc = f"'{target}/'"
 
     if dry_run:
-        console.print(f"[dim]Dry run: previewing merge of '{source}' into {dest_desc}[/dim]\n")
+        console.print(
+            f"[dim]Dry run: previewing merge of '{source}' into {dest_desc}[/dim]\n"
+        )
 
     try:
         moves = merge_notebook(
@@ -294,10 +317,14 @@ def notebooks_merge(
     if dry_run:
         for src, dst in moves:
             console.print(f"  {src} -> [cyan]{dst}[/cyan]")
-        console.print(f"\n[dim]Would move {len(moves)} note(s). Run without --dry-run to apply.[/dim]")
+        console.print(
+            f"\n[dim]Would move {len(moves)} note(s). Run without --dry-run to apply.[/dim]"
+        )
         return
 
-    console.print(f"[green]Merged {len(moves)} note(s)[/green] from '{source}' into {dest_desc}")
+    console.print(
+        f"[green]Merged {len(moves)} note(s)[/green] from '{source}' into {dest_desc}"
+    )
 
     # Register the section in the target notebook's config
     if section:
@@ -309,7 +336,9 @@ def notebooks_merge(
 
         target_config = config.get_notebook(target)
         if target_config:
-            existing = next((s for s in target_config.sections if s.name == section), None)
+            existing = next(
+                (s for s in target_config.sections if s.name == section), None
+            )
             if existing:
                 if source_excluded:
                     existing.todo_exclude = True
@@ -322,12 +351,16 @@ def notebooks_merge(
 
             _save_config(config)
             if source_excluded:
-                console.print(f"[dim]Section '{section}' inherits todo_exclude from '{source}'.[/dim]")
+                console.print(
+                    f"[dim]Section '{section}' inherits todo_exclude from '{source}'.[/dim]"
+                )
 
         # Warn about linked notes that reference the source notebook
         from nb.core.links import list_linked_notes
 
-        linked = [ln for ln in list_linked_notes() if (ln.notebook or ln.alias) == source]
+        linked = [
+            ln for ln in list_linked_notes() if (ln.notebook or ln.alias) == source
+        ]
         if linked:
             aliases = ", ".join(ln.alias for ln in linked)
             console.print(

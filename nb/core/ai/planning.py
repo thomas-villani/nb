@@ -317,9 +317,12 @@ def gather_planning_context(
     due_today_todos = [t for t in todos if t.due_date and t.due_date.date() == today]
 
     # For light day detection, only consider today's availability (even for week horizon)
-    today_blocks = [
-        b for b in availability_blocks if b.start.date() == today
-    ] or availability_blocks[:1] if not availability_blocks else []
+    today_blocks = (
+        [b for b in availability_blocks if b.start.date() == today]
+        or availability_blocks[:1]
+        if not availability_blocks
+        else []
+    )
 
     # If no calendar, assume full work day available (8 hours)
     if not today_blocks and not calendar_events:

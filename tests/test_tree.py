@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nb.core.tree import ROOT_NOTEBOOK, build_note_tree
+from nb.core.tree import build_note_tree
 
 
 def _find(children, name, ntype):

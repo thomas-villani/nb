@@ -801,7 +801,10 @@ def _print_todo(
         )
         source_part = (
             _format_colored_todo_source(
-                t, source_width, max_section_len=max_section_len, hide_notebook=hide_notebook
+                t,
+                source_width,
+                max_section_len=max_section_len,
+                hide_notebook=hide_notebook,
             )
             if source_str
             else " " * source_width

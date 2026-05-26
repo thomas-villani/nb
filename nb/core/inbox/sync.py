@@ -253,7 +253,9 @@ def sync_clipped_items(
                             pass  # Non-fatal
 
             # Update metadata in database
-            if not dry_run and (result.tags_updated or result.note_updated or result.summary_pushed):
+            if not dry_run and (
+                result.tags_updated or result.note_updated or result.summary_pushed
+            ):
                 update_sync_metadata(item_id, new_tags, new_note)
 
                 # Re-index the note

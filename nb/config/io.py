@@ -244,7 +244,9 @@ def save_config(config: Config) -> None:
     notebooks_data = [_serialize_notebook(nb) for nb in config.notebooks]
 
     # Embeddings: all fields except api_key (use env var for security)
-    embeddings_data = _serialize_dataclass_fields(config.embeddings, exclude={"api_key"})
+    embeddings_data = _serialize_dataclass_fields(
+        config.embeddings, exclude={"api_key"}
+    )
 
     # Search: all fields except api_key (use env var for security)
     search_data = _serialize_dataclass_fields(config.search, exclude={"serper_api_key"})

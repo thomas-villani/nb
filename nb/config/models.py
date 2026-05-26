@@ -17,7 +17,9 @@ class SectionConfig:
     """
 
     name: str
-    todo_exclude: bool = False  # If True, exclude this section from `nb todo` by default
+    todo_exclude: bool = (
+        False  # If True, exclude this section from `nb todo` by default
+    )
 
 
 @dataclass
@@ -47,7 +49,11 @@ class NotebookConfig:
         - True/"daily" -> "daily" (one file per day)
         - "weekly" -> "weekly" (one file per week with daily sections)
         """
-        if self.date_based is False or self.date_based is None or self.date_based == "none":
+        if (
+            self.date_based is False
+            or self.date_based is None
+            or self.date_based == "none"
+        ):
             return "none"
         if self.date_based is True or self.date_based == "daily":
             return "daily"

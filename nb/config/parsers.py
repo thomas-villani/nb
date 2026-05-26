@@ -266,7 +266,9 @@ def _parse_raindrop_config(data: dict[str, Any] | None) -> RaindropConfig:
     collections: list[RaindropCollectionConfig] = []
     if "collections" in data:
         collections = [
-            _parse_raindrop_collection_config(c, default_auto_archive=global_auto_archive)
+            _parse_raindrop_collection_config(
+                c, default_auto_archive=global_auto_archive
+            )
             for c in data["collections"]
         ]
 

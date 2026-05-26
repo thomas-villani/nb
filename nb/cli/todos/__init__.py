@@ -332,7 +332,10 @@ def todo(
         from nb.core.links import list_linked_notes
 
         for ln in list_linked_notes():
-            if ln.section in all_section_args and ln.notebook not in effective_notebooks:
+            if (
+                ln.section in all_section_args
+                and ln.notebook not in effective_notebooks
+            ):
                 effective_notebooks.append(ln.notebook)
 
     # Resolve notes (supports "note::heading" syntax for markdown section filtering)

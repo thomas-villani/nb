@@ -181,9 +181,8 @@ def gather_standup_context(
     availability_blocks: list[AvailabilityBlock] = []
     if include_calendar:
         try:
-            from nb.core.calendar import get_today_events
-
             from nb.core.ai.planning import _compute_availability_blocks
+            from nb.core.calendar import get_today_events
 
             calendar_events = get_today_events()
             availability_blocks = _compute_availability_blocks(
