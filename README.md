@@ -1417,20 +1417,24 @@ nb web                    # Start server and open browser
 nb web --port 8080        # Custom port (default: 3000)
 nb web --no-open          # Start server without opening browser
 nb web -c                 # Include completed todos
+nb web -n projects        # Scope the viewer to a single notebook
 ```
 
 Features:
 - Browse notebooks and notes with notebook colors from config
+- **Tree navigation**: Open a notebook or section directly from the sidebar tree (the caret still toggles expand/collapse)
 - Create and edit notes directly in the browser
 - Markdown rendering with syntax highlighting for code blocks
+- **Note properties**: Frontmatter shown vertically, with list values rendered as bullet lists
 - Full-text search across all notes (with notebook scoping)
 - **Clickable links**: Wiki links `[[note]]` and internal markdown links navigate between notes
 - **Backlinks panel**: See which notes link to the current note
 - **Knowledge graph**: Interactive D3.js visualization of note connections
 - **Kanban board**: Drag-and-drop todo management with customizable columns
-- Todo management: add new todos, toggle completion, view by section
+- Todo management: add new todos, toggle completion, view by section, and open (with full path) each todo's source note
 - Todo sections: Overdue, In Progress, Due Today, Due This Week, Due Later, No Due Date
 - Sort todos by status, notebook, due date, priority, or created date
+- **Layout toggle**: Switch between full-width and centered reading-width
 - Dark theme, mobile responsive
 - Zero additional dependencies (stdlib HTTP server + CDN for markdown/highlighting/D3)
 

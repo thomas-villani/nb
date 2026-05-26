@@ -812,6 +812,7 @@ nb todo --delete-view work   # Delete saved view
 | `nb web --port 8080` | Use custom port |
 | `nb web --no-open` | Don't open browser |
 | `nb web --completed` | Show completed todos |
+| `nb web -n <notebook>` | Scope the viewer to a single notebook |
 
 ### Statistics
 
@@ -961,11 +962,14 @@ A modern dark-themed web UI accessible via `nb web`. Launches a local HTTP serve
 ### Features
 
 - **Notebook Browser**: Cards with color indicators and note counts
-- **Note Viewer**: Markdown rendering with syntax highlighting (GitHub dark theme)
+- **Sidebar Tree**: Open notebooks/sections from the tree (caret toggles expand/collapse); supports nested section filtering
+- **Note Viewer**: Markdown rendering with syntax highlighting (GitHub dark theme); vertical properties panel with list values as bullet lists
 - **Full-text Search**: Live search results as you type
-- **Todo Manager**: Status groups (Overdue, In Progress, Due Today, etc.)
+- **Todo Manager**: Status groups (Overdue, In Progress, Due Today, etc.); each todo links to and shows the path of its source note
 - **Note Editor**: Create and edit notes in-browser
 - **Todo Creation**: Add todos with metadata (@due, @priority, #tags)
+- **Notebook Scope**: `nb web -n <notebook>` limits the tree, notebook list and initial view to one notebook
+- **Layout Toggle**: Switch between full-width and centered reading-width (persisted in `localStorage`)
 
 ### API Endpoints
 
@@ -979,6 +983,7 @@ A modern dark-themed web UI accessible via `nb web`. Launches a local HTTP serve
 | `/api/todos/{id}/toggle` | POST | Toggle todo completion |
 | `/api/todos` | POST | Create new todo |
 | `/api/search` | GET | Search notes (query: `q`) |
+| `/api/startup` | GET | Startup info (notebook scope from `nb web -n`) |
 
 ### Tech Stack
 

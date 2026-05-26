@@ -1018,6 +1018,8 @@ Browse notebooks in a browser.
      - Don't open browser automatically
    * - ``-c, --completed``
      - Include completed todos
+   * - ``-n, --notebook NAME``
+     - Scope the viewer to a single notebook
 
 **Examples:**
 
@@ -1027,14 +1029,18 @@ Browse notebooks in a browser.
    nb web --port 8080          # Custom port
    nb web --no-open            # Don't open browser
    nb web -c                   # Include completed todos
+   nb web -n projects          # Show only the 'projects' notebook
 
 **Features:**
 
 - Browse notebooks and notes with colors
+- Open a notebook or section directly from the sidebar tree (the caret still toggles expand/collapse)
 - Create and edit notes in browser
 - Markdown rendering with syntax highlighting
+- Note properties (frontmatter) shown vertically, with list values as bullet lists
 - Full-text search
-- Todo management
+- Todo management, including a link to open (and the full path of) each todo's source note
+- Toggle between full-width and centered reading-width layouts
 - Dark theme, mobile responsive
 
 Press ``Ctrl+C`` to stop the server.
