@@ -34,6 +34,7 @@ Current:
 - [x] In `nb web` a clickable way to toggle full screen width vs with gutters
 - [ ] Need a way to archive notebooks
 - [ ] Automatically cross link notes from within a week, and set them linearly so they link the previous note in the notebook?
+- [ ] Need to add completion commands
 
 - [x] Need a command to see which notebooks/notes are todo_excluded
 
