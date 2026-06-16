@@ -16,7 +16,6 @@ from starlette.responses import FileResponse
 # nb/web/server/static.py -> nb/web
 _WEB_DIR = Path(__file__).parent.parent
 STATIC_ROOT = (_WEB_DIR / "static").resolve()
-DIST_ROOT = (_WEB_DIR / "dist").resolve()
 
 
 def serve_static_file(rel: str) -> Response:

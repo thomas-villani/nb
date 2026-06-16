@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from fastapi import FastAPI, Response
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 
 from nb.web.server.routers import (
     graph,
@@ -15,7 +14,7 @@ from nb.web.server.routers import (
     todos,
 )
 from nb.web.server.settings import AppSettings
-from nb.web.server.static import DIST_ROOT, serve_static_file
+from nb.web.server.static import serve_static_file
 
 
 def create_app(settings: AppSettings | None = None) -> FastAPI:
@@ -35,13 +34,6 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     app.include_router(todos.router)
     app.include_router(graph.router)
     app.include_router(history.router)
-
-    # Built SPA assets (base=/static/app/). Served for M4+; harmless until then.
-    # Registered before the catch-all /static route so it takes precedence.
-    if DIST_ROOT.is_dir():
-        app.mount(
-            "/static/app", StaticFiles(directory=DIST_ROOT, html=True), name="spa"
-        )
 
     @app.get("/", response_class=HTMLResponse)
     @app.get("/index.html", response_class=HTMLResponse)

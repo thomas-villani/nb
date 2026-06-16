@@ -2,13 +2,12 @@
 __pycache__/
 *.py[oc]
 build/
-/dist/
+dist/
 wheels/
 *.egg-info
 
-# Node / frontend build
+# Node
 node_modules/
-# Note: nb/web/dist (the committed Vite build output) is intentionally tracked.
 
 # Virtual environments
 .venv
