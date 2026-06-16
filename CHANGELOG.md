@@ -1,3 +1,34 @@
+# v0.6.7 - 2026-06-16
+
+Reworks `nb stream` from an interactive TUI into a simple paged console reader: notes render end-to-end as rich markdown through a scrolling pager (like `less`).
+
+## Changes
+
+- [0bb4cd9] Simplify `nb stream` to paged console output
+  - Default output is now rich markdown streamed end-to-end through a scrolling pager, with each note separated by a title rule and a metadata line (date, notebook, path, position)
+  - The interactive Wijjit TUI (keyboard navigation, in-app search/edit) has been removed
+  - `--no-pager` prints straight to the console; `--plain` disables markdown rendering
+  - Piped output is auto-detected (not a TTY) and emitted as plain text with no pager
+  - Default `--limit` lowered from 50 to 10, with a capped-result hint printed to stderr so pipes stay clean
+  - `-c`/`--continuous`/`--auto` is retained as a no-op for backwards compatibility (notes always stream end-to-end now)
+  - `nb search -i` Ctrl+O ("stream") now uses the new paged reader
+
+## Documentation
+
+- [c08ee5d] Update README and the technical overview for the paged `nb stream`, and correct the stale `nb search -i` keybinding table
+
+# v0.6.6 - 2026-05-26
+
+Patch release adding shell completion for note-reference arguments. No breaking changes.
+
+## New Features
+
+- [6e7b054] Add note/notebook shell completion for note-ref arguments
+  - New `complete_note_ref` completer suggests aliases, notebook drill-in entries (`work/`), and recent/matching notes as `notebook/stem`, capped at 50 candidates; with `-n/--notebook` it completes bare note names within that notebook
+  - Attached to `open`, `show`, `edit`, `alias`, `delete`, `where`, `mv`, `cp`, `pin`, `unpin`, `export`, `graph`, `related`, `links`/`backlinks`, and `attach --to`
+  - New "namespace" completion type maps to PowerShell `ProviderContainer` for clean notebook drill-in (no trailing space) in both `nb` and `nbt`
+  - Fixed `handle_powershell_completion`: the in-progress word was passed both in the args list and as `incomplete`, so partial input returned no candidates (also broke `-n pre<Tab>`)
+
 # v0.6.5 - 2026-05-26
 
 Patch release with several `nb web` enhancements: single-notebook scoping, tree-based navigation, a vertical properties panel, todo source links, and a layout width toggle. No breaking changes.
