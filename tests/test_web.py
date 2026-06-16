@@ -400,7 +400,7 @@ class TestTemplate:
         assert "<title>nb</title>" in template
         assert "/static/vendor/marked.min.js" in template
         assert "/static/vendor/highlight.min.js" in template
-        assert "/static/vendor/toastui-editor.min.js" in template
+        assert "/static/vendor/toastui-editor-all.min.js" in template
         assert "cdn.jsdelivr.net" not in template
         assert "bootstrapcdn" not in template
 

@@ -869,9 +869,13 @@
             else { el.textContent = ''; }
         }
 
-        // Re-assemble the full file (verbatim frontmatter + edited body).
+        // Re-assemble the full file: the frontmatter YAML is preserved verbatim
+        // (never edited via the WYSIWYG editor) and re-joined to the edited body
+        // with exactly one blank line, so spacing stays deterministic.
         function currentEditorContent() {
-            return editingFrontmatter + (tuiEditor ? tuiEditor.getMarkdown() : '');
+            const body = tuiEditor ? tuiEditor.getMarkdown() : '';
+            if (!editingFrontmatter) return body;
+            return editingFrontmatter.replace(/\s*$/, '') + '\n\n' + body;
         }
 
         // Tear down the active editor. Auto-saves unsaved changes (Obsidian-like)
