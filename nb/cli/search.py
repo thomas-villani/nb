@@ -7,7 +7,7 @@ from pathlib import Path
 import click
 
 from nb.cli.completion import complete_notebook, complete_tag
-from nb.cli.utils import console
+from nb.cli.utils import console, stderr_console
 from nb.config import get_config
 from nb.utils.hashing import make_note_id, normalize_path
 
@@ -657,13 +657,25 @@ def index_cmd(
 @click.option(
     "--by-date", is_flag=True, help="Sort by note date instead of modification time"
 )
-@click.option("--limit", "-l", default=50, help="Limit number of notes")
+@click.option(
+    "--limit", "-l", default=10, help="Limit number of notes (default: 10)"
+)
 @click.option(
     "--continuous",
     "--auto",
     "-c",
     is_flag=True,
-    help="Show all notes in continuous flow with dividers",
+    help="(Deprecated) Notes always stream end-to-end; kept for compatibility",
+)
+@click.option(
+    "--no-pager",
+    is_flag=True,
+    help="Print directly to the console instead of paging output",
+)
+@click.option(
+    "--plain",
+    is_flag=True,
+    help="Disable rich markdown rendering (plain text output)",
 )
 def stream_notes(
     notebook: str | None,
@@ -675,37 +687,31 @@ def stream_notes(
     by_date: bool,
     limit: int,
     continuous: bool,
+    no_pager: bool,
+    plain: bool,
 ) -> None:
-    """Browse notes interactively in a streaming view.
+    """Stream notes to the console, end-to-end with clear separators.
 
-    By default shows recently modified notes (most recent first).
-    When piped, outputs plain text without the TUI.
+    By default shows recently modified notes (most recent first), rendered
+    as rich markdown through a scrolling pager (like ``less``). All matching
+    notes are shown end-to-end with a separator between each.
 
-    Navigate through notes with keyboard controls:
-
-    \b
-    j/k            - Next/previous note
-    n/N or p       - Next/previous note (alternate)
-    g/G            - First/last note
-    /              - Search notes by title or content
-    ↑/↓            - Scroll within note (when focused)
-    e              - Edit current note (in-app)
-    E              - Edit in external editor
-    Tab            - Focus content area for scrolling
-    q              - Quit
+    Use ``--no-pager`` to print straight to the console, ``--plain`` to
+    disable rich rendering. Output is automatically plain text (no pager)
+    when piped.
 
     \b
     Examples:
       nb stream                      # Recently modified notes (default)
       nb stream --by-date            # Notes sorted by date
-      nb stream -c                   # Continuous flow with dividers
       nb stream -n daily             # Stream daily notes
       nb stream -w "last week"       # Last week's notes
       nb stream -w "this week"       # This week's notes
       nb stream -n daily -w "last 2 weeks"  # Daily notes from last 2 weeks
       nb stream --recent             # Recently viewed notes
       nb stream --recent -l 20       # Last 20 viewed notes
-      nb stream -c -w "this week"    # Continuous flow of this week
+      nb stream --no-pager           # Print directly to console
+      nb stream --plain              # Plain text (no markdown rendering)
       nb stream | head -100          # Pipe first 100 lines
 
     """
@@ -714,7 +720,7 @@ def stream_notes(
 
     from nb.index.db import get_db
     from nb.models import Note
-    from nb.tui.stream import run_note_stream
+    from nb.tui.stream import display_note_stream
     from nb.utils.dates import parse_date_range, parse_fuzzy_date
 
     config = get_config()
@@ -722,38 +728,29 @@ def stream_notes(
     # Check if output is piped (not a tty)
     is_piped = not sys.stdout.isatty()
 
+    # Piped output is always plain text with no pager
+    use_plain = plain or is_piped
+    use_pager = not no_pager and not is_piped
+
     # Check for mutually exclusive options
     if recent and by_date:
         console.print("[red]Cannot use both --recent and --by-date[/red]")
         raise SystemExit(1)
 
-    # Helper function to output notes to pipe
-    def output_notes_to_pipe(notes_list: list[Note]) -> None:
-        """Output notes as plain text to stdout (for piping)."""
-        for note in notes_list:
-            # Get full path
-            if note.path.is_absolute():
-                full_path = note.path
-            else:
-                full_path = config.notes_root / note.path
-
-            # Read content
-            try:
-                content = full_path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                content = "[Error reading file]"
-
-            # Output header
-            title = note.title or "Untitled"
-            date_str = note.date.strftime(config.date_format) if note.date else ""
-            notebook_str = f"[{note.notebook}]" if note.notebook else ""
-            print(f"# {title}")
-            if date_str or notebook_str:
-                print(f"{date_str} {notebook_str}".strip())
-            print(f"Path: {note.path}")
-            print("-" * 40)
-            print(content)
-            print("\n" + "=" * 60 + "\n")
+    def display(notes_list: list[Note]) -> None:
+        """Render notes to the console (rich or plain, paged or direct)."""
+        # Hint (to stderr, so pipes stay clean) when results are capped
+        if not is_piped and limit and len(notes_list) >= limit:
+            stderr_console.print(
+                f"[dim]Showing {len(notes_list)} notes (use -l to show more).[/dim]"
+            )
+        display_note_stream(
+            notes_list,
+            config.notes_root,
+            console,
+            plain=use_plain,
+            use_pager=use_pager,
+        )
 
     # Helper function to convert path/mtime data to Note objects
     def paths_to_notes(path_data: list[tuple]) -> list[Note]:
@@ -820,11 +817,7 @@ def stream_notes(
             console.print("[yellow]No notes found.[/yellow]")
             return
 
-        if is_piped:
-            output_notes_to_pipe(notes)
-        else:
-            console.print(f"[dim]Loading {len(notes)} notes...[/dim]")
-            run_note_stream(notes, config.notes_root, continuous=continuous)
+        display(notes)
         return
 
     # Handle --by-date mode or date filter options (when/since/until)
@@ -901,11 +894,7 @@ def stream_notes(
                 )
             )
 
-        if is_piped:
-            output_notes_to_pipe(notes)
-        else:
-            console.print(f"[dim]Loading {len(notes)} notes...[/dim]")
-            run_note_stream(notes, config.notes_root, continuous=continuous)
+        display(notes)
         return
 
     # Default: recently modified notes (most recent first)
@@ -924,8 +913,4 @@ def stream_notes(
         console.print("[yellow]No notes found.[/yellow]")
         return
 
-    if is_piped:
-        output_notes_to_pipe(notes)
-    else:
-        console.print(f"[dim]Loading {len(notes)} notes...[/dim]")
-        run_note_stream(notes, config.notes_root, continuous=continuous)
+    display(notes)

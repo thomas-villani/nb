@@ -57,7 +57,7 @@ def run_interactive_search(
         search_type: Search type (hybrid, vector, keyword).
 
     """
-    from nb.tui.stream import run_note_stream
+    from nb.tui.stream import display_note_stream
     from nb.utils.editor import open_in_editor
 
     config = get_config()
@@ -427,9 +427,11 @@ def run_interactive_search(
             date=None,  # Could parse from result.date if needed
         )
 
-        # Exit current TUI and launch stream
+        # Exit current TUI and display the note
         app.quit()
-        run_note_stream([note], config.notes_root, continuous=False)
+        from nb.cli.utils import console
+
+        display_note_stream([note], config.notes_root, console)
 
     # --- Navigation ---
 
