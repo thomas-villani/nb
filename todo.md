@@ -3,6 +3,8 @@ todo_exclude: true
 ---
 # nb-cli Development Todo
 
+- `nb stream` convert to real stream to stdout with markup instead, with optional simpler scrolling pager.
+
 
 # ISSUES:
 
