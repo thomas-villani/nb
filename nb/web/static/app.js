@@ -923,6 +923,7 @@
                 : `<button class="btn" onclick="enterEdit('${escapeJs(path)}')">Edit</button>`;
 
             document.getElementById('content').innerHTML = `
+                ${buildBreadcrumbs(path, note.title)}
                 <div class="header-actions">
                     ${editBtn}
                     <button class="btn" id="copyNoteBtn" onclick="copyNote()">Copy</button>
@@ -1949,8 +1950,50 @@
             applyContentWidth(reading);
         }
 
+        // ---- Theme toggle (dark/light) ----
+
+        function applyTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            const toggle = document.getElementById('themeToggle');
+            if (toggle) toggle.textContent = theme === 'light' ? '🌙 Dark theme' : '☀️ Light theme';
+        }
+
+        function initTheme() {
+            let theme = 'dark';  // default preserves the original dark look
+            try { theme = localStorage.getItem('nb-web-theme') || 'dark'; } catch (e) {}
+            applyTheme(theme);
+        }
+
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+            const next = current === 'light' ? 'dark' : 'light';
+            try { localStorage.setItem('nb-web-theme', next); } catch (e) {}
+            applyTheme(next);
+        }
+
+        // Build a clickable breadcrumb trail (Notebook › Section › Title) for a note.
+        function buildBreadcrumbs(path, title) {
+            const segs = (path || '').split('/');
+            const leaf = title || segs[segs.length - 1] || '';
+            // Linked/absolute notes (or bare files) just show the title.
+            if (!path || path.startsWith('/') || /^[A-Za-z]:/.test(path) || segs.length < 2) {
+                return `<div class="breadcrumbs"><span class="current">${escapeHtml(leaf)}</span></div>`;
+            }
+            const notebook = segs[0];
+            const sections = segs.slice(1, -1);
+            let crumbs = `<a onclick="loadNotebook('${escapeJs(notebook)}')">${escapeHtml(notebook)}</a>`;
+            let cum = '';
+            sections.forEach(s => {
+                cum = cum ? (cum + '/' + s) : s;
+                crumbs += `<span class="sep">›</span><a onclick="openNotebookSection('${escapeJs(notebook)}','${escapeJs(cum)}')">${escapeHtml(s)}</a>`;
+            });
+            crumbs += `<span class="sep">›</span><span class="current">${escapeHtml(leaf)}</span>`;
+            return `<div class="breadcrumbs">${crumbs}</div>`;
+        }
+
         // Init - set initial state and load based on hash
         async function init() {
+            initTheme();
             loadTreeExpanded();
             initTreeEvents();
             initSidebarResizer();
