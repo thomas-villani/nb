@@ -3,11 +3,17 @@ todo_exclude: true
 ---
 # nb-cli Development Todo
 
-- `nb stream` convert to real stream to stdout with markup instead, with optional simpler scrolling pager.
+- [x] `nb stream` convert to real stream to stdout with markup instead, with optional simpler scrolling pager.
 
+- [ ] improve `nb web`
+  - sort notebooks by date, especially daily/weekly notebooks
+  - More of a "notebook" interface, perhaps we borrow from notion a bit
+  - the wysiwyg editor is terrible
+  - probably need to shift from basic http server to something heavier and better (fastapi)
 
 # ISSUES:
 
+[fixed]
 ## Issue while running `nb index --force`:
 
 localvectordb.exceptions.EmbeddingError: Error retrieving embeddings: Client error '400 Bad Request' for url
