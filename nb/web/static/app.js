@@ -704,10 +704,11 @@
         }
 
         let currentNoteMarkdown = ''; // Store markdown for copy function
-        let mde = null;               // Active EasyMDE editor instance
-        let mdeDirty = false;         // Unsaved-changes flag
+        let tuiEditor = null;         // Active Toast UI Editor instance
+        let editorDirty = false;      // Unsaved-changes flag
         let editingPath = null;       // Path currently open in the editor
-        let mdeSaveHandler = null;    // window keydown handler (Ctrl/Cmd+S) while editing
+        let editingFrontmatter = '';  // Raw frontmatter block, preserved verbatim across edits
+        let editorSaveHandler = null; // window keydown handler (Ctrl/Cmd+S) while editing
 
         async function loadNote(path, pushHistory = true) {
             teardownEditor();
@@ -841,17 +842,21 @@
             }
         }
 
-        // ---- EasyMDE editor lifecycle ----
+        // ---- Toast UI Editor lifecycle ----
 
-        // Render markdown for the editor preview, stripping frontmatter and keeping
-        // the configured marked pipeline (wiki links + internal-link navigation).
-        function renderMarkdownWithLinks(plainText) {
-            let body = plainText;
-            if (body.startsWith('---')) {
-                const parts = body.split('---');
-                if (parts.length >= 3) body = parts.slice(2).join('---').trim();
-            }
-            return marked.parse(body);
+        // Split a raw note into its frontmatter block (kept verbatim) and body.
+        // The YAML frontmatter never round-trips through the WYSIWYG editor, so it
+        // can't be corrupted; we only edit the body and re-attach the block on save.
+        function splitFrontmatter(raw) {
+            const m = (raw || '').match(/^---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/);
+            if (m) return { fm: m[0], body: raw.slice(m[0].length) };
+            return { fm: '', body: raw || '' };
+        }
+
+        // Toast UI theme follows the app theme ('dark' needs the vendored dark CSS).
+        function getEditorTheme() {
+            return document.documentElement.getAttribute('data-theme') === 'light'
+                ? 'default' : 'dark';
         }
 
         function setSaveStatus(state, msg) {
@@ -864,26 +869,31 @@
             else { el.textContent = ''; }
         }
 
+        // Re-assemble the full file (verbatim frontmatter + edited body).
+        function currentEditorContent() {
+            return editingFrontmatter + (tuiEditor ? tuiEditor.getMarkdown() : '');
+        }
+
         // Tear down the active editor. Auto-saves unsaved changes (Obsidian-like)
         // so navigating away never loses edits.
         function teardownEditor() {
-            if (mde) {
-                if (mdeDirty && editingPath) {
-                    const content = mde.value();
+            if (tuiEditor) {
+                if (editorDirty && editingPath) {
                     api('/note', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ path: editingPath, content: content })
+                        body: JSON.stringify({ path: editingPath, content: currentEditorContent() })
                     });
                 }
-                try { mde.toTextArea(); } catch (e) {}
-                mde = null;
+                try { tuiEditor.destroy(); } catch (e) {}
+                tuiEditor = null;
             }
-            mdeDirty = false;
+            editorDirty = false;
             editingPath = null;
-            if (mdeSaveHandler) {
-                window.removeEventListener('keydown', mdeSaveHandler);
-                mdeSaveHandler = null;
+            editingFrontmatter = '';
+            if (editorSaveHandler) {
+                window.removeEventListener('keydown', editorSaveHandler);
+                editorSaveHandler = null;
             }
         }
 
@@ -896,43 +906,52 @@
             const note = await api('/note?path=' + encodeURIComponent(path));
             if (note.isLinked) { loadNote(path); return; }  // safety: linked notes are read-only
 
+            const split = splitFrontmatter(note.content);
+            editingFrontmatter = split.fm;
+
             document.getElementById('content').innerHTML = `
                 <div class="header-actions">
                     <button class="btn btn-primary" onclick="saveNote('${escapeJs(path)}')">Save</button>
                     <button class="btn" onclick="exitEdit('${escapeJs(path)}')">Done</button>
                     <span id="saveStatus" class="save-status"></span>
                 </div>
-                <textarea id="mdeArea"></textarea>
+                ${editingFrontmatter ? '<p class="editor-fm-note">Frontmatter is preserved as-is and kept out of the editor.</p>' : ''}
+                <div id="tuiEditor"></div>
             `;
-            const ta = document.getElementById('mdeArea');
-            ta.value = note.content;
 
-            mde = new EasyMDE({
-                element: ta,
+            tuiEditor = new toastui.Editor({
+                el: document.getElementById('tuiEditor'),
+                initialValue: split.body,
+                initialEditType: 'wysiwyg',
+                previewStyle: 'vertical',
+                height: 'calc(100vh - 140px)',
+                usageStatistics: false,
                 autofocus: true,
-                spellChecker: false,
-                autoDownloadFontAwesome: false,  // FontAwesome is vendored locally
-                previewRender: (plainText) => renderMarkdownWithLinks(plainText),
-                toolbar: ['bold', 'italic', 'heading', '|', 'quote', 'unordered-list', 'ordered-list', '|',
-                          'link', 'image', 'code', 'table', '|', 'preview', 'side-by-side', 'fullscreen', '|', 'guide'],
-                status: ['lines', 'words'],
+                theme: getEditorTheme(),
+                toolbarItems: [
+                    ['heading', 'bold', 'italic', 'strike'],
+                    ['hr', 'quote'],
+                    ['ul', 'ol', 'task', 'indent', 'outdent'],
+                    ['table', 'link'],
+                    ['code', 'codeblock'],
+                ],
             });
-            mdeDirty = false;
-            mde.codemirror.on('change', () => { mdeDirty = true; setSaveStatus('unsaved'); });
+            editorDirty = false;
+            tuiEditor.on('change', () => { editorDirty = true; setSaveStatus('unsaved'); });
 
             // Ctrl/Cmd+S → save (prevent the browser save dialog)
-            mdeSaveHandler = (e) => {
+            editorSaveHandler = (e) => {
                 if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
                     e.preventDefault();
                     saveNote(path);
                 }
             };
-            window.addEventListener('keydown', mdeSaveHandler);
+            window.addEventListener('keydown', editorSaveHandler);
         }
 
         async function saveNote(path) {
-            if (!mde) return;
-            const content = mde.value();
+            if (!tuiEditor) return;
+            const content = currentEditorContent();
             setSaveStatus('saving');
             const res = await api('/note', {
                 method: 'POST',
@@ -940,7 +959,7 @@
                 body: JSON.stringify({ path: path, content: content })
             });
             if (res && res.error) { setSaveStatus('error', res.error); return; }
-            mdeDirty = false;
+            editorDirty = false;
             setSaveStatus('saved');
         }
 

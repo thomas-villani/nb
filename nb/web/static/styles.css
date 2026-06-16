@@ -452,48 +452,19 @@
             align-self: center;
         }
 
-        /* EasyMDE editor (dark theme overrides) */
-        .EasyMDEContainer { color: var(--text); }
-        .EasyMDEContainer .CodeMirror {
-            background: var(--surface);
-            color: var(--text);
+        /* Toast UI Editor: the vendored dark theme handles most styling; round the
+           container to match the app and give a small note above the editor. */
+        .editor-fm-note {
+            font-size: 0.78rem;
+            color: var(--text-dim);
+            margin: 0 0 0.5rem;
+        }
+        #tuiEditor {
             border: 1px solid var(--border);
-            border-radius: 0 0 6px 6px;
-            min-height: calc(100vh - 220px);
-        }
-        .EasyMDEContainer .CodeMirror-cursor { border-left-color: var(--text); }
-        .EasyMDEContainer .CodeMirror-selected { background: var(--border) !important; }
-        .EasyMDEContainer .CodeMirror-focused .CodeMirror-selected { background: var(--border) !important; }
-        .editor-toolbar {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-bottom: none;
-            border-radius: 6px 6px 0 0;
-            opacity: 1;
-        }
-        .editor-toolbar button {
-            color: var(--text) !important;
-        }
-        .editor-toolbar button:hover,
-        .editor-toolbar button.active {
-            background: var(--border);
-            border-color: var(--border);
-        }
-        .editor-toolbar i.separator { border-color: var(--border); }
-        .editor-statusbar { color: var(--text-dim); }
-        .editor-preview,
-        .editor-preview-side {
-            background: var(--bg);
-            color: var(--text);
-            border-color: var(--border);
-        }
-        .editor-preview a, .editor-preview-side a { color: var(--accent); }
-        .editor-preview pre, .editor-preview-side pre {
-            background: var(--surface);
-            padding: 1rem;
             border-radius: 6px;
+            overflow: hidden;
         }
-        .CodeMirror-fullscreen, .editor-preview-active-side { z-index: 9; }
+        .toastui-editor-defaultUI { border-radius: 6px; }
 
         /* Loading state */
         .loading { color: var(--text-dim); }
