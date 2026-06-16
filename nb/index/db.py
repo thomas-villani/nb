@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -384,12 +385,18 @@ class Database:
     def __init__(self, path: Path):
         self.path = path
         self._conn: sqlite3.Connection | None = None
+        # Re-entrant lock serializing access to the single shared connection.
+        # The web viewer (FastAPI/uvicorn) dispatches request handlers across a
+        # threadpool, so the connection is opened with check_same_thread=False
+        # and every statement is guarded by this lock to keep one-writer-at-a-time
+        # semantics. The CLI is single-threaded, so the lock is uncontended there.
+        self._lock = threading.RLock()
 
     def connect(self) -> sqlite3.Connection:
         """Get or create a database connection."""
         if self._conn is None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            self._conn = sqlite3.connect(self.path)
+            self._conn = sqlite3.connect(self.path, check_same_thread=False)
             self._conn.row_factory = sqlite3.Row
             # Enable foreign keys
             self._conn.execute("PRAGMA foreign_keys = ON")
@@ -404,34 +411,42 @@ class Database:
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
         """Context manager for database transactions."""
-        conn = self.connect()
-        try:
-            yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
+        # Hold the lock for the whole transaction so interleaved statements from
+        # another thread can't land between this transaction's writes and commit.
+        with self._lock:
+            conn = self.connect()
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
 
     def execute(self, sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Cursor:
         """Execute a SQL statement."""
-        return self.connect().execute(sql, params)
+        with self._lock:
+            return self.connect().execute(sql, params)
 
     def executemany(self, sql: str, params: list[tuple[Any, ...]]) -> None:
         """Execute a SQL statement for multiple parameter sets."""
-        self.connect().executemany(sql, params)
+        with self._lock:
+            self.connect().executemany(sql, params)
 
     def fetchone(self, sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
         """Execute a query and fetch one row."""
-        return self.execute(sql, params).fetchone()
+        with self._lock:
+            return self.connect().execute(sql, params).fetchone()
 
     def fetchall(self, sql: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
         """Execute a query and fetch all rows."""
-        return self.execute(sql, params).fetchall()
+        with self._lock:
+            return self.connect().execute(sql, params).fetchall()
 
     def commit(self) -> None:
         """Commit the current transaction."""
-        if self._conn is not None:
-            self._conn.commit()
+        with self._lock:
+            if self._conn is not None:
+                self._conn.commit()
 
 
 def get_schema_version(db: Database) -> int:

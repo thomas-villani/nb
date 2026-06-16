@@ -1,15 +1,13 @@
-"""Tests for the web viewer module."""
+"""Tests for the web viewer (FastAPI backend)."""
 
 from __future__ import annotations
 
-import io
-import json
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
+from fastapi.testclient import TestClient
 
 from nb import config as config_module
 from nb.cli import cli
@@ -18,7 +16,7 @@ from nb.config import Config, EmbeddingsConfig, NotebookConfig
 from nb.index.db import reset_db
 from nb.index.search import reset_search
 from nb.web import get_template
-from nb.webserver import NBHandler
+from nb.web.server import AppSettings, create_app
 
 
 @pytest.fixture
@@ -47,231 +45,153 @@ def web_config(tmp_path: Path):
         time_format="%H:%M",
     )
 
-    # Create notebook directories
     for nb in cfg.notebooks:
         if not nb.is_external:
             (notes_root / nb.name).mkdir(exist_ok=True)
 
     yield cfg
 
-    # Cleanup: reset config and database singletons to avoid test interference
     config_module.reset_config()
     reset_db()
 
 
 @pytest.fixture
 def mock_web_config(web_config: Config, monkeypatch: pytest.MonkeyPatch):
-    """Mock get_config() for web tests.
+    """Install ``web_config`` as the active nb configuration for the test.
 
-    This patches get_config in BOTH nb.config AND nb.cli.utils to ensure proper
-    isolation. CLI modules import get_config at module level, so we must patch
-    the local reference in each module that uses it.
+    The web routers read the ``nb.config`` singleton on each request, so setting
+    ``_config`` (and patching ``get_config`` for CLI modules that bind it early)
+    is enough to isolate the test.
     """
-    # Reset any cached singletons before test
     reset_search()
     config_module.reset_config()
     reset_db()
 
-    # Patch get_config in all modules that import it directly
-    from nb import webserver
-
     monkeypatch.setattr(config_module, "_config", web_config)
     monkeypatch.setattr(config_module, "get_config", lambda: web_config)
     monkeypatch.setattr(cli_utils_module, "get_config", lambda: web_config)
-    monkeypatch.setattr(webserver, "get_config", lambda: web_config)
     return web_config
 
 
-class MockRequest:
-    """Mock HTTP request for testing."""
+@pytest.fixture(autouse=True)
+def _no_background_reindex(monkeypatch: pytest.MonkeyPatch):
+    """Stop POST /api/note from spawning a real reindex thread.
 
-    def __init__(self, path: str):
-        self.path = path
+    The save handler reindexes in a daemon thread; left running it races with
+    test teardown (config/db singletons get reset out from under it), making the
+    suite flaky. Tests here don't assert on indexing, so no-op it.
+    """
+    monkeypatch.setattr(
+        "nb.index.scanner.index_note_threadsafe",
+        lambda *args, **kwargs: None,
+    )
 
-    def makefile(self, *args: Any, **kwargs: Any) -> io.BytesIO:
-        return io.BytesIO()
+
+def make_client(settings: AppSettings | None = None) -> TestClient:
+    """Build a TestClient over a fresh app with the given settings."""
+    return TestClient(create_app(settings))
 
 
-class MockHandler(NBHandler):
-    """Mock handler that captures responses."""
-
-    def __init__(self, path: str):
-        self.path = path
-        self.response_code: int | None = None
-        self.response_headers: dict[str, str] = {}
-        self.response_body: bytes = b""
-        self._headers_buffer: list[bytes] = []
-        self._body: bytes = b""
-
-        # Mock request/connection
-        self.request = MockRequest(path)
-        self.client_address = ("127.0.0.1", 12345)
-        self.server = MagicMock()
-        self.requestline = f"GET {path} HTTP/1.1"
-        self.command = "GET"
-        self.request_version = "HTTP/1.1"
-
-        # Buffer for response
-        self.wfile = io.BytesIO()
-        self.rfile = io.BytesIO()
-
-        # Mock headers
-        self.headers = MagicMock()
-        self.headers.get = lambda key, default=None: (
-            str(len(self._body)) if key == "Content-Length" else default
-        )
-
-    def set_body(self, data: dict) -> None:
-        """Set JSON body for POST requests."""
-        self._body = json.dumps(data).encode()
-        self.rfile = io.BytesIO(self._body)
-
-    def send_response(self, code: int, message: str | None = None) -> None:
-        self.response_code = code
-
-    def send_header(self, keyword: str, value: str) -> None:
-        self.response_headers[keyword] = value
-
-    def end_headers(self) -> None:
-        pass
-
-    def log_message(self, format: str, *args: object) -> None:
-        pass
-
-    def get_response_json(self) -> Any:
-        self.wfile.seek(0)
-        return json.loads(self.wfile.read().decode())
-
-    def get_response_html(self) -> str:
-        self.wfile.seek(0)
-        return self.wfile.read().decode()
+@pytest.fixture
+def client(mock_web_config: Config) -> TestClient:
+    """A TestClient with default settings (no scope, completed hidden)."""
+    return make_client()
 
 
 class TestWebCommand:
     """Tests for the web CLI command."""
 
     def test_web_command_help(self, cli_runner: CliRunner):
-        """Test that web command shows help."""
         result = cli_runner.invoke(cli, ["web", "--help"])
-
         assert result.exit_code == 0
         assert "Launch web viewer" in result.output
         assert "--port" in result.output
         assert "--no-open" in result.output
 
     def test_web_command_registered(self, cli_runner: CliRunner):
-        """Test that web command is in the main help."""
         result = cli_runner.invoke(cli, ["--help"])
-
         assert result.exit_code == 0
         assert "web" in result.output
 
 
-class TestNBHandler:
-    """Tests for the web request handler."""
+class TestGetEndpoints:
+    """Tests for GET endpoints."""
 
-    def test_serve_index_html(self, mock_web_config: Config):
-        """Test serving the main HTML template."""
-        handler = MockHandler("/")
-        handler.do_GET()
+    def test_serve_index_html(self, client: TestClient):
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/html")
+        assert "<!DOCTYPE html>" in resp.text
+        assert "<title>nb</title>" in resp.text
 
-        assert handler.response_code == 200
-        assert handler.response_headers["Content-Type"] == "text/html"
-        html = handler.get_response_html()
-        assert "<!DOCTYPE html>" in html
-        assert "<title>nb</title>" in html
+    def test_serve_index_html_explicit(self, client: TestClient):
+        resp = client.get("/index.html")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/html")
 
-    def test_serve_index_html_explicit(self, mock_web_config: Config):
-        """Test serving /index.html."""
-        handler = MockHandler("/index.html")
-        handler.do_GET()
-
-        assert handler.response_code == 200
-        assert handler.response_headers["Content-Type"] == "text/html"
-
-    def test_api_notebooks_empty(self, mock_web_config: Config):
-        """Test /api/notebooks with no notes."""
-        handler = MockHandler("/api/notebooks")
-        handler.do_GET()
-
-        assert handler.response_code == 200
-        assert handler.response_headers["Content-Type"] == "application/json"
-        data = handler.get_response_json()
+    def test_api_notebooks_empty(self, client: TestClient):
+        resp = client.get("/api/notebooks")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("application/json")
+        data = resp.json()
         assert isinstance(data, list)
-        # Should have 2 notebooks (daily and projects)
         assert len(data) == 2
         names = [nb["name"] for nb in data]
         assert "daily" in names
         assert "projects" in names
-        # All should have 0 notes
         for nb in data:
             assert nb["count"] == 0
 
-    def test_api_notebooks_with_notes(self, mock_web_config: Config):
-        """Test /api/notebooks with some notes."""
-        # Create a test note
+    def test_api_notebooks_with_notes(
+        self, client: TestClient, mock_web_config: Config
+    ):
         note_path = mock_web_config.notes_root / "projects" / "test-note.md"
         note_path.write_text("# Test Note\n\nSome content.", encoding="utf-8")
 
-        handler = MockHandler("/api/notebooks")
-        handler.do_GET()
-
-        data = handler.get_response_json()
+        data = client.get("/api/notebooks").json()
         projects = next(nb for nb in data if nb["name"] == "projects")
         assert projects["count"] == 1
 
-    def test_api_notebook_notes(self, mock_web_config: Config):
-        """Test /api/notebooks/<name> endpoint."""
-        # Create test notes
+    def test_api_notebook_notes(self, client: TestClient, mock_web_config: Config):
         note_path = mock_web_config.notes_root / "projects" / "test-note.md"
         note_path.write_text(
             "---\ndate: 2025-11-28\n---\n\n# Test Note\n\nContent.", encoding="utf-8"
         )
 
-        handler = MockHandler("/api/notebooks/projects")
-        handler.do_GET()
-
-        assert handler.response_code == 200
-        data = handler.get_response_json()
+        resp = client.get("/api/notebooks/projects")
+        assert resp.status_code == 200
+        data = resp.json()
         assert len(data) == 1
         assert data[0]["title"] == "Test Note"
         assert data[0]["date"] == "2025-11-28"
         assert "test-note.md" in data[0]["path"]
 
-    def test_api_note_content(self, mock_web_config: Config):
-        """Test /api/note?path= endpoint."""
-        # Create a test note
+    def test_api_note_content(self, client: TestClient, mock_web_config: Config):
         note_content = "---\ndate: 2025-11-28\n---\n\n# My Note\n\nHello world!"
         note_path = mock_web_config.notes_root / "projects" / "my-note.md"
         note_path.write_text(note_content, encoding="utf-8")
 
-        handler = MockHandler("/api/note?path=projects/my-note.md")
-        handler.do_GET()
-
-        assert handler.response_code == 200
-        data = handler.get_response_json()
+        resp = client.get("/api/note", params={"path": "projects/my-note.md"})
+        assert resp.status_code == 200
+        data = resp.json()
         assert data["title"] == "My Note"
         assert data["path"] == "projects/my-note.md"
         assert "Hello world!" in data["content"]
 
-    def test_api_note_missing_path(self, mock_web_config: Config):
-        """Test /api/note without path parameter."""
-        handler = MockHandler("/api/note")
-        handler.do_GET()
-
-        data = handler.get_response_json()
+    def test_api_note_missing_path(self, client: TestClient):
+        data = client.get("/api/note").json()
         assert data["error"] == "Missing path"
 
-    def test_api_note_not_found(self, mock_web_config: Config):
-        """Test /api/note with non-existent file."""
-        handler = MockHandler("/api/note?path=does-not-exist.md")
-        handler.do_GET()
-
-        data = handler.get_response_json()
+    def test_api_note_not_found(self, client: TestClient):
+        data = client.get("/api/note", params={"path": "does-not-exist.md"}).json()
         assert data["error"] == "Not found"
 
-    def test_api_search(self, mock_web_config: Config):
-        """Test /api/search endpoint."""
+    def test_api_note_path_traversal_blocked(self, client: TestClient):
+        resp = client.get("/api/note", params={"path": "../../etc/passwd"})
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "Invalid path"
+
+    def test_api_search(self, client: TestClient):
         mock_result = MagicMock()
         mock_result.path = "projects/test.md"
         mock_result.title = "Test Note"
@@ -279,27 +199,18 @@ class TestNBHandler:
 
         with patch("nb.index.search.get_search") as mock_search:
             mock_search.return_value.search.return_value = [mock_result]
-
-            handler = MockHandler("/api/search?q=test")
-            handler.do_GET()
-
-            assert handler.response_code == 200
-            data = handler.get_response_json()
+            resp = client.get("/api/search", params={"q": "test"})
+            assert resp.status_code == 200
+            data = resp.json()
             assert len(data) == 1
             assert data[0]["path"] == "projects/test.md"
             assert data[0]["title"] == "Test Note"
             assert data[0]["snippet"] == "Some snippet text"
 
-    def test_api_search_empty_query(self, mock_web_config: Config):
-        """Test /api/search with empty query."""
-        handler = MockHandler("/api/search?q=")
-        handler.do_GET()
+    def test_api_search_empty_query(self, client: TestClient):
+        assert client.get("/api/search", params={"q": ""}).json() == []
 
-        data = handler.get_response_json()
-        assert data == []
-
-    def test_api_todos(self, mock_web_config: Config):
-        """Test /api/todos endpoint."""
+    def test_api_todos(self, client: TestClient):
         from datetime import date
 
         from nb.models import Priority, Todo, TodoSource, TodoStatus
@@ -318,177 +229,125 @@ class TestNBHandler:
 
         with patch("nb.index.todos_repo.get_sorted_todos") as mock_get_todos:
             mock_get_todos.return_value = [mock_todo]
-
-            handler = MockHandler("/api/todos")
-            handler.do_GET()
-
-            assert handler.response_code == 200
-            data = handler.get_response_json()
+            resp = client.get("/api/todos")
+            assert resp.status_code == 200
+            data = resp.json()
             assert len(data) == 1
             assert data[0]["id"] == "abc12345"
             assert data[0]["content"] == "Test todo item"
             assert data[0]["due"] == "2025-12-01"
             assert data[0]["priority"] == 1
             assert data[0]["status"] == "pending"
-            # Source note path is exposed so the UI can open/show it.
             assert data[0]["path"] == "projects/test.md"
 
-    def test_api_startup_no_scope(self, mock_web_config: Config):
-        """/api/startup reports no scope by default."""
-        import nb.webserver as webserver
-
-        webserver._scope_notebook = None
-        handler = MockHandler("/api/startup")
-        handler.do_GET()
-
-        assert handler.response_code == 200
-        assert handler.get_response_json() == {"scopeNotebook": None}
+    def test_api_startup_no_scope(self, client: TestClient):
+        resp = client.get("/api/startup")
+        assert resp.status_code == 200
+        assert resp.json() == {"scopeNotebook": None}
 
     def test_api_startup_with_scope(self, mock_web_config: Config):
-        """/api/startup reports the scoped notebook when one is set."""
-        import nb.webserver as webserver
-
-        webserver._scope_notebook = "projects"
-        try:
-            handler = MockHandler("/api/startup")
-            handler.do_GET()
-
-            assert handler.response_code == 200
-            assert handler.get_response_json() == {"scopeNotebook": "projects"}
-        finally:
-            webserver._scope_notebook = None
+        scoped = make_client(AppSettings(scope_notebook="projects"))
+        resp = scoped.get("/api/startup")
+        assert resp.status_code == 200
+        assert resp.json() == {"scopeNotebook": "projects"}
 
     def test_api_notebooks_scoped(self, mock_web_config: Config):
-        """When scoped, /api/notebooks returns only the scoped notebook."""
-        import nb.webserver as webserver
-
         root = mock_web_config.notes_root
         for notebook in ("projects", "work"):
             (root / notebook).mkdir(exist_ok=True)
             (root / notebook / "n1.md").write_text("# N1", encoding="utf-8")
 
-        webserver._scope_notebook = "projects"
-        try:
-            handler = MockHandler("/api/notebooks")
-            handler.do_GET()
+        scoped = make_client(AppSettings(scope_notebook="projects"))
+        names = {nb["name"] for nb in scoped.get("/api/notebooks").json()}
+        assert names == {"projects"}
 
-            assert handler.response_code == 200
-            names = {nb["name"] for nb in handler.get_response_json()}
-            assert names == {"projects"}
-        finally:
-            webserver._scope_notebook = None
+    def test_404_unknown_path(self, client: TestClient):
+        assert client.get("/unknown/path").status_code == 404
 
-    def test_404_unknown_path(self, mock_web_config: Config):
-        """Test 404 for unknown paths."""
-        handler = MockHandler("/unknown/path")
-        handler.do_GET()
+    def test_serve_static_vendor_asset(self, client: TestClient):
+        resp = client.get("/static/vendor/marked.min.js")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("application/javascript")
+        assert len(resp.content) > 0
 
-        assert handler.response_code == 404
+    def test_serve_static_path_traversal_blocked(self):
+        # httpx normalizes ".." in the URL, so exercise the guard directly.
+        from nb.web.server.static import serve_static_file
 
-    def test_serve_static_vendor_asset(self, mock_web_config: Config):
-        """Vendored libraries are served locally (so the viewer works offline)."""
-        handler = MockHandler("/static/vendor/marked.min.js")
-        handler.do_GET()
+        assert serve_static_file("../webserver.py").status_code == 403
 
-        assert handler.response_code == 200
-        assert handler.response_headers["Content-Type"] == "application/javascript"
-        assert len(handler.wfile.getvalue()) > 0
-
-    def test_serve_static_path_traversal_blocked(self, mock_web_config: Config):
-        """Static serving must reject path traversal outside the static dir."""
-        handler = MockHandler("/static/../webserver.py")
-        handler.do_GET()
-
-        assert handler.response_code == 403
-
-    def test_serve_static_missing_file(self, mock_web_config: Config):
-        """Missing static files return 404."""
-        handler = MockHandler("/static/vendor/does-not-exist.js")
-        handler.do_GET()
-
-        assert handler.response_code == 404
+    def test_serve_static_missing_file(self, client: TestClient):
+        resp = client.get("/static/vendor/does-not-exist.js")
+        assert resp.status_code == 404
 
 
-class TestNBHandlerPOST:
+class TestPostEndpoints:
     """Tests for POST endpoints."""
 
-    def test_create_note(self, mock_web_config: Config):
-        """Test POST /api/note to create a new note."""
-        handler = MockHandler("/api/note")
-        handler.set_body(
-            {
+    def test_create_note(self, client: TestClient, mock_web_config: Config):
+        resp = client.post(
+            "/api/note",
+            json={
                 "path": "projects/new-note.md",
                 "content": "# New Note\n\nContent",
                 "create": True,
-            }
+            },
         )
-        handler.do_POST()
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
 
-        assert handler.response_code == 200
-        data = handler.get_response_json()
-        assert data["success"] is True
-
-        # Verify file was created
         note_path = mock_web_config.notes_root / "projects" / "new-note.md"
         assert note_path.exists()
         assert "# New Note" in note_path.read_text()
 
-    def test_create_note_already_exists(self, mock_web_config: Config):
-        """Test POST /api/note fails when file exists and create=True."""
-        # Create the file first
+    def test_create_note_already_exists(
+        self, client: TestClient, mock_web_config: Config
+    ):
         note_path = mock_web_config.notes_root / "projects" / "existing.md"
         note_path.write_text("# Existing", encoding="utf-8")
 
-        handler = MockHandler("/api/note")
-        handler.set_body(
-            {"path": "projects/existing.md", "content": "# New", "create": True}
+        resp = client.post(
+            "/api/note",
+            json={"path": "projects/existing.md", "content": "# New", "create": True},
         )
-        handler.do_POST()
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "File already exists"
 
-        data = handler.get_response_json()
-        assert data["error"] == "File already exists"
-
-    def test_update_note(self, mock_web_config: Config):
-        """Test POST /api/note to update existing note."""
-        # Create the file first
+    def test_update_note(self, client: TestClient, mock_web_config: Config):
         note_path = mock_web_config.notes_root / "projects" / "update-me.md"
         note_path.write_text("# Old Content", encoding="utf-8")
 
-        handler = MockHandler("/api/note")
-        handler.set_body(
-            {"path": "projects/update-me.md", "content": "# Updated Content"}
+        resp = client.post(
+            "/api/note",
+            json={"path": "projects/update-me.md", "content": "# Updated Content"},
         )
-        handler.do_POST()
-
-        assert handler.response_code == 200
+        assert resp.status_code == 200
         assert "# Updated Content" in note_path.read_text()
 
-    def test_add_todo(self, mock_web_config: Config):
-        """Test POST /api/todos to create a new todo."""
-        with patch("nb.core.todos.add_todo_to_inbox") as mock_add:
-            handler = MockHandler("/api/todos")
-            handler.set_body({"content": "New todo @due(friday)"})
-            handler.do_POST()
+    def test_create_note_absolute_path_rejected(self, client: TestClient):
+        # An absolute path outside notes_root must be rejected. The exact error
+        # differs by platform (Windows treats "/etc/.." as drive-relative and
+        # rejects it via the traversal guard), but it is always a 400.
+        resp = client.post("/api/note", json={"path": "/etc/evil.md", "content": "x"})
+        assert resp.status_code == 400
+        assert "error" in resp.json()
 
-            assert handler.response_code == 200
+    def test_add_todo(self, client: TestClient):
+        with patch("nb.core.todos.add_todo_to_inbox") as mock_add:
+            resp = client.post("/api/todos", json={"content": "New todo @due(friday)"})
+            assert resp.status_code == 200
             mock_add.assert_called_once_with("New todo @due(friday)")
 
-    def test_add_todo_empty_content(self, mock_web_config: Config):
-        """Test POST /api/todos with empty content fails."""
-        handler = MockHandler("/api/todos")
-        handler.set_body({"content": ""})
-        handler.do_POST()
+    def test_add_todo_empty_content(self, client: TestClient):
+        resp = client.post("/api/todos", json={"content": ""})
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "Content required"
 
-        data = handler.get_response_json()
-        assert data["error"] == "Content required"
-
-    def test_toggle_todo(self, mock_web_config: Config):
-        """Test POST /api/todos/<id>/toggle."""
+    def test_toggle_todo(self, client: TestClient, mock_web_config: Config):
         from datetime import date
 
         from nb.models import Todo, TodoSource, TodoStatus
 
-        # Create a test note with a todo
         note_path = mock_web_config.notes_root / "projects" / "test-todo.md"
         note_path.write_text("- [ ] Test todo\n", encoding="utf-8")
 
@@ -507,75 +366,56 @@ class TestNBHandlerPOST:
             patch("nb.index.todos_repo.update_todo_status"),
         ):
             mock_get.return_value = mock_todo
+            resp = client.post("/api/todos/abc12345/toggle")
+            assert resp.status_code == 200
+            assert "[x]" in note_path.read_text()
 
-            handler = MockHandler("/api/todos/abc12345/toggle")
-            handler.do_POST()
-
-            assert handler.response_code == 200
-
-            # Verify the file was updated
-            content = note_path.read_text()
-            assert "[x]" in content  # Should be marked complete
-
-    def test_toggle_todo_not_found(self, mock_web_config: Config):
-        """Test POST /api/todos/<id>/toggle with invalid ID."""
+    def test_toggle_todo_not_found(self, client: TestClient):
         with patch("nb.index.todos_repo.get_todo_by_id") as mock_get:
             mock_get.return_value = None
-
-            handler = MockHandler("/api/todos/invalid/toggle")
-            handler.do_POST()
-
-            assert handler.response_code == 404
+            resp = client.post("/api/todos/invalid/toggle")
+            assert resp.status_code == 404
 
 
 class TestNotebookColors:
     """Tests for notebook colors."""
 
-    def test_notebooks_include_color(self, mock_web_config: Config, monkeypatch):
-        """Test /api/notebooks includes notebook colors."""
-
-        # Add a color to one of the notebooks
+    def test_notebooks_include_color(
+        self, client: TestClient, mock_web_config: Config, monkeypatch
+    ):
         nb_config = mock_web_config.get_notebook("daily")
         monkeypatch.setattr(nb_config, "color", "blue")
 
-        handler = MockHandler("/api/notebooks")
-        handler.do_GET()
-
-        data = handler.get_response_json()
+        data = client.get("/api/notebooks").json()
         daily = next(nb for nb in data if nb["name"] == "daily")
         assert daily["color"] == "#58a6ff"  # blue hex
 
 
 class TestTemplate:
-    """Tests for the HTML template."""
+    """Tests for the (legacy) HTML template still served at /."""
 
     def test_template_contains_key_elements(self):
-        """Test template has required HTML structure (libraries vendored locally)."""
         template = get_template()
         assert "<!DOCTYPE html>" in template
         assert "<title>nb</title>" in template
         assert "/static/vendor/marked.min.js" in template
         assert "/static/vendor/highlight.min.js" in template
         assert "/static/vendor/easymde.min.js" in template
-        # No external CDN dependencies (works offline)
         assert "cdn.jsdelivr.net" not in template
         assert "bootstrapcdn" not in template
 
     def test_template_has_navigation(self):
-        """Test template has navigation elements."""
         template = get_template()
         assert 'class="sidebar"' in template
         assert 'id="tree"' in template
         assert 'id="content"' in template
 
     def test_template_has_search(self):
-        """Test template has search functionality."""
         template = get_template()
         assert 'id="searchInput"' in template
         assert "doSearch" in template
 
     def test_template_has_todos_link(self):
-        """Test template has todos link."""
         template = get_template()
         assert "loadTodos()" in template
         assert "Todos" in template
