@@ -94,6 +94,20 @@ def strip_images_for_embedding(content: str) -> str:
         return content
 
 
+def _embeddable_text(note: Note, content: str) -> str:
+    """Return the text to embed for a note, with images stripped.
+
+    Image-only notes (e.g. converted scans) become an empty string after image
+    stripping, and the embeddings API rejects empty input with a 400 error. Fall
+    back to the note's title/filename so indexing never sends an empty document
+    and the note stays searchable.
+    """
+    clean = strip_images_for_embedding(content)
+    if clean.strip():
+        return clean
+    return note.title or note.path.name
+
+
 class NoteSearch:
     """Unified search interface using localvectordb.
 
@@ -146,8 +160,9 @@ class NoteSearch:
             content: The full text content of the note.
 
         """
-        # Strip images (especially base64) to avoid exceeding embedding token limits
-        clean_content = strip_images_for_embedding(content)
+        # Strip images (especially base64) to avoid exceeding embedding token limits;
+        # falls back to title/filename if the note is empty after stripping.
+        clean_content = _embeddable_text(note, content)
 
         self.db.upsert(
             documents=[clean_content],
@@ -188,8 +203,9 @@ class NoteSearch:
         for note, content in notes:
             if not content:
                 continue
-            # Strip images (especially base64) to avoid exceeding embedding token limits
-            clean_content = strip_images_for_embedding(content)
+            # Strip images (especially base64) to avoid exceeding embedding token limits;
+            # falls back to title/filename if the note is empty after stripping.
+            clean_content = _embeddable_text(note, content)
             documents.append(clean_content)
             metadata_list.append(
                 {
