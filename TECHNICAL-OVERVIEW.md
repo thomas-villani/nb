@@ -100,7 +100,7 @@ nb-cli/
 │   ├── tui/                     # Text User Interface
 │   │   ├── todos.py             # Interactive todo viewer
 │   │   ├── review.py            # Interactive todo review mode
-│   │   └── stream.py            # Console streaming utilities
+│   │   └── stream.py            # Paged console note renderer (nb stream)
 │   ├── recorder/                # Audio recording (optional)
 │   │   ├── __init__.py          # Availability checking
 │   │   ├── audio.py             # Microphone/system audio capture
@@ -848,39 +848,41 @@ nb todo --delete-view work   # Delete saved view
 
 ## Text User Interface (TUI)
 
-**Location:** `nb/tui/todos.py`, `nb/tui/review.py`, `nb/tui/stream.py`
+**Location:** `nb/tui/todos.py`, `nb/tui/review.py`
 
-### Note Stream Viewer: `nb stream`
+### Note Stream Reader: `nb stream`
 
-Interactive note browser for reading through notes with keyboard navigation.
+**Location:** `nb/tui/stream.py`
+
+Renders matching notes end-to-end to the console, each separated by a title
+rule and a metadata line (date, notebook, path, position). Not an interactive
+TUI — output flows top to bottom through a scrolling pager.
 
 **Default Behavior:**
-- Shows recently modified notes (most recent first)
-- Pipes to stdout as plain text when output is not a TTY
+- Shows the 10 most recently modified notes (most recent first); use `-l` for more
+- Renders rich markdown (YAML frontmatter stripped) through a scrolling pager (like `less`)
+- A capped-result hint is printed to **stderr** so it never pollutes piped output
 
-**Modes:**
+**Rendering modes:**
+| Mode | Flag | Description |
+|------|------|-------------|
+| Paged rich markdown | (default) | Rendered markdown through a pager |
+| Direct | `--no-pager` | Print straight to the console, no pager |
+| Plain | `--plain` | Plain text, no markdown rendering |
+| Piped | (auto) | Plain text with no pager when stdout is not a TTY |
+
+**Selection modes:**
 | Mode | Flag | Description |
 |------|------|-------------|
 | Recently Modified | (default) | Notes sorted by modification time |
 | By Date | `--by-date` | Notes sorted by note date |
 | Recently Viewed | `--recent` | Notes from view history |
-| Continuous | `-c` | All notes in scrollable flow |
 
-**Controls:**
-
-| Key | Action |
-|-----|--------|
-| `j/k` | Next/previous note |
-| `n/N/p` | Alternate navigation |
-| `g/G` | First/last note |
-| `/` | Search notes by title or content |
-| `e` | Edit note in-app |
-| `E` | Edit in external editor |
-| `Escape` | Clear search or quit |
-| `q` | Quit |
+`-c`/`--continuous`/`--auto` is retained as a no-op for backwards compatibility
+(notes always stream end-to-end now).
 
 **Pipe Mode:**
-When output is piped (not a TTY), notes are output as plain text:
+When output is piped (not a TTY), notes are emitted as plain text with no pager:
 ```bash
 nb stream | head -100      # First 100 lines
 nb stream | grep "TODO"    # Search in output

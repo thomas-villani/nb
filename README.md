@@ -13,7 +13,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Multiple notebooks** - Organize notes by project, including external directories
 - **Fuzzy finding** - Auto-suggest notebooks and notes when exact match not found
 - **Unified search** - Keyword, semantic, and hybrid search powered by localvectordb
-- **Note streaming** - Browse notes interactively with keyboard navigation and search
+- **Note streaming** - Read notes end-to-end as rich markdown through a scrolling pager
 - **Notebook sections** - Organize notes into subfolders within notebooks with per-section settings
 - **Linked files** - Index external todo files and note directories into specific notebooks and sections
 - **Note linking** - Wiki-style and markdown links between notes with backlink tracking
@@ -197,15 +197,16 @@ nb export daily/ journal.pdf          # Export entire notebook (all notes)
 nb export daily/ archive.pdf --sort modified  # Sort by modification time
 nb export daily/ archive.pdf --reverse        # Newest first
 
-nb stream                  # Recently modified notes (default, TUI)
+nb stream                  # Recently modified notes (default, last 10, paged)
 nb stream --by-date        # Sort by note date instead
-nb stream -n daily         # Browse daily notes
-nb stream -w "last week"   # Browse last week's notes
+nb stream -n daily         # Stream daily notes
+nb stream -w "last week"   # Stream last week's notes
 nb stream -n daily -w "last 2 weeks"  # Daily notes from last 2 weeks
-nb stream --recent         # Browse recently viewed notes
+nb stream --recent         # Recently viewed notes
 nb stream --recent -l 20   # Last 20 viewed notes
-nb stream -c               # Continuous mode (maximized content)
-nb stream | head -100      # Pipe mode (plain text output)
+nb stream --no-pager       # Print directly to console (no pager)
+nb stream --plain          # Plain text (no markdown rendering)
+nb stream | head -100      # Pipe mode (plain text, auto-detected)
 ```
 
 ### Note Templates
@@ -703,9 +704,11 @@ Launch an interactive search interface with `nb search -i`:
 | `Enter` | Execute search / open note |
 | `↑/↓` | Navigate results |
 | `Tab` | Cycle focus between panels |
-| `e` | Edit selected note |
-| `b` | Browse in stream view |
-| `q` | Quit |
+| `Ctrl+E` | Edit selected note |
+| `Ctrl+F` | View full note |
+| `Ctrl+Y` | Copy note |
+| `Ctrl+O` | Stream selected note (paged markdown) |
+| `Ctrl+Q` | Quit |
 
 ### Statistics
 
