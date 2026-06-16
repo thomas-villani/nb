@@ -466,6 +466,105 @@
         }
         .toastui-editor-defaultUI { border-radius: 6px; }
 
+        /* Date-based notebook views: view toggle, timeline groups, calendar */
+        .view-toggle-group {
+            display: inline-flex;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+            margin-right: 0.5rem;
+        }
+        .view-toggle {
+            background: var(--surface);
+            color: var(--text-dim);
+            border: none;
+            border-right: 1px solid var(--border);
+            padding: 0.35rem 0.7rem;
+            font-size: 0.82rem;
+            cursor: pointer;
+        }
+        .view-toggle:last-child { border-right: none; }
+        .view-toggle:hover { color: var(--text); }
+        .view-toggle.active { background: var(--accent); color: #fff; }
+
+        .date-group { margin-bottom: 1.25rem; }
+        .date-group-header {
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            margin: 0 0 0.4rem;
+            padding: 0.3rem 0;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-dim);
+            z-index: 1;
+        }
+        .date-group-count { color: var(--text-dim); font-weight: normal; opacity: 0.7; }
+        .date-note-row {
+            display: flex;
+            align-items: baseline;
+            gap: 0.75rem;
+            padding: 0.4rem 0.5rem;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .date-note-row:hover { background: var(--surface); }
+        .date-note-date {
+            font-family: monospace;
+            font-size: 0.78rem;
+            color: var(--text-dim);
+            white-space: nowrap;
+            min-width: 5.5rem;
+        }
+        .date-note-title { color: var(--accent); flex: 1; }
+        .date-note-tags { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+        .date-note-tag { font-size: 0.72rem; color: var(--text-dim); }
+
+        .calendar { max-width: 720px; }
+        .cal-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+        .cal-month { font-weight: 600; font-size: 1.05rem; }
+        .cal-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+        }
+        .cal-dow {
+            text-align: center;
+            font-size: 0.72rem;
+            color: var(--text-dim);
+            padding: 0.25rem 0;
+        }
+        .cal-cell {
+            position: relative;
+            min-height: 64px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            padding: 0.25rem 0.35rem;
+            background: var(--surface);
+        }
+        .cal-empty { background: transparent; border-color: transparent; }
+        .cal-day { font-size: 0.8rem; color: var(--text-dim); }
+        .cal-has { cursor: pointer; border-color: var(--accent); }
+        .cal-has:hover { background: var(--border); }
+        .cal-has .cal-day { color: var(--text); }
+        .cal-today { outline: 2px solid var(--accent); }
+        .cal-badge {
+            position: absolute;
+            bottom: 0.3rem;
+            right: 0.4rem;
+            font-size: 0.7rem;
+            background: var(--accent);
+            color: #fff;
+            border-radius: 10px;
+            padding: 0 0.35rem;
+        }
+
         /* Loading state */
         .loading { color: var(--text-dim); }
 

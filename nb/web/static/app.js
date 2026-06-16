@@ -78,6 +78,7 @@
                     notebookSortBy: prefs.notebookSortBy || 'mtime-desc',
                     historySortBy: prefs.historySortBy || 'viewed',
                     todoSortBy: prefs.todoSortBy || 'section',
+                    dateView: prefs.dateView || 'grouped',
                 };
             } catch (e) {
                 return {
@@ -85,6 +86,7 @@
                     notebookSortBy: 'mtime-desc',
                     historySortBy: 'viewed',
                     todoSortBy: 'section',
+                    dateView: 'grouped',
                 };
             }
         }
@@ -96,6 +98,7 @@
                     notebookSortBy,
                     historySortBy,
                     todoSortBy,
+                    dateView,
                 }));
             } catch (e) {
                 // Ignore localStorage errors
@@ -108,6 +111,11 @@
         let notebookSortBy = prefs.notebookSortBy;
         let historySortBy = prefs.historySortBy;
         let todoSortBy = prefs.todoSortBy;
+        // Date-based notebook view: 'grouped' | 'calendar' | 'list'
+        let dateView = prefs.dateView;
+        // Calendar navigation state (initialized to the current month on first use)
+        let calendarYear = null;
+        let calendarMonth = null;  // 0-11
 
         function sortNotebooks(notebooks, sortBy) {
             return [...notebooks].sort((a, b) => {
@@ -493,17 +501,18 @@
             const nb = notebooksCache.find(x => x.name === name);
             const colorBar = nb && nb.color ? `<span class="color-dot" style="background:${nb.color};width:12px;height:12px"></span> ` : '';
             const isVirtualNb = name.startsWith('@');
+            // Date-based notebooks (daily/weekly) get timeline + calendar views.
+            const isDateBased = !!(nb && (nb.dateMode === 'daily' || nb.dateMode === 'weekly'));
+            const view = isDateBased ? dateView : 'list';
 
-            document.getElementById('content').innerHTML = `
-                <h1>${colorBar}${escapeHtml(name)}</h1>
-                <div class="header-actions">
-                    <button class="btn" onclick="loadStream('${escapeJs(name)}')">Stream</button>
-                    ${!isVirtualNb ? `<button class="btn btn-primary" onclick="promptNewNote('${escapeJs(name)}')">+ New Note</button>` : ''}
-                </div>
-                <input type="text" class="search-box" id="notebookFilterInput" placeholder="Filter notes by title, filename, alias, or tag..." value="${escapeHtml(notebookFilter)}" style="margin:0.5rem 0">
-                ${chipsHtml}
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-                    <p style="color:var(--text-dim)">${displayNotes.length} of ${cachedNotebookNotes.length} notes</p>
+            const viewBtn = (v, label) =>
+                `<button class="view-toggle${view === v ? ' active' : ''}" onclick="setNotebookDateView('${v}')">${label}</button>`;
+            const viewToggleHtml = isDateBased
+                ? `<div class="view-toggle-group">${viewBtn('grouped', 'Timeline')}${viewBtn('calendar', 'Calendar')}${viewBtn('list', 'List')}</div>`
+                : '';
+
+            // The sort control only applies to the flat table/list view.
+            const sortHtml = (view === 'list') ? `
                     <select id="notebookSort" style="padding:0.3rem 0.5rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem">
                         <option value="mtime-desc" ${notebookSortBy === 'mtime-desc' ? 'selected' : ''}>Modified (Newest)</option>
                         <option value="mtime-asc" ${notebookSortBy === 'mtime-asc' ? 'selected' : ''}>Modified (Oldest)</option>
@@ -515,50 +524,27 @@
                         <option value="title-desc" ${notebookSortBy === 'title-desc' ? 'selected' : ''}>Title (Z-A)</option>
                         <option value="filename" ${notebookSortBy === 'filename' ? 'selected' : ''}>Filename</option>
                         <option value="section" ${notebookSortBy === 'section' ? 'selected' : ''}>Section</option>
-                    </select>
+                    </select>` : '';
+
+            let bodyHtml;
+            if (view === 'grouped') bodyHtml = renderDateGrouped(displayNotes);
+            else if (view === 'calendar') bodyHtml = renderCalendarView(displayNotes);
+            else bodyHtml = renderNotesTable(displayNotes);
+
+            document.getElementById('content').innerHTML = `
+                <h1>${colorBar}${escapeHtml(name)}</h1>
+                <div class="header-actions">
+                    ${viewToggleHtml}
+                    <button class="btn" onclick="loadStream('${escapeJs(name)}')">Stream</button>
+                    ${!isVirtualNb ? `<button class="btn btn-primary" onclick="promptNewNote('${escapeJs(name)}')">+ New Note</button>` : ''}
                 </div>
-                <div style="overflow-x:auto">
-                    <table style="width:100%;border-collapse:collapse;font-size:0.9rem">
-                        <thead>
-                            <tr style="border-bottom:1px solid var(--border);text-align:left">
-                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500">Title</th>
-                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500">Path</th>
-                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500;white-space:nowrap">Date</th>
-                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500;white-space:nowrap">Modified</th>
-                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500;white-space:nowrap">Viewed</th>
-                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500">Tags</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${displayNotes.map(n => {
-                                const aliasTag = n.alias ? ` <span style="color:var(--accent);font-size:0.8em">@${escapeHtml(n.alias)}</span>` : '';
-                                const linkedIcon = n.isLinked ? '<span style="color:var(--text-dim)" title="Linked note">↗</span> ' : '';
-                                // Format mtime as relative or date
-                                const mtimeStr = n.mtime ? formatRelativeTime(n.mtime * 1000) : '-';
-                                // Format lastViewed
-                                const viewedStr = n.lastViewed ? formatRelativeTime(new Date(n.lastViewed).getTime()) : '-';
-                                // Tags - limit to first 5
-                                const tags = n.tags || [];
-                                const displayTags = tags.slice(0, 5);
-                                const moreTags = tags.length > 5 ? ` <span style="color:var(--text-dim)">+${tags.length - 5} more</span>` : '';
-                                const tagsHtml = displayTags.map(t => `<span style="color:var(--text-dim);font-size:0.8rem;background:var(--surface);padding:0.1rem 0.3rem;border-radius:3px;margin-right:0.25rem">#${escapeHtml(t)}</span>`).join('') + moreTags;
-                                // Path relative to notebook (sections + filename)
-                                const relPath = (n.sections || []).length > 0 ? (n.sections.join('/') + '/' + n.filename) : n.filename;
-                                return `
-                                <tr style="border-bottom:1px solid var(--border)" class="note-row" onclick="loadNote('${escapeJs(n.path)}')">
-                                    <td style="padding:0.5rem">
-                                        <a href="javascript:void(0)" style="color:var(--accent);text-decoration:none">${linkedIcon}${escapeHtml(n.title)}</a>${aliasTag}
-                                    </td>
-                                    <td style="padding:0.5rem;color:var(--text-dim);font-size:0.85rem">${escapeHtml(relPath)}</td>
-                                    <td style="padding:0.5rem;color:var(--text-dim);white-space:nowrap">${n.date || '-'}</td>
-                                    <td style="padding:0.5rem;color:var(--text-dim);white-space:nowrap">${mtimeStr}</td>
-                                    <td style="padding:0.5rem;color:var(--text-dim);white-space:nowrap">${viewedStr}</td>
-                                    <td style="padding:0.5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tagsHtml || '-'}</td>
-                                </tr>
-                            `;}).join('')}
-                        </tbody>
-                    </table>
+                <input type="text" class="search-box" id="notebookFilterInput" placeholder="Filter notes by title, filename, alias, or tag..." value="${escapeHtml(notebookFilter)}" style="margin:0.5rem 0">
+                ${chipsHtml}
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+                    <p style="color:var(--text-dim)">${displayNotes.length} of ${cachedNotebookNotes.length} notes</p>
+                    ${sortHtml}
                 </div>
+                ${bodyHtml}
             `;
 
             // Add event listeners for sort and filter
@@ -586,6 +572,155 @@
                 }
             }
 
+        }
+
+        // Flat sortable table (used for non-date notebooks and the date 'List' view).
+        function renderNotesTable(displayNotes) {
+            return `
+                <div style="overflow-x:auto">
+                    <table style="width:100%;border-collapse:collapse;font-size:0.9rem">
+                        <thead>
+                            <tr style="border-bottom:1px solid var(--border);text-align:left">
+                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500">Title</th>
+                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500">Path</th>
+                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500;white-space:nowrap">Date</th>
+                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500;white-space:nowrap">Modified</th>
+                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500;white-space:nowrap">Viewed</th>
+                                <th style="padding:0.5rem;color:var(--text-dim);font-weight:500">Tags</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${displayNotes.map(n => {
+                                const aliasTag = n.alias ? ` <span style="color:var(--accent);font-size:0.8em">@${escapeHtml(n.alias)}</span>` : '';
+                                const linkedIcon = n.isLinked ? '<span style="color:var(--text-dim)" title="Linked note">↗</span> ' : '';
+                                const mtimeStr = n.mtime ? formatRelativeTime(n.mtime * 1000) : '-';
+                                const viewedStr = n.lastViewed ? formatRelativeTime(new Date(n.lastViewed).getTime()) : '-';
+                                const tags = n.tags || [];
+                                const displayTags = tags.slice(0, 5);
+                                const moreTags = tags.length > 5 ? ` <span style="color:var(--text-dim)">+${tags.length - 5} more</span>` : '';
+                                const tagsHtml = displayTags.map(t => `<span style="color:var(--text-dim);font-size:0.8rem;background:var(--surface);padding:0.1rem 0.3rem;border-radius:3px;margin-right:0.25rem">#${escapeHtml(t)}</span>`).join('') + moreTags;
+                                const relPath = (n.sections || []).length > 0 ? (n.sections.join('/') + '/' + n.filename) : n.filename;
+                                return `
+                                <tr style="border-bottom:1px solid var(--border)" class="note-row" onclick="loadNote('${escapeJs(n.path)}')">
+                                    <td style="padding:0.5rem">
+                                        <a href="javascript:void(0)" style="color:var(--accent);text-decoration:none">${linkedIcon}${escapeHtml(n.title)}</a>${aliasTag}
+                                    </td>
+                                    <td style="padding:0.5rem;color:var(--text-dim);font-size:0.85rem">${escapeHtml(relPath)}</td>
+                                    <td style="padding:0.5rem;color:var(--text-dim);white-space:nowrap">${n.date || '-'}</td>
+                                    <td style="padding:0.5rem;color:var(--text-dim);white-space:nowrap">${mtimeStr}</td>
+                                    <td style="padding:0.5rem;color:var(--text-dim);white-space:nowrap">${viewedStr}</td>
+                                    <td style="padding:0.5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tagsHtml || '-'}</td>
+                                </tr>
+                            `;}).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+        }
+
+        // ---- Date-based notebook views (timeline grouping + month calendar) ----
+
+        // Bucket notes into relative date groups (Upcoming / Today / Yesterday /
+        // Earlier this week / This month / "Month YYYY" / No date), newest first.
+        function groupNotesByDate(notes) {
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const buckets = new Map();
+            const ensure = (label, order) => {
+                if (!buckets.has(label)) buckets.set(label, { order, notes: [] });
+                return buckets.get(label);
+            };
+            notes.forEach(n => {
+                if (!n.date) { ensure('No date', 2e9).notes.push(n); return; }
+                const d = new Date(n.date + 'T00:00:00');
+                const diffDays = Math.round((today - d) / 86400000);
+                let label, order;
+                if (diffDays < 0) { label = 'Upcoming'; order = -1; }
+                else if (diffDays === 0) { label = 'Today'; order = 0; }
+                else if (diffDays === 1) { label = 'Yesterday'; order = 1; }
+                else if (diffDays < 7) { label = 'Earlier this week'; order = 2; }
+                else if (d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth()) { label = 'This month'; order = 3; }
+                else { label = d.toLocaleString('default', { month: 'long', year: 'numeric' }); order = 1e9 - (d.getFullYear() * 12 + d.getMonth()); }
+                ensure(label, order).notes.push(n);
+            });
+            return [...buckets.entries()]
+                .sort((a, b) => a[1].order - b[1].order)
+                .map(([label, v]) => ({ label, notes: v.notes.sort((x, y) => (y.date || '').localeCompare(x.date || '')) }));
+        }
+
+        function renderDateNoteRow(n) {
+            const tags = (n.tags || []).slice(0, 4).map(t => `<span class="date-note-tag">#${escapeHtml(t)}</span>`).join('');
+            return `<div class="date-note-row" onclick="loadNote('${escapeJs(n.path)}')">
+                        <span class="date-note-date">${n.date || ''}</span>
+                        <span class="date-note-title">${escapeHtml(n.title)}</span>
+                        <span class="date-note-tags">${tags}</span>
+                    </div>`;
+        }
+
+        function renderDateGrouped(notes) {
+            const groups = groupNotesByDate(notes);
+            if (!groups.length) return '<p style="color:var(--text-dim)">No notes</p>';
+            return '<div class="date-groups">' + groups.map(g => `
+                <div class="date-group">
+                    <h3 class="date-group-header">${escapeHtml(g.label)} <span class="date-group-count">${g.notes.length}</span></h3>
+                    <div class="date-group-items">${g.notes.map(renderDateNoteRow).join('')}</div>
+                </div>`).join('') + '</div>';
+        }
+
+        function renderCalendarView(notes) {
+            // Default the calendar to the month of the most recent note, else today.
+            if (calendarYear === null || calendarMonth === null) {
+                const newest = notes.filter(n => n.date).map(n => n.date).sort().pop();
+                const base = newest ? new Date(newest + 'T00:00:00') : new Date();
+                calendarYear = base.getFullYear();
+                calendarMonth = base.getMonth();
+            }
+            const byDate = {};
+            notes.forEach(n => { if (n.date) (byDate[n.date] = byDate[n.date] || []).push(n); });
+
+            const y = calendarYear, m = calendarMonth;
+            const first = new Date(y, m, 1);
+            const startDow = first.getDay();
+            const daysInMonth = new Date(y, m + 1, 0).getDate();
+            const monthLabel = first.toLocaleString('default', { month: 'long', year: 'numeric' });
+            const todayStr = getToday();
+
+            let cells = '';
+            for (let i = 0; i < startDow; i++) cells += '<div class="cal-cell cal-empty"></div>';
+            for (let day = 1; day <= daysInMonth; day++) {
+                const ds = `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const dayNotes = byDate[ds] || [];
+                const has = dayNotes.length > 0;
+                const cls = 'cal-cell' + (has ? ' cal-has' : '') + (ds === todayStr ? ' cal-today' : '');
+                const click = has ? `onclick="loadNote('${escapeJs(dayNotes[0].path)}')"` : '';
+                const title = has ? ` title="${escapeHtml(dayNotes.map(n => n.title).join(', '))}"` : '';
+                cells += `<div class="${cls}" ${click}${title}>
+                    <span class="cal-day">${day}</span>
+                    ${has ? `<span class="cal-badge">${dayNotes.length}</span>` : ''}
+                </div>`;
+            }
+            const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => `<div class="cal-dow">${d}</div>`).join('');
+            return `<div class="calendar">
+                <div class="cal-nav">
+                    <button class="btn" onclick="calendarShift(-1)">‹ Prev</button>
+                    <span class="cal-month">${escapeHtml(monthLabel)}</span>
+                    <button class="btn" onclick="calendarShift(1)">Next ›</button>
+                </div>
+                <div class="cal-grid">${dow}${cells}</div>
+            </div>`;
+        }
+
+        function calendarShift(delta) {
+            if (calendarYear === null) return;
+            let m = calendarMonth + delta, y = calendarYear;
+            while (m < 0) { m += 12; y--; }
+            while (m > 11) { m -= 12; y++; }
+            calendarMonth = m; calendarYear = y;
+            loadNotebook(currentNotebook, false, false);
+        }
+
+        function setNotebookDateView(v) {
+            dateView = v;
+            savePreferences();
+            loadNotebook(currentNotebook, false, false);
         }
 
         function setNotebookSection(value) {

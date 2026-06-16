@@ -80,6 +80,7 @@ def list_notebooks_endpoint(
                 "count": len(notes_with_linked),
                 "color": color,
                 "isLinked": False,
+                "dateMode": nb_config.date_mode if nb_config else "none",
                 "lastModified": stats.get("last_modified"),
                 "lastViewed": stats.get("last_viewed"),
             }
@@ -99,6 +100,7 @@ def list_notebooks_endpoint(
                     "count": len(files),
                     "color": "#39c5cf",  # Cyan for linked notebooks
                     "isLinked": True,
+                    "dateMode": "none",
                     "alias": linked.alias,
                     "lastModified": stats.get("last_modified"),
                     "lastViewed": stats.get("last_viewed"),
