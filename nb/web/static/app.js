@@ -207,9 +207,38 @@
             return new Date(timestampMs).toLocaleDateString();
         }
 
+        // ---- Global loading indicator (top progress bar + content dim) ----
+        // Driven by an active-request counter so it covers every view automatically.
+        // A short delay avoids a flash/flicker on fast (cached) responses.
+        let _activeRequests = 0;
+        let _progressTimer = null;
+
+        function _progressStart() {
+            if (_progressTimer || _activeRequests > 1) return; // already pending/shown
+            _progressTimer = setTimeout(() => {
+                const bar = document.getElementById('progress-bar');
+                if (bar) bar.classList.add('active');
+                document.body.classList.add('loading-active');
+            }, 120);
+        }
+
+        function _progressDone() {
+            if (_progressTimer) { clearTimeout(_progressTimer); _progressTimer = null; }
+            const bar = document.getElementById('progress-bar');
+            if (bar) bar.classList.remove('active');
+            document.body.classList.remove('loading-active');
+        }
+
         async function api(endpoint, options = {}) {
-            const res = await fetch('/api' + endpoint, options);
-            return res.json();
+            _activeRequests++;
+            _progressStart();
+            try {
+                const res = await fetch('/api' + endpoint, options);
+                return res.json();
+            } finally {
+                _activeRequests--;
+                if (_activeRequests <= 0) { _activeRequests = 0; _progressDone(); }
+            }
         }
 
         // ---- File tree (sidebar) ----

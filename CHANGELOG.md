@@ -17,6 +17,7 @@ Major overhaul of `nb web`: the viewer moves from the stdlib `http.server` to a 
   - Todos page: condensed Table view, a separate notebook dropdown filter, group-by-notebook dividers, an inbox-destination hint, `autocomplete=off`, optimistic toggling, client-side text filtering (fixes the focus/race when erasing quickly), and a "Show excluded" toggle
   - Knowledge graph is scoped to one or more selected notebooks (multi-select chips); nothing loads until you pick at least one, since rendering a whole large vault at once is slow
   - Fixed a Kanban drag crash (`Invalid or unexpected token`) by reading column filters from a data attribute instead of an escaped-JSON inline handler
+  - Global loading indicator: a top progress bar and subtle content dim appear whenever a view is fetching (driven from the shared `api()` helper, with a short delay so fast/cached loads don't flicker), so navigation no longer feels unresponsive
 
 ## Backend
 
