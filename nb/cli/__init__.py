@@ -110,7 +110,7 @@ _nb_art = f"""
     ████ █████ ████████
    ░░░░ ░░░░░ ░░░░░░░░      v{__version__}
 [/blue]
-[bright_green]Copyright (c) 2025, Tom Villani, Ph.D.[/bright_green]
+[bright_green]Copyright (c) 2025-2026, Tom Villani, Ph.D.[/bright_green]
 
 [dim][cyan]nb[/cyan] was created because I prefer command line applications
 over web apps. This tool allows you to collect todo
