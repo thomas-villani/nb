@@ -6,11 +6,15 @@ alias lookup, and frontmatter -> JSON-serializable conversion.
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 from nb.config import get_config
+
+# Matches a leading YAML frontmatter block so it can be stripped for previews.
+_FRONTMATTER_RE = re.compile(r"^---\r?\n.*?\r?\n---[ \t]*\r?\n?", re.DOTALL)
 
 # Color name to hex mapping for notebook colors
 COLOR_MAP = {
@@ -66,6 +70,33 @@ def get_alias_for_path(note_path: Path) -> str | None:
         # If database doesn't exist or table missing, just return None
         pass
     return None
+
+
+def make_snippet(content: str | None, length: int = 160) -> str:
+    """Build a short plain-text preview from raw note content.
+
+    Strips a leading frontmatter block, drops the first markdown heading
+    (usually a title that duplicates ``note.title``), removes common markdown
+    syntax, and collapses whitespace down to a single trimmed line.
+    """
+    if not content:
+        return ""
+    text = _FRONTMATTER_RE.sub("", content, count=1)
+    lines = text.splitlines()
+    # Skip a leading title heading and blank lines.
+    while lines and (not lines[0].strip() or lines[0].lstrip().startswith("# ")):
+        lines.pop(0)
+    text = "\n".join(lines)
+    # Strip the noisiest markdown so previews read as prose.
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)  # images
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)  # links -> text
+    text = re.sub(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]", lambda m: m.group(2) or m.group(1), text)
+    text = re.sub(r"[`*_>#~]", "", text)  # inline marks / heading hashes
+    text = re.sub(r"^\s*[-+]\s+", "", text, flags=re.MULTILINE)  # list bullets
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) > length:
+        text = text[:length].rstrip() + "…"
+    return text
 
 
 def serialize_frontmatter(fm: dict[str, Any]) -> dict[str, Any]:

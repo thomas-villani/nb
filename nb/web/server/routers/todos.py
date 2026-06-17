@@ -18,11 +18,21 @@ router = APIRouter()
 
 
 @router.get("/api/todos")
-def list_todos(settings: AppSettings = Depends(get_settings)) -> list[dict]:
-    """All todos (open by default; completed when the viewer was launched with -c)."""
+def list_todos(
+    include_excluded: bool = False,
+    settings: AppSettings = Depends(get_settings),
+) -> list[dict]:
+    """All todos (open by default; completed when the viewer was launched with -c).
+
+    By default todos from notes/links marked ``todo_exclude`` are hidden; pass
+    ``include_excluded=true`` to surface them as well.
+    """
     from nb.index.todos_repo import get_sorted_todos
 
-    todos = get_sorted_todos(completed=None if settings.show_completed else False)
+    todos = get_sorted_todos(
+        completed=None if settings.show_completed else False,
+        exclude_note_excluded=not include_excluded,
+    )
     today = date_type.today()
 
     return [

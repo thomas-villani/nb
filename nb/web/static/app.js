@@ -79,6 +79,8 @@
                     historySortBy: prefs.historySortBy || 'viewed',
                     todoSortBy: prefs.todoSortBy || 'section',
                     dateView: prefs.dateView || 'grouped',
+                    historyView: prefs.historyView || 'list',
+                    todoView: prefs.todoView || 'list',
                 };
             } catch (e) {
                 return {
@@ -87,6 +89,8 @@
                     historySortBy: 'viewed',
                     todoSortBy: 'section',
                     dateView: 'grouped',
+                    historyView: 'list',
+                    todoView: 'list',
                 };
             }
         }
@@ -99,6 +103,8 @@
                     historySortBy,
                     todoSortBy,
                     dateView,
+                    historyView,
+                    todoView,
                 }));
             } catch (e) {
                 // Ignore localStorage errors
@@ -111,11 +117,14 @@
         let notebookSortBy = prefs.notebookSortBy;
         let historySortBy = prefs.historySortBy;
         let todoSortBy = prefs.todoSortBy;
+        let todoView = prefs.todoView;   // 'list' | 'table'
         // Date-based notebook view: 'grouped' | 'calendar' | 'list'
         let dateView = prefs.dateView;
-        // Calendar navigation state (initialized to the current month on first use)
-        let calendarYear = null;
-        let calendarMonth = null;  // 0-11
+        // History view: 'list' | 'calendar'
+        let historyView = prefs.historyView;
+        // Calendar navigation state per surface (month initialized on first use)
+        let notebookCalState = { year: null, month: null };  // month 0-11
+        let historyCalState = { year: null, month: null };
 
         function sortNotebooks(notebooks, sortBy) {
             return [...notebooks].sort((a, b) => {
@@ -411,24 +420,45 @@
 
             const sortedNbs = sortNotebooks(notebooksCache, homeSortBy);
 
+            const recentRow = (rn) =>
+                `<a class="nb-recent" onclick="event.stopPropagation();loadNote('${escapeJs(rn.path)}')" title="${escapeHtml(rn.title)}">
+                    ${rn.date ? `<span class="nb-recent-date">${escapeHtml(rn.date)}</span>` : ''}
+                    <span class="nb-recent-title">${escapeHtml(rn.title)}</span>
+                </a>`;
+
             document.getElementById('content').innerHTML = `
                 <h1>Notebooks</h1>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:0.5rem;flex-wrap:wrap">
                     <p style="color:var(--text-dim)">${sortedNbs.length} notebooks</p>
-                    <select id="homeSort" style="padding:0.3rem 0.5rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem">
-                        <option value="alpha" ${homeSortBy === 'alpha' ? 'selected' : ''}>Alphabetical</option>
-                        <option value="modified" ${homeSortBy === 'modified' ? 'selected' : ''}>Recently Modified</option>
-                        <option value="viewed" ${homeSortBy === 'viewed' ? 'selected' : ''}>Recently Viewed</option>
-                    </select>
+                    <div style="display:flex;align-items:center;gap:0.5rem">
+                        <button class="btn" onclick="loadStream('__all__')" title="Read every notebook's notes in one stream">≡ All Notes Stream</button>
+                        <select id="homeSort" style="padding:0.3rem 0.5rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem">
+                            <option value="alpha" ${homeSortBy === 'alpha' ? 'selected' : ''}>Alphabetical</option>
+                            <option value="modified" ${homeSortBy === 'modified' ? 'selected' : ''}>Recently Modified</option>
+                            <option value="viewed" ${homeSortBy === 'viewed' ? 'selected' : ''}>Recently Viewed</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="notebook-grid">
-                    ${sortedNbs.map(nb => `
-                        <div class="notebook-card" onclick="loadNotebook('${escapeJs(nb.name)}')">
+                    ${sortedNbs.map(nb => {
+                        const isVirtual = nb.name.startsWith('@') || nb.isLinked;
+                        const recent = nb.recentNotes || [];
+                        return `
+                        <div class="notebook-card">
                             ${nb.color ? `<div class="color-bar" style="background:${nb.color}"></div>` : ''}
-                            <h3>${escapeHtml(nb.name)}</h3>
-                            <span class="count">${nb.count} notes</span>
-                        </div>
-                    `).join('')}
+                            <div class="nb-card-head" onclick="loadNotebook('${escapeJs(nb.name)}')">
+                                <h3>${escapeHtml(nb.name)}</h3>
+                                <span class="count">${nb.count} notes</span>
+                            </div>
+                            <div class="nb-card-recent">
+                                ${recent.length ? recent.map(recentRow).join('') : '<span class="nb-recent-empty">No notes yet</span>'}
+                            </div>
+                            <div class="nb-card-foot">
+                                <button class="btn btn-sm" onclick="event.stopPropagation();loadStream('${escapeJs(nb.name)}')">Stream</button>
+                                ${!isVirtual ? `<button class="btn btn-sm" onclick="event.stopPropagation();promptNewNote('${escapeJs(nb.name)}')">+ Note</button>` : ''}
+                            </div>
+                        </div>`;
+                    }).join('')}
                 </div>
             `;
 
@@ -648,10 +678,16 @@
 
         function renderDateNoteRow(n) {
             const tags = (n.tags || []).slice(0, 4).map(t => `<span class="date-note-tag">#${escapeHtml(t)}</span>`).join('');
+            const snippet = n.snippet ? `<div class="date-note-snippet">${escapeHtml(n.snippet)}</div>` : '';
             return `<div class="date-note-row" onclick="loadNote('${escapeJs(n.path)}')">
                         <span class="date-note-date">${n.date || ''}</span>
-                        <span class="date-note-title">${escapeHtml(n.title)}</span>
-                        <span class="date-note-tags">${tags}</span>
+                        <div class="date-note-main">
+                            <div class="date-note-titlerow">
+                                <span class="date-note-title">${escapeHtml(n.title)}</span>
+                                <span class="date-note-tags">${tags}</span>
+                            </div>
+                            ${snippet}
+                        </div>
                     </div>`;
         }
 
@@ -665,18 +701,20 @@
                 </div>`).join('') + '</div>';
         }
 
-        function renderCalendarView(notes) {
-            // Default the calendar to the month of the most recent note, else today.
-            if (calendarYear === null || calendarMonth === null) {
-                const newest = notes.filter(n => n.date).map(n => n.date).sort().pop();
+        // Generic month-calendar renderer. `items` are {date:'YYYY-MM-DD', path, title};
+        // `state` is a {year, month} object (initialized to the newest item's month on
+        // first use); `shiftFn` is the global function name wired to the prev/next nav.
+        function renderCalendar(items, state, shiftFn) {
+            if (state.year === null || state.month === null) {
+                const newest = items.filter(n => n.date).map(n => n.date).sort().pop();
                 const base = newest ? new Date(newest + 'T00:00:00') : new Date();
-                calendarYear = base.getFullYear();
-                calendarMonth = base.getMonth();
+                state.year = base.getFullYear();
+                state.month = base.getMonth();
             }
             const byDate = {};
-            notes.forEach(n => { if (n.date) (byDate[n.date] = byDate[n.date] || []).push(n); });
+            items.forEach(n => { if (n.date) (byDate[n.date] = byDate[n.date] || []).push(n); });
 
-            const y = calendarYear, m = calendarMonth;
+            const y = state.year, m = state.month;
             const first = new Date(y, m, 1);
             const startDow = first.getDay();
             const daysInMonth = new Date(y, m + 1, 0).getDate();
@@ -700,20 +738,28 @@
             const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => `<div class="cal-dow">${d}</div>`).join('');
             return `<div class="calendar">
                 <div class="cal-nav">
-                    <button class="btn" onclick="calendarShift(-1)">‹ Prev</button>
+                    <button class="btn" onclick="${shiftFn}(-1)">‹ Prev</button>
                     <span class="cal-month">${escapeHtml(monthLabel)}</span>
-                    <button class="btn" onclick="calendarShift(1)">Next ›</button>
+                    <button class="btn" onclick="${shiftFn}(1)">Next ›</button>
                 </div>
                 <div class="cal-grid">${dow}${cells}</div>
             </div>`;
         }
 
-        function calendarShift(delta) {
-            if (calendarYear === null) return;
-            let m = calendarMonth + delta, y = calendarYear;
+        function shiftCalState(state, delta) {
+            if (state.year === null) return;
+            let m = state.month + delta, y = state.year;
             while (m < 0) { m += 12; y--; }
             while (m > 11) { m -= 12; y++; }
-            calendarMonth = m; calendarYear = y;
+            state.month = m; state.year = y;
+        }
+
+        function renderCalendarView(notes) {
+            return renderCalendar(notes, notebookCalState, 'calendarShift');
+        }
+
+        function calendarShift(delta) {
+            shiftCalState(notebookCalState, delta);
             loadNotebook(currentNotebook, false, false);
         }
 
@@ -750,14 +796,19 @@
             streamTotal = 0;
             if (pushHistory) history.pushState({ view: 'stream', notebook }, '', '#stream/' + encodeURIComponent(notebook));
 
+            const isAll = notebook === '__all__';
             const nb = notebooksCache.find(x => x.name === notebook);
             const colorBar = nb && nb.color ? `<span class="color-dot" style="background:${nb.color};width:12px;height:12px"></span> ` : '';
+            const streamTitle = isAll ? 'All Notes' : (colorBar + escapeHtml(notebook));
+            const backBtn = isAll
+                ? `<button class="btn" onclick="loadHome()">Home</button>`
+                : `<button class="btn" onclick="loadNotebook('${escapeJs(notebook)}')">List View</button>`;
 
             document.getElementById('content').innerHTML = `
                 <div class="stream-header">
-                    <h1>${colorBar}${escapeHtml(notebook)} <span style="color:var(--text-dim);font-size:0.6em;font-weight:normal">stream</span></h1>
+                    <h1>${streamTitle} <span style="color:var(--text-dim);font-size:0.6em;font-weight:normal">stream</span></h1>
                     <div class="header-actions">
-                        <button class="btn" onclick="loadNotebook('${escapeJs(notebook)}')">List View</button>
+                        ${backBtn}
                     </div>
                 </div>
                 <div id="streamContainer" class="stream-container"></div>
@@ -809,13 +860,20 @@
             const container = document.getElementById('streamContainer');
             if (!container) { streamLoading = false; return; }
 
+            const isAll = streamNotebook === '__all__';
             data.notes.forEach(note => {
                 const noteEl = document.createElement('div');
                 noteEl.className = 'stream-note';
+                let nbBadge = '';
+                if (isAll && note.notebook) {
+                    const nbc = notebooksCache.find(x => x.name === note.notebook);
+                    const dot = nbc && nbc.color ? `<span class="color-dot" style="background:${nbc.color}"></span>` : '';
+                    nbBadge = `<a class="stream-note-nb" onclick="loadNotebook('${escapeJs(note.notebook)}')">${dot}${escapeHtml(note.notebook)}</a>`;
+                }
                 noteEl.innerHTML = `
                     <div class="stream-note-header">
                         <a href="javascript:void(0)" class="stream-note-title" onclick="loadNote('${escapeJs(note.path)}')">${escapeHtml(note.title)}</a>
-                        <span class="stream-note-date">${note.date || ''}</span>
+                        <span class="stream-note-date">${nbBadge}${note.date || ''}</span>
                     </div>
                     <div class="stream-note-content">${marked.parse(note.content)}</div>
                 `;
@@ -834,7 +892,8 @@
             if (h1) {
                 const nb = notebooksCache.find(x => x.name === streamNotebook);
                 const colorBar = nb && nb.color ? `<span class="color-dot" style="background:${nb.color};width:12px;height:12px"></span> ` : '';
-                h1.innerHTML = `${colorBar}${escapeHtml(streamNotebook)} <span style="color:var(--text-dim);font-size:0.6em;font-weight:normal">stream (${streamOffset}/${streamTotal})</span>`;
+                const title = isAll ? 'All Notes' : (colorBar + escapeHtml(streamNotebook));
+                h1.innerHTML = `${title} <span style="color:var(--text-dim);font-size:0.6em;font-weight:normal">stream (${streamOffset}/${streamTotal})</span>`;
             }
         }
 
@@ -1128,8 +1187,14 @@
             enterEdit(path);
         }
 
-        let todoFilter = ''; // Filter text for todos
+        let todoFilter = '';             // Free-text filter
         let todoFilterTimeout = null;
+        let todoNotebookFilter = '';     // Notebook dropdown filter ('' = all)
+        let todoIncludeExcluded = false; // Include todos from todo_exclude notes
+        let todosCache = [];             // Last fetched todos (filtered client-side)
+        let inboxFile = 'todo.md';       // Where new todos land (from /startup)
+
+        const TODO_CHECK_ICON = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2"><path d="M2 6l3 3 5-5"/></svg>';
 
         function filterTodos(todos, filter) {
             if (!filter.trim()) return todos;
@@ -1156,20 +1221,21 @@
             });
         }
 
-        async function loadTodos(pushHistory = true) {
-            teardownEditor();
-            currentNotebook = null;
-            currentNotePath = null;
-            if (pushHistory) history.pushState({ view: 'todos' }, '', '#todos');
+        // ---- Todo rendering helpers (operate on the cached list) ----
 
-            let todos = await api('/todos');
-            const today = getToday();
+        function sortTodosList(todoList) {
+            return todoList.slice().sort((a, b) => {
+                if (todoSortBy === 'notebook') return (a.notebook || '').localeCompare(b.notebook || '');
+                if (todoSortBy === 'due') return (a.due || '9999').localeCompare(b.due || '9999');
+                if (todoSortBy === 'priority') return (a.priority || 99) - (b.priority || 99);
+                if (todoSortBy === 'created') return (b.created || '').localeCompare(a.created || '');
+                const pDiff = (a.priority || 99) - (b.priority || 99);
+                if (pDiff !== 0) return pDiff;
+                return (a.due || '9999').localeCompare(b.due || '9999');
+            });
+        }
 
-            // Apply filter
-            todos = filterTodos(todos, todoFilter);
-            const checkIcon = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2"><path d="M2 6l3 3 5-5"/></svg>';
-
-            // Group todos into sections
+        function todoSectionsFrom(todos) {
             const sections = {
                 overdue: { title: 'Overdue', color: 'var(--red)', todos: [] },
                 inProgress: { title: 'In Progress', color: 'var(--green)', todos: [] },
@@ -1179,7 +1245,6 @@
                 noDueDate: { title: 'No Due Date', color: 'var(--text-dim)', todos: [] },
                 completed: { title: 'Completed', color: 'var(--text-dim)', todos: [] }
             };
-
             todos.forEach(t => {
                 if (t.status === 'completed') sections.completed.todos.push(t);
                 else if (t.status === 'in_progress') sections.inProgress.todos.push(t);
@@ -1189,135 +1254,242 @@
                 else if (t.due) sections.dueLater.todos.push(t);
                 else sections.noDueDate.todos.push(t);
             });
+            return sections;
+        }
 
-            // Sort function based on current sort
-            function sortTodos(todoList) {
-                return todoList.sort((a, b) => {
-                    if (todoSortBy === 'notebook') return (a.notebook || '').localeCompare(b.notebook || '');
-                    if (todoSortBy === 'due') return (a.due || '9999').localeCompare(b.due || '9999');
-                    if (todoSortBy === 'priority') return (a.priority || 99) - (b.priority || 99);
-                    if (todoSortBy === 'created') return (b.created || '').localeCompare(a.created || '');
-                    // Default: priority then due
-                    const pDiff = (a.priority || 99) - (b.priority || 99);
-                    if (pDiff !== 0) return pDiff;
-                    return (a.due || '9999').localeCompare(b.due || '9999');
-                });
-            }
+        function renderTodoItem(t) {
+            let cls = 'todo-item';
+            if (t.status === 'completed') cls += ' completed';
+            else if (t.status === 'in_progress') cls += ' in-progress';
+            else if (t.isOverdue) cls += ' overdue';
+            else if (t.isDueToday) cls += ' due-today';
 
-            function renderTodo(t) {
-                let cls = 'todo-item';
-                if (t.status === 'completed') cls += ' completed';
-                else if (t.status === 'in_progress') cls += ' in-progress';
-                else if (t.isOverdue) cls += ' overdue';
-                else if (t.isDueToday) cls += ' due-today';
+            let priorityBadge = '';
+            if (t.priority === 1) priorityBadge = '<span class="priority-1">!!!</span> ';
+            else if (t.priority === 2) priorityBadge = '<span class="priority-2">!!</span> ';
+            else if (t.priority === 3) priorityBadge = '<span class="priority-3">!</span> ';
 
-                let priorityBadge = '';
-                if (t.priority === 1) priorityBadge = '<span class="priority-1">!!!</span> ';
-                else if (t.priority === 2) priorityBadge = '<span class="priority-2">!!</span> ';
-                else if (t.priority === 3) priorityBadge = '<span class="priority-3">!</span> ';
+            const isCompleted = t.status === 'completed';
+            const nb = notebooksCache.find(n => n.name === t.notebook);
+            const nbColor = nb && nb.color ? nb.color : 'var(--text-dim)';
 
-                const isCompleted = t.status === 'completed';
-                const nb = notebooksCache.find(n => n.name === t.notebook);
-                const nbColor = nb && nb.color ? nb.color : 'var(--text-dim)';
-
-                // Build editable due date element
-                let dueDateHtml;
-                if (t.due) {
-                    if (t.isOverdue && !isCompleted) {
-                        dueDateHtml = `<span class="due-date-edit" style="color:var(--red);cursor:pointer" onclick="editDueDate('${t.id}', '${t.due}')" title="Click to edit">Overdue: ${t.due}</span>`;
-                    } else {
-                        dueDateHtml = `<span class="due-date-edit" style="cursor:pointer" onclick="editDueDate('${t.id}', '${t.due}')" title="Click to edit">Due: ${t.due}</span>`;
-                    }
+            let dueDateHtml;
+            if (t.due) {
+                if (t.isOverdue && !isCompleted) {
+                    dueDateHtml = `<span class="due-date-edit" style="color:var(--red);cursor:pointer" onclick="editDueDate('${t.id}', '${t.due}')" title="Click to edit">Overdue: ${t.due}</span>`;
                 } else {
-                    dueDateHtml = `<span class="due-date-edit" style="cursor:pointer;color:var(--text-dim)" onclick="editDueDate('${t.id}', '')" title="Click to add due date">No due date</span>`;
+                    dueDateHtml = `<span class="due-date-edit" style="cursor:pointer" onclick="editDueDate('${t.id}', '${t.due}')" title="Click to edit">Due: ${t.due}</span>`;
                 }
+            } else {
+                dueDateHtml = `<span class="due-date-edit" style="cursor:pointer;color:var(--text-dim)" onclick="editDueDate('${t.id}', '')" title="Click to add due date">No due date</span>`;
+            }
 
-                // Source note: full path with a click-to-open link.
-                const pathHtml = t.path
-                    ? `<div class="meta todo-source"><span class="todo-open-note" title="Open note: ${escapeHtml(t.path)}" onclick="event.stopPropagation(); loadNote('${escapeJs(t.path)}')">↗ ${escapeHtml(t.path)}</span></div>`
-                    : '';
+            const pathHtml = t.path
+                ? `<div class="meta todo-source"><span class="todo-open-note" title="Open note: ${escapeHtml(t.path)}" onclick="event.stopPropagation(); loadNote('${escapeJs(t.path)}')">↗ ${escapeHtml(t.path)}</span></div>`
+                : '';
 
-                return `
-                    <div class="${cls}" data-id="${t.id}">
-                        <div class="checkbox" onclick="toggleTodo('${t.id}')">${checkIcon}</div>
-                        <div class="todo-body">
-                            <div class="content">${priorityBadge}${escapeHtml(t.content)}</div>
-                            <div class="meta">
-                                ${t.status === 'in_progress' ? '<span style="color:var(--green)">In Progress</span> · ' : ''}
-                                ${t.notebook ? '<span class="color-dot" style="background:' + nbColor + '"></span><span style="color:var(--accent)">' + escapeHtml(t.notebook) + '</span> · ' : ''}
-                                ${dueDateHtml}
-                                · <span style="font-family:monospace;color:var(--text-dim);font-size:0.75rem" title="Todo ID">${t.id}</span>
-                            </div>
-                            ${pathHtml}
+            return `
+                <div class="${cls}" data-id="${t.id}">
+                    <div class="checkbox" onclick="toggleTodo('${t.id}')">${TODO_CHECK_ICON}</div>
+                    <div class="todo-body">
+                        <div class="content">${priorityBadge}${escapeHtml(t.content)}</div>
+                        <div class="meta">
+                            ${t.status === 'in_progress' ? '<span style="color:var(--green)">In Progress</span> · ' : ''}
+                            ${t.notebook ? '<span class="color-dot" style="background:' + nbColor + '"></span><span style="color:var(--accent)">' + escapeHtml(t.notebook) + '</span> · ' : ''}
+                            ${dueDateHtml}
+                            · <span style="font-family:monospace;color:var(--text-dim);font-size:0.75rem" title="Todo ID">${t.id}</span>
                         </div>
+                        ${pathHtml}
                     </div>
-                `;
+                </div>
+            `;
+        }
+
+        // Condensed single-row representation for the table view.
+        function renderTodoTableRow(t) {
+            const isCompleted = t.status === 'completed';
+            const nb = notebooksCache.find(n => n.name === t.notebook);
+            const nbColor = nb && nb.color ? nb.color : 'var(--text-dim)';
+            let pr = '';
+            if (t.priority === 1) pr = '<span class="priority-1">!!!</span>';
+            else if (t.priority === 2) pr = '<span class="priority-2">!!</span>';
+            else if (t.priority === 3) pr = '<span class="priority-3">!</span>';
+            const dueStyle = (t.isOverdue && !isCompleted) ? 'color:var(--red)' : 'color:var(--text-dim)';
+            const dueTxt = t.due ? escapeHtml(t.due) : '—';
+            let rowCls = 'todo-trow';
+            if (isCompleted) rowCls += ' completed';
+            else if (t.status === 'in_progress') rowCls += ' in-progress';
+            else if (t.isOverdue) rowCls += ' overdue';
+            else if (t.isDueToday) rowCls += ' due-today';
+            const open = t.path
+                ? `<span class="todo-open-note" title="Open note: ${escapeHtml(t.path)}" onclick="event.stopPropagation(); loadNote('${escapeJs(t.path)}')">↗</span>`
+                : '';
+            return `
+                <tr class="${rowCls}" data-id="${t.id}">
+                    <td class="tt-check"><span class="checkbox" onclick="toggleTodo('${t.id}')">${TODO_CHECK_ICON}</span></td>
+                    <td class="tt-pr">${pr}</td>
+                    <td class="tt-content">${escapeHtml(t.content)}</td>
+                    <td class="tt-nb">${t.notebook ? '<span class="color-dot" style="background:' + nbColor + '"></span>' + escapeHtml(t.notebook) : ''}</td>
+                    <td class="tt-due" style="${dueStyle}">${dueTxt}</td>
+                    <td class="tt-open">${open}</td>
+                </tr>`;
+        }
+
+        function todoTableHtml(rows) {
+            return `<table class="todo-table"><tbody>${rows.join('')}</tbody></table>`;
+        }
+
+        function renderTodoSection(section) {
+            if (section.todos.length === 0) return '';
+            const sorted = sortTodosList(section.todos);
+            const body = todoView === 'table' ? todoTableHtml(sorted.map(renderTodoTableRow)) : sorted.map(renderTodoItem).join('');
+            return `
+                <div class="todo-section">
+                    <h3 class="todo-divider" style="color:${section.color}">${section.title} (${section.todos.length})</h3>
+                    ${body}
+                </div>`;
+        }
+
+        // Build just the list/table body (filtered) — used for live filtering
+        // without re-rendering the whole page, so the filter input keeps focus.
+        function renderTodoBody() {
+            let todos = filterTodos(todosCache, todoFilter);
+            if (todoNotebookFilter) todos = todos.filter(t => (t.notebook || 'unknown') === todoNotebookFilter);
+
+            if (!todos.length) return '<p style="color:var(--text-dim);margin-top:1rem">No matching todos.</p>';
+
+            if (todoSortBy === 'section') {
+                const sections = todoSectionsFrom(todos);
+                return Object.values(sections).map(renderTodoSection).join('');
             }
 
-            function renderSection(key, section) {
-                if (section.todos.length === 0) return '';
-                return `
-                    <div class="todo-section">
-                        <h3 style="color:${section.color};font-size:0.85rem;text-transform:uppercase;margin:1.5rem 0 0.75rem;letter-spacing:0.05em">
-                            ${section.title} (${section.todos.length})
-                        </h3>
-                        ${sortTodos(section.todos).map(renderTodo).join('')}
-                    </div>
-                `;
+            const sorted = sortTodosList(todos);
+
+            if (todoSortBy === 'notebook') {
+                // Group with a divider between notebooks.
+                const groups = [];
+                const byNb = {};
+                sorted.forEach(t => {
+                    const key = t.notebook || 'unknown';
+                    if (!byNb[key]) { byNb[key] = []; groups.push(key); }
+                    byNb[key].push(t);
+                });
+                return groups.map(key => {
+                    const nb = notebooksCache.find(n => n.name === key);
+                    const dot = nb && nb.color ? `<span class="color-dot" style="background:${nb.color}"></span>` : '';
+                    const body = todoView === 'table' ? todoTableHtml(byNb[key].map(renderTodoTableRow)) : byNb[key].map(renderTodoItem).join('');
+                    return `<div class="todo-section">
+                        <h3 class="todo-divider" style="color:var(--accent)">${dot}${escapeHtml(key)} (${byNb[key].length})</h3>
+                        ${body}
+                    </div>`;
+                }).join('');
             }
 
-            const openCount = todos.filter(t => t.status !== 'completed').length;
+            return todoView === 'table' ? todoTableHtml(sorted.map(renderTodoTableRow)) : sorted.map(renderTodoItem).join('');
+        }
+
+        // Render the full Todos page (controls + body) from the cached list.
+        function renderTodosPage() {
+            let visible = filterTodos(todosCache, todoFilter);
+            if (todoNotebookFilter) visible = visible.filter(t => (t.notebook || 'unknown') === todoNotebookFilter);
+            const openCount = visible.filter(t => t.status !== 'completed').length;
+
+            // Notebook options come from the todos currently loaded.
+            const nbNames = [...new Set(todosCache.map(t => t.notebook || 'unknown'))].sort((a, b) => a.localeCompare(b));
+            const nbOptions = nbNames.map(n => `<option value="${escapeHtml(n)}" ${todoNotebookFilter === n ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('');
+
+            const viewBtn = (v, label) => `<button class="view-toggle${todoView === v ? ' active' : ''}" onclick="setTodoView('${v}')">${label}</button>`;
 
             document.getElementById('content').innerHTML = `
                 <h1>Todos</h1>
-                <input type="text" class="search-box" id="todoFilterInput" placeholder="Filter: notebook:name, @name, #tag, or text..." value="${escapeHtml(todoFilter)}" style="margin-bottom:0.5rem">
-                <form class="add-todo-form" onsubmit="addTodo(event)">
-                    <input type="text" id="newTodoInput" placeholder="Add a new todo... (use @due(date), @priority(1-3), #tags)">
+                <form class="add-todo-form" onsubmit="addTodo(event)" autocomplete="off">
+                    <input type="text" id="newTodoInput" autocomplete="off" placeholder="Add a new todo... (use @due(date), @priority(1-3), #tags)">
                     <button type="submit">Add</button>
                 </form>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-                    <p style="color:var(--text-dim)">${openCount} open, ${todos.length} total</p>
-                    <select id="todoSort" onchange="changeTodoSort(this.value)" style="padding:0.3rem 0.5rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem">
+                <p class="todo-inbox-hint">New todos are appended to your inbox: <code>${escapeHtml(inboxFile)}</code></p>
+                <div class="todo-controls">
+                    <input type="text" class="search-box" id="todoFilterInput" autocomplete="off" placeholder="Filter: #tag or text..." value="${escapeHtml(todoFilter)}" style="margin:0;flex:1;min-width:160px">
+                    <select id="todoNotebookFilter" style="padding:0.4rem 0.5rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem">
+                        <option value="">All notebooks</option>
+                        ${nbOptions}
+                    </select>
+                    <div class="view-toggle-group">${viewBtn('list', 'List')}${viewBtn('table', 'Table')}</div>
+                    <select id="todoSort" onchange="changeTodoSort(this.value)" style="padding:0.4rem 0.5rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem">
                         <option value="section" ${todoSortBy === 'section' ? 'selected' : ''}>Group by Status</option>
-                        <option value="notebook" ${todoSortBy === 'notebook' ? 'selected' : ''}>Sort by Notebook</option>
+                        <option value="notebook" ${todoSortBy === 'notebook' ? 'selected' : ''}>Group by Notebook</option>
                         <option value="due" ${todoSortBy === 'due' ? 'selected' : ''}>Sort by Due Date</option>
                         <option value="priority" ${todoSortBy === 'priority' ? 'selected' : ''}>Sort by Priority</option>
                         <option value="created" ${todoSortBy === 'created' ? 'selected' : ''}>Sort by Created</option>
                     </select>
+                    <label class="todo-excluded-toggle"><input type="checkbox" id="todoIncludeExcluded" ${todoIncludeExcluded ? 'checked' : ''}> Show excluded</label>
                 </div>
-                ${todoSortBy === 'section' ?
-                    Object.entries(sections).map(([key, section]) => renderSection(key, section)).join('')
-                    : sortTodos(todos).map(renderTodo).join('')
-                }
+                <p style="color:var(--text-dim);margin-bottom:1rem">${openCount} open, ${visible.length} shown</p>
+                <div id="todoListBody">${renderTodoBody()}</div>
             `;
 
-            // Add event listener for filter input (live filtering with debounce)
+            // Live text filter: re-render only the body so focus/caret are preserved.
             const filterInput = document.getElementById('todoFilterInput');
             if (filterInput) {
                 filterInput.addEventListener('input', (e) => {
-                    clearTimeout(todoFilterTimeout);
-                    todoFilterTimeout = setTimeout(() => {
-                        todoFilter = e.target.value;
-                        loadTodos(false);
-                    }, 300);
+                    todoFilter = e.target.value;
+                    const body = document.getElementById('todoListBody');
+                    if (body) body.innerHTML = renderTodoBody();
                 });
-                // Focus at end of input if filter has value
                 if (todoFilter) {
                     filterInput.focus();
                     filterInput.setSelectionRange(filterInput.value.length, filterInput.value.length);
                 }
             }
+
+            const nbFilter = document.getElementById('todoNotebookFilter');
+            if (nbFilter) nbFilter.addEventListener('change', (e) => { todoNotebookFilter = e.target.value; renderTodosPage(); });
+
+            const exToggle = document.getElementById('todoIncludeExcluded');
+            if (exToggle) exToggle.addEventListener('change', (e) => { todoIncludeExcluded = e.target.checked; refreshTodos(); });
+        }
+
+        async function loadTodos(pushHistory = true) {
+            teardownEditor();
+            currentNotebook = null;
+            currentNotePath = null;
+            if (pushHistory) history.pushState({ view: 'todos' }, '', '#todos');
+            todosCache = await api('/todos' + (todoIncludeExcluded ? '?include_excluded=true' : ''));
+            renderTodosPage();
+        }
+
+        // Re-fetch todos from the server, then re-render (keeps cache in sync after edits).
+        async function refreshTodos() {
+            try {
+                todosCache = await api('/todos' + (todoIncludeExcluded ? '?include_excluded=true' : ''));
+            } catch (e) {
+                todosCache = [];
+            }
+            renderTodosPage();
+        }
+
+        function setTodoView(v) {
+            todoView = v;
+            savePreferences();
+            renderTodosPage();
         }
 
         function changeTodoSort(value) {
             todoSortBy = value;
             savePreferences();
-            loadTodos();
+            renderTodosPage();
         }
 
         async function toggleTodo(id) {
-            await api('/todos/' + id + '/toggle', { method: 'POST' });
-            loadTodos();
+            // Optimistic: flip the cached status and re-render immediately so the
+            // click feels instant, then reconcile with the server.
+            const t = todosCache.find(x => x.id === id);
+            if (t) {
+                t.status = (t.status === 'completed') ? 'pending' : 'completed';
+                const body = document.getElementById('todoListBody');
+                if (body) body.innerHTML = renderTodoBody();
+            }
+            try { await api('/todos/' + id + '/toggle', { method: 'POST' }); } catch (e) {}
+            await refreshTodos();
         }
 
         async function addTodo(event) {
@@ -1333,7 +1505,7 @@
             });
 
             input.value = '';
-            loadTodos();
+            refreshTodos();
         }
 
         function editDueDate(todoId, currentDate) {
@@ -1476,10 +1648,10 @@
 
             const columnsHtml = columns.map(col => `
                 <div class="kanban-column"
-                     data-filters='${JSON.stringify(col.filters)}'
+                     data-filters="${escapeHtml(JSON.stringify(col.filters))}"
                      ondragover="kanbanDragOver(event)"
                      ondragleave="kanbanDragLeave(event)"
-                     ondrop="kanbanDrop(event, '${escapeJs(JSON.stringify(col.filters))}')">
+                     ondrop="kanbanDrop(event)">
                     <div class="kanban-header" style="border-color: ${getColumnColor(col.color)}">
                         <span>${escapeHtml(col.name)}</span>
                         <span class="count">${col.todos.length}</span>
@@ -1518,13 +1690,16 @@
             event.currentTarget.classList.remove('drag-over');
         }
 
-        async function kanbanDrop(event, filtersJson) {
+        async function kanbanDrop(event) {
             event.preventDefault();
             event.currentTarget.classList.remove('drag-over');
 
             if (!draggedTodoId) return;
 
-            const filters = JSON.parse(filtersJson);
+            // Filters come from the column's data attribute (escaped HTML), which
+            // avoids breaking the inline handler on the JSON's quotes.
+            let filters = {};
+            try { filters = JSON.parse(event.currentTarget.dataset.filters || '{}'); } catch (e) {}
 
             // Determine new status from column filters
             let newStatus = filters.status;
@@ -1553,6 +1728,9 @@
 
         let graphShowTags = true;
         let graphShowNotebooks = true;
+        // Graph scope: a notebook name, '' = none selected (default), or '__all__'
+        // (every notebook — slow on large vaults, so it's opt-in).
+        let graphNotebook = '';
 
         async function loadGraph(pushHistory = true) {
             teardownEditor();
@@ -1560,21 +1738,48 @@
             currentNotePath = null;
             if (pushHistory) history.pushState({ view: 'graph' }, '', '#graph');
 
+            // Ensure we have notebooks to populate the scope selector.
+            if (!notebooksCache.length) {
+                try { notebooksCache = await api('/notebooks'); } catch (e) {}
+            }
+            const realNbs = notebooksCache.filter(n => !n.name.startsWith('@'));
+            const nbOptions = realNbs.map(n =>
+                `<option value="${escapeHtml(n.name)}" ${graphNotebook === n.name ? 'selected' : ''}>${escapeHtml(n.name)} (${n.count})</option>`
+            ).join('');
+
             document.getElementById('content').innerHTML = `
                 <h1>Knowledge Graph</h1>
                 <div class="graph-controls">
+                    <label>Notebook:
+                        <select id="graphNotebook" style="padding:0.25rem 0.4rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem">
+                            <option value="" ${graphNotebook === '' ? 'selected' : ''}>— Select —</option>
+                            ${nbOptions}
+                            <option value="__all__" ${graphNotebook === '__all__' ? 'selected' : ''}>All notebooks (slow)</option>
+                        </select>
+                    </label>
                     <label><input type="checkbox" id="showTags" ${graphShowTags ? 'checked' : ''}> Show tags</label>
                     <label><input type="checkbox" id="showNotebooks" ${graphShowNotebooks ? 'checked' : ''}> Show notebooks</label>
                     <label>Zoom: <input type="range" id="graphZoom" min="0.1" max="3" step="0.1" value="1"></label>
                     <button class="btn" onclick="resetGraphZoom()">Reset View</button>
                 </div>
                 <div class="graph-container" id="graphContainer">
-                    <p class="loading" style="padding:1rem">Loading graph...</p>
+                    ${graphNotebook
+                        ? '<p class="loading" style="padding:1rem">Loading graph...</p>'
+                        : '<p style="padding:1rem;color:var(--text-dim)">Select a notebook to view its knowledge graph. Loading every notebook at once can be slow on large vaults.</p>'}
                 </div>
             `;
 
-            const data = await api('/graph');
-            renderGraph(data);
+            // Scope selector
+            document.getElementById('graphNotebook').addEventListener('change', (e) => {
+                graphNotebook = e.target.value;
+                loadGraph(false);
+            });
+
+            if (graphNotebook) {
+                const url = graphNotebook === '__all__' ? '/graph' : '/graph?notebook=' + encodeURIComponent(graphNotebook);
+                const data = await api(url);
+                renderGraph(data);
+            }
 
             // Add event listeners for controls
             document.getElementById('showTags').addEventListener('change', (e) => {
@@ -1795,8 +2000,49 @@
                 return d.toLocaleDateString();
             }
 
+            // Local YYYY-MM-DD for a timestamp (used by the calendar view).
+            const localDate = (iso) => {
+                const d = new Date(iso);
+                return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+            };
+
+            const viewBtn = (v, label) =>
+                `<button class="view-toggle${historyView === v ? ' active' : ''}" onclick="setHistoryView('${v}')">${label}</button>`;
+
+            let bodyHtml;
+            if (historyView === 'calendar') {
+                const items = historyData.map(h => ({
+                    date: localDate(h.timestamp),
+                    path: h.path,
+                    title: h.title || h.path.split('/').pop().replace('.md', ''),
+                }));
+                bodyHtml = renderCalendar(items, historyCalState, 'historyCalShift');
+            } else {
+                bodyHtml = `
+                    <div class="search-results">
+                        ${historyData.length === 0 ? '<p style="color:var(--text-dim)">No history yet. View some notes to build your history.</p>' : ''}
+                        ${historyData.map(h => {
+                            const nb = notebooksCache.find(n => n.name === h.notebook);
+                            const nbColor = nb && nb.color ? nb.color : 'var(--text-dim)';
+                            return `
+                                <div class="search-result" onclick="loadNote('${escapeJs(h.path)}')">
+                                    <h4>${escapeHtml(h.title || h.path.split('/').pop().replace('.md', ''))}</h4>
+                                    <div class="snippet">
+                                        ${h.notebook ? '<span class="color-dot" style="background:' + nbColor + '"></span><span style="color:var(--accent)">' + escapeHtml(h.notebook) + '</span> · ' : ''}
+                                        <span style="color:var(--text-dim)">${formatTimestamp(h.timestamp)}</span>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>`;
+            }
+
             document.getElementById('content').innerHTML = `
                 <h1>History</h1>
+                <div class="header-actions">
+                    <div class="view-toggle-group">${viewBtn('list', 'List')}${viewBtn('calendar', 'Calendar')}</div>
+                    <button class="btn" onclick="loadStream('__all__')" title="Read every notebook's notes in one stream">≡ All Notes Stream</button>
+                </div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
                     <p style="color:var(--text-dim)">${historyData.length} entries</p>
                     <select id="historySort" style="padding:0.3rem 0.5rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem">
@@ -1804,22 +2050,7 @@
                         <option value="modified" ${historySortBy === 'modified' ? 'selected' : ''}>Recently Modified</option>
                     </select>
                 </div>
-                <div class="search-results">
-                    ${historyData.length === 0 ? '<p style="color:var(--text-dim)">No history yet. View some notes to build your history.</p>' : ''}
-                    ${historyData.map(h => {
-                        const nb = notebooksCache.find(n => n.name === h.notebook);
-                        const nbColor = nb && nb.color ? nb.color : 'var(--text-dim)';
-                        return `
-                            <div class="search-result" onclick="loadNote('${escapeJs(h.path)}')">
-                                <h4>${escapeHtml(h.title || h.path.split('/').pop().replace('.md', ''))}</h4>
-                                <div class="snippet">
-                                    ${h.notebook ? '<span class="color-dot" style="background:' + nbColor + '"></span><span style="color:var(--accent)">' + escapeHtml(h.notebook) + '</span> · ' : ''}
-                                    <span style="color:var(--text-dim)">${formatTimestamp(h.timestamp)}</span>
-                                </div>
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
+                ${bodyHtml}
             `;
 
             // Add event listener for sort change
@@ -1831,6 +2062,17 @@
                     loadHistory(false);
                 });
             }
+        }
+
+        function setHistoryView(v) {
+            historyView = v;
+            savePreferences();
+            loadHistory(false);
+        }
+
+        function historyCalShift(delta) {
+            shiftCalState(historyCalState, delta);
+            loadHistory(false);
         }
 
         async function doSearch(query) {
@@ -2002,7 +2244,11 @@
 
             // Notebook scope (from `nb web -n <notebook>`): default view is that notebook.
             let scope = null;
-            try { scope = (await api('/startup')).scopeNotebook; } catch (e) {}
+            try {
+                const startup = await api('/startup');
+                scope = startup.scopeNotebook;
+                if (startup.inboxFile) inboxFile = startup.inboxFile;
+            } catch (e) {}
 
             const hash = location.hash;
             if (hash.startsWith('#notebook/')) {

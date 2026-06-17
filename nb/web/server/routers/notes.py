@@ -178,25 +178,34 @@ def stream(
     limit: int = 20,
     config: Config = Depends(get_app_config),
 ):
-    """Get notes with full content for continuous reading (paginated)."""
-    from nb.index.db import get_db
+    """Get notes with full content for continuous reading (paginated).
 
-    if not notebook:
-        return JSONResponse({"error": "Missing notebook parameter"}, status_code=400)
+    Pass ``notebook`` to stream a single notebook, or omit it (or pass the
+    ``__all__`` sentinel) to stream every notebook's notes together.
+    """
+    from nb.index.db import get_db
 
     db = get_db()
 
+    all_notebooks = not notebook or notebook == "__all__"
+    if all_notebooks:
+        where = "external = 0"
+        where_params: tuple = ()
+    else:
+        where = "notebook = ? AND external = 0"
+        where_params = (notebook,)
+
     note_rows = db.fetchall(
-        """SELECT path, title, date, mtime
-           FROM notes WHERE notebook = ? AND external = 0
+        f"""SELECT path, title, date, notebook, mtime
+           FROM notes WHERE {where}
            ORDER BY COALESCE(date, '') DESC, mtime DESC
            LIMIT ? OFFSET ?""",
-        (notebook, limit, offset),
+        (*where_params, limit, offset),
     )
 
     count_row = db.fetchone(
-        "SELECT COUNT(*) as total FROM notes WHERE notebook = ? AND external = 0",
-        (notebook,),
+        f"SELECT COUNT(*) as total FROM notes WHERE {where}",
+        where_params,
     )
     total = count_row["total"] if count_row else 0
 
@@ -220,6 +229,7 @@ def stream(
                 "path": normalize_path(note_path),
                 "title": row["title"] or note_path.stem,
                 "date": row["date"],
+                "notebook": row["notebook"],
                 "content": content,
             }
         )

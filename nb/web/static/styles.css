@@ -359,6 +359,38 @@
             width: 4px;
             border-radius: 8px 0 0 8px;
         }
+        .notebook-card .nb-card-head { cursor: pointer; }
+        .notebook-card .nb-card-head:hover h3 { color: var(--accent); }
+        .nb-card-recent {
+            margin: 0.6rem 0 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
+            min-height: 1.5rem;
+        }
+        .nb-recent {
+            display: flex;
+            gap: 0.5rem;
+            align-items: baseline;
+            font-size: 0.8rem;
+            text-decoration: none;
+            color: var(--text-dim);
+            padding: 0.1rem 0.2rem;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .nb-recent:hover { background: var(--bg); color: var(--text); }
+        .nb-recent-date { font-family: monospace; font-size: 0.72rem; color: var(--text-dim); flex-shrink: 0; }
+        .nb-recent-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .nb-recent-empty { font-size: 0.78rem; color: var(--text-dim); opacity: 0.7; font-style: italic; }
+        .nb-card-foot {
+            display: flex;
+            gap: 0.4rem;
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--border);
+        }
+        .btn-sm { padding: 0.25rem 0.55rem; font-size: 0.78rem; }
 
         /* Todos */
         .todo-item {
@@ -517,7 +549,7 @@
             display: flex;
             align-items: baseline;
             gap: 0.75rem;
-            padding: 0.4rem 0.5rem;
+            padding: 0.45rem 0.5rem;
             border-radius: 5px;
             cursor: pointer;
         }
@@ -529,9 +561,19 @@
             white-space: nowrap;
             min-width: 5.5rem;
         }
-        .date-note-title { color: var(--accent); flex: 1; }
+        .date-note-main { flex: 1; min-width: 0; }
+        .date-note-titlerow { display: flex; align-items: baseline; gap: 0.6rem; }
+        .date-note-title { color: var(--accent); }
         .date-note-tags { display: flex; gap: 0.3rem; flex-wrap: wrap; }
         .date-note-tag { font-size: 0.72rem; color: var(--text-dim); }
+        .date-note-snippet {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-top: 0.15rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
 
         .calendar { max-width: 720px; }
         .cal-nav {
@@ -764,7 +806,17 @@
             font-size: 0.85rem;
             white-space: nowrap;
             margin-left: 1rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
         }
+        .stream-note-nb {
+            color: var(--accent);
+            text-decoration: none;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        .stream-note-nb:hover { text-decoration: underline; }
         .stream-note-content {
             line-height: 1.7;
         }
@@ -777,3 +829,78 @@
             text-align: center;
             padding: 1.5rem;
         }
+
+        /* Todos page controls */
+        .todo-inbox-hint {
+            font-size: 0.78rem;
+            color: var(--text-dim);
+            margin: -0.75rem 0 1rem;
+        }
+        .todo-inbox-hint code {
+            background: var(--surface);
+            padding: 0.1rem 0.35rem;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .todo-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.75rem;
+        }
+        .todo-controls .search-box { margin-bottom: 0; }
+        .todo-excluded-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            font-size: 0.82rem;
+            color: var(--text-dim);
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        .todo-divider {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            margin: 1.5rem 0 0.6rem;
+            letter-spacing: 0.05em;
+            padding-bottom: 0.3rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        /* Todos table (condensed) view */
+        .todo-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .todo-table td {
+            padding: 0.3rem 0.5rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+        .todo-trow { cursor: default; }
+        .todo-trow:hover { background: var(--surface); }
+        .todo-trow.completed .tt-content { text-decoration: line-through; color: var(--text-dim); }
+        .todo-trow.overdue .tt-due { color: var(--red); }
+        .todo-table .tt-check { width: 26px; }
+        .todo-table .tt-pr { width: 30px; white-space: nowrap; }
+        .todo-table .tt-content { width: auto; }
+        .todo-table .tt-nb { color: var(--accent); white-space: nowrap; }
+        .todo-table .tt-due { white-space: nowrap; font-family: monospace; font-size: 0.8rem; }
+        .todo-table .tt-open { width: 24px; text-align: center; }
+        .todo-table .checkbox {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border);
+            border-radius: 3px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .todo-table .checkbox:hover { border-color: var(--accent); }
+        .todo-table .checkbox svg { display: none; }
+        .todo-trow.completed .checkbox { background: var(--green); border-color: var(--green); }
+        .todo-trow.completed .checkbox svg { display: block; }
+        .todo-table .todo-open-note { cursor: pointer; color: var(--text-dim); }
+        .todo-table .todo-open-note:hover { color: var(--accent); }

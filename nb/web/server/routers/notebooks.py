@@ -12,16 +12,43 @@ from nb.core.notebooks import get_notebook_notes_with_linked, list_notebooks
 from nb.core.notes import get_note, get_sections_for_path
 from nb.utils.hashing import normalize_path
 from nb.web.server.deps import get_app_config, get_settings
-from nb.web.server.serializers import get_alias_for_path, get_color_hex
+from nb.web.server.serializers import get_alias_for_path, get_color_hex, make_snippet
 from nb.web.server.settings import AppSettings
 
 router = APIRouter()
 
 
+def _recent_notes(db, notebook: str, external: int = 0, limit: int = 3) -> list[dict]:
+    """The most recently modified notes in a notebook (for home-page cards)."""
+    rows = db.fetchall(
+        """SELECT path, title, date FROM notes
+           WHERE notebook = ? AND external = ?
+           ORDER BY mtime DESC LIMIT ?""",
+        (notebook, external, limit),
+    )
+    out: list[dict] = []
+    for row in rows:
+        note_path = Path(row["path"])
+        out.append(
+            {
+                "path": normalize_path(note_path),
+                "title": row["title"] or note_path.stem,
+                "date": row["date"],
+            }
+        )
+    return out
+
+
 @router.get("/api/startup")
-def startup(settings: AppSettings = Depends(get_settings)) -> dict:
-    """Startup info (scope, etc.) used by the frontend on first load."""
-    return {"scopeNotebook": settings.scope_notebook}
+def startup(
+    settings: AppSettings = Depends(get_settings),
+    config: Config = Depends(get_app_config),
+) -> dict:
+    """Startup info (scope, inbox file, etc.) used by the frontend on first load."""
+    return {
+        "scopeNotebook": settings.scope_notebook,
+        "inboxFile": config.todo.inbox_file,
+    }
 
 
 @router.get("/api/notebooks")
@@ -83,6 +110,7 @@ def list_notebooks_endpoint(
                 "dateMode": nb_config.date_mode if nb_config else "none",
                 "lastModified": stats.get("last_modified"),
                 "lastViewed": stats.get("last_viewed"),
+                "recentNotes": _recent_notes(db, name, external=0),
             }
         )
 
@@ -104,6 +132,7 @@ def list_notebooks_endpoint(
                     "alias": linked.alias,
                     "lastModified": stats.get("last_modified"),
                     "lastViewed": stats.get("last_viewed"),
+                    "recentNotes": _recent_notes(db, virtual_nb, external=1),
                 }
             )
             seen_notebooks.add(virtual_nb)
@@ -175,7 +204,7 @@ def notebook_notes(
     if linked_config:
         # List files from linked note - query database for indexed data
         note_rows = db.fetchall(
-            """SELECT path, title, date, source_alias, mtime
+            """SELECT path, title, date, source_alias, mtime, content
                FROM notes WHERE notebook = ? AND external = 1
                ORDER BY COALESCE(date, '') DESC, mtime DESC""",
             (name,),
@@ -206,6 +235,7 @@ def notebook_notes(
                         "alias": note_alias,
                         "isLinked": True,
                         "sections": get_sections_for_path(note_path),
+                        "snippet": make_snippet(row["content"]),
                     }
                 )
         else:
@@ -240,7 +270,7 @@ def notebook_notes(
     else:
         # Regular notebook - query database for notes with metadata
         note_rows = db.fetchall(
-            """SELECT path, title, date, external, source_alias, mtime
+            """SELECT path, title, date, external, source_alias, mtime, content
                FROM notes WHERE notebook = ?
                ORDER BY COALESCE(date, '') DESC, mtime DESC""",
             (name,),
@@ -286,6 +316,7 @@ def notebook_notes(
                         "alias": note_alias,
                         "isLinked": is_external,
                         "sections": get_sections_for_path(note_path),
+                        "snippet": make_snippet(row["content"]),
                     }
                 )
         else:

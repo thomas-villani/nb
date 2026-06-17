@@ -15,8 +15,16 @@ router = APIRouter()
 
 
 @router.get("/api/graph")
-def graph(config: Config = Depends(get_app_config)) -> dict:
-    """Nodes (notes, notebooks, tags) and edges for the D3 graph."""
+def graph(
+    notebook: str | None = None,
+    config: Config = Depends(get_app_config),
+) -> dict:
+    """Nodes (notes, notebooks, tags) and edges for the D3 graph.
+
+    Loading every notebook at once is expensive for large vaults, so the graph
+    can be scoped to a single ``notebook`` (only its notes, their tags, and the
+    links between them are returned).
+    """
     from nb.index.db import get_db
 
     db = get_db()
@@ -25,10 +33,16 @@ def graph(config: Config = Depends(get_app_config)) -> dict:
     edges: list[dict] = []
     node_ids: set[str] = set()
 
-    # Get all notes as nodes
-    note_rows = db.fetchall(
-        "SELECT path, title, notebook FROM notes WHERE external = 0"
-    )
+    # Get notes as nodes (optionally scoped to a single notebook)
+    if notebook:
+        note_rows = db.fetchall(
+            "SELECT path, title, notebook FROM notes WHERE external = 0 AND notebook = ?",
+            (notebook,),
+        )
+    else:
+        note_rows = db.fetchall(
+            "SELECT path, title, notebook FROM notes WHERE external = 0"
+        )
     for row in note_rows:
         path_str = normalize_path(row["path"])
         node_ids.add(path_str)
@@ -41,12 +55,9 @@ def graph(config: Config = Depends(get_app_config)) -> dict:
             }
         )
 
-    # Get all notebooks as nodes
-    notebook_rows = db.fetchall(
-        "SELECT DISTINCT notebook FROM notes WHERE external = 0 AND notebook IS NOT NULL"
-    )
+    # Notebook nodes — restricted to the notebooks of the included notes.
     notebook_ids: set[str] = set()
-    for row in notebook_rows:
+    for row in note_rows:
         nb_name = row["notebook"]
         if nb_name and nb_name not in notebook_ids:
             notebook_ids.add(nb_name)
@@ -61,14 +72,9 @@ def graph(config: Config = Depends(get_app_config)) -> dict:
                 }
             )
 
-    # Get all tags as nodes
-    tag_rows = db.fetchall("SELECT DISTINCT tag FROM note_tags")
+    # Tag nodes — only tags attached to the included notes (added below as edges
+    # are discovered) so a scoped graph doesn't pull in the whole tag universe.
     tag_ids: set[str] = set()
-    for row in tag_rows:
-        tag = row["tag"]
-        if tag and tag not in tag_ids:
-            tag_ids.add(tag)
-            nodes.append({"id": f"tag:{tag}", "title": f"#{tag}", "type": "tag"})
 
     # Add note -> notebook edges
     for row in note_rows:
@@ -83,15 +89,19 @@ def graph(config: Config = Depends(get_app_config)) -> dict:
                 }
             )
 
-    # Add note -> tag edges
+    # Add note -> tag edges, creating tag nodes only for included notes.
     note_tag_rows = db.fetchall("SELECT note_path, tag FROM note_tags")
     for row in note_tag_rows:
         path_str = normalize_path(row["note_path"])
-        if path_str in node_ids:
+        tag = row["tag"]
+        if path_str in node_ids and tag:
+            if tag not in tag_ids:
+                tag_ids.add(tag)
+                nodes.append({"id": f"tag:{tag}", "title": f"#{tag}", "type": "tag"})
             edges.append(
                 {
                     "source": path_str,
-                    "target": f"tag:{row['tag']}",
+                    "target": f"tag:{tag}",
                     "type": "tag",
                 }
             )

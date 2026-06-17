@@ -166,6 +166,78 @@ class TestGetEndpoints:
         assert data[0]["date"] == "2025-11-28"
         assert "test-note.md" in data[0]["path"]
 
+    def test_api_notebook_notes_snippet(
+        self, client: TestClient, mock_web_config: Config
+    ):
+        from nb.index.scanner import index_note
+
+        note_path = mock_web_config.notes_root / "projects" / "snip.md"
+        note_path.write_text(
+            "---\ndate: 2025-11-28\n---\n\n# Title\n\nThe quick brown fox jumps.",
+            encoding="utf-8",
+        )
+        index_note(note_path, mock_web_config.notes_root, index_vectors=False)
+
+        data = client.get("/api/notebooks/projects").json()
+        assert len(data) == 1
+        assert "quick brown fox" in data[0]["snippet"]
+
+    def test_api_notebooks_includes_recent_notes(
+        self, client: TestClient, mock_web_config: Config
+    ):
+        from nb.index.scanner import index_note
+
+        note_path = mock_web_config.notes_root / "projects" / "recent.md"
+        note_path.write_text("# Recent Note\n\nBody.", encoding="utf-8")
+        index_note(note_path, mock_web_config.notes_root, index_vectors=False)
+
+        nbs = client.get("/api/notebooks").json()
+        projects = next(nb for nb in nbs if nb["name"] == "projects")
+        assert "recentNotes" in projects
+        titles = [rn["title"] for rn in projects["recentNotes"]]
+        assert "Recent Note" in titles
+
+    def test_api_stream_all_notebooks(
+        self, client: TestClient, mock_web_config: Config
+    ):
+        from nb.index.scanner import index_note
+
+        for nbname, fname, title in [
+            ("projects", "p1.md", "Proj One"),
+            ("daily", "2025-11-28.md", "Day One"),
+        ]:
+            p = mock_web_config.notes_root / nbname / fname
+            p.write_text(f"# {title}\n\nContent here.", encoding="utf-8")
+            index_note(p, mock_web_config.notes_root, index_vectors=False)
+
+        data = client.get("/api/stream").json()
+        assert data["total"] >= 2
+        nbs_in_stream = {n.get("notebook") for n in data["notes"]}
+        assert {"projects", "daily"}.issubset(nbs_in_stream)
+
+    def test_api_graph_notebook_filter(
+        self, client: TestClient, mock_web_config: Config
+    ):
+        from nb.index.scanner import index_note
+
+        for nbname, fname in [("projects", "p1.md"), ("daily", "2025-11-28.md")]:
+            p = mock_web_config.notes_root / nbname / fname
+            p.write_text("# T\n\nBody.", encoding="utf-8")
+            index_note(p, mock_web_config.notes_root, index_vectors=False)
+
+        data = client.get("/api/graph", params={"notebook": "projects"}).json()
+        nb_nodes = {n["id"] for n in data["nodes"] if n["type"] == "notebook"}
+        assert nb_nodes == {"notebook:projects"}
+        note_nbs = {n["notebook"] for n in data["nodes"] if n["type"] == "note"}
+        assert note_nbs == {"projects"}
+
+    def test_api_todos_include_excluded_param(self, client: TestClient):
+        # Both variants return a list; the param must be accepted.
+        assert isinstance(client.get("/api/todos").json(), list)
+        assert isinstance(
+            client.get("/api/todos", params={"include_excluded": "true"}).json(), list
+        )
+
     def test_api_note_content(self, client: TestClient, mock_web_config: Config):
         note_content = "---\ndate: 2025-11-28\n---\n\n# My Note\n\nHello world!"
         note_path = mock_web_config.notes_root / "projects" / "my-note.md"
@@ -243,13 +315,17 @@ class TestGetEndpoints:
     def test_api_startup_no_scope(self, client: TestClient):
         resp = client.get("/api/startup")
         assert resp.status_code == 200
-        assert resp.json() == {"scopeNotebook": None}
+        body = resp.json()
+        assert body["scopeNotebook"] is None
+        assert "inboxFile" in body
 
     def test_api_startup_with_scope(self, mock_web_config: Config):
         scoped = make_client(AppSettings(scope_notebook="projects"))
         resp = scoped.get("/api/startup")
         assert resp.status_code == 200
-        assert resp.json() == {"scopeNotebook": "projects"}
+        body = resp.json()
+        assert body["scopeNotebook"] == "projects"
+        assert "inboxFile" in body
 
     def test_api_notebooks_scoped(self, mock_web_config: Config):
         root = mock_web_config.notes_root
