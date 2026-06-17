@@ -30,7 +30,7 @@ dependencies = [
     "httpx>=0.27.0", # web clipping
     "fastapi>=0.115.0", # web viewer backend
     "uvicorn>=0.30.0", # ASGI server for the web viewer
-    "all2md[all]>=1.0.0",
+    "all2md[all,ocr,pdf_layout]>=1.4.0",
     "pyperclip>=1.11.0",
     "wijjit",
     "gitpython>=3.1.0",  # Git integration for version control
@@ -58,7 +58,7 @@ daemon = [
 all = [
     "sounddevice>=0.4.6",
     "soundfile>=0.12.0",
-    "numpy>=2.4.0",
+    "numpy>=2.4.6",
     "deepgram-sdk>=3.0.0",
     "pywin32>=306; sys_platform == 'win32'",
     "watchdog>=4.0.0",
