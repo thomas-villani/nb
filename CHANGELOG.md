@@ -1,3 +1,35 @@
+# v0.7.0 - 2026-06-16
+
+Major overhaul of `nb web`: the viewer moves from the stdlib `http.server` to a FastAPI + uvicorn backend and gains a true WYSIWYG editor, date/calendar views, a dark/light theme, richer home cards, a reworked todos page, and a performance-scoped knowledge graph. Markdown files remain the source of truth and the on-disk index stays a rebuildable cache. The only net-new runtime dependencies are `fastapi` and `uvicorn` (pip-only); the frontend is still a no-build vanilla-JS app and works fully offline.
+
+## New Features
+
+- [830ea64] Swap the web backend to FastAPI + uvicorn
+  - The server is now a `create_app(settings)` factory in `nb/web/server/` with `APIRouter` modules; `nb/webserver.py` is a thin `run_server()` wrapper calling `uvicorn.run(...)`
+  - `nb/index/db.py` uses `check_same_thread=False` with a `threading.RLock`, since uvicorn dispatches sync handlers on a threadpool
+  - All existing CLI flags (`--port/--no-open/--completed/--notebook`) are preserved
+- [9230692, 9d80c9f] Replace the EasyMDE textarea with a Toast UI WYSIWYG editor
+  - YAML frontmatter is split off and preserved verbatim, so it never round-trips through the editor; auto-save on navigate-away
+- [7d76a84] Date-based notebook views: Timeline (with content snippets), Calendar (month grid), and List, plus a Calendar view on the History page
+- [11f2feb] Dark/light theme toggle and clickable note breadcrumbs (both persisted in `localStorage`)
+- [4e8fedf] Home, todos, stream, and graph improvements
+  - Home cards are wider and preview each notebook's three most recently modified notes, with Stream / New Note buttons; an "All Notes" stream reads every notebook end-to-end
+  - Todos page: condensed Table view, a separate notebook dropdown filter, group-by-notebook dividers, an inbox-destination hint, `autocomplete=off`, optimistic toggling, client-side text filtering (fixes the focus/race when erasing quickly), and a "Show excluded" toggle
+  - Knowledge graph is scoped to one or more selected notebooks (multi-select chips); nothing loads until you pick at least one, since rendering a whole large vault at once is slow
+  - Fixed a Kanban drag crash (`Invalid or unexpected token`) by reading column filters from a data attribute instead of an escaped-JSON inline handler
+
+## Backend
+
+- New endpoints / parameters: `/api/stream` supports an all-notebooks mode (`__all__`), `/api/graph` accepts repeated `notebook` params for scoping, `/api/todos` accepts `include_excluded`, `/api/startup` returns the inbox file, and `/api/notebooks` includes recent-note previews and per-note snippets
+
+## Dependencies
+
+- Adds `fastapi` and `uvicorn` to the runtime dependencies. The earlier React/Vite/BlockNote SPA direction (M0) was scaffolded and then deliberately dropped (S0) in favor of evolving the existing vanilla frontend — no Node/npm/build step is required.
+
+## Documentation
+
+- Updated the README, technical overview, and the `nb web` command reference for the FastAPI backend, WYSIWYG editor, date/calendar views, theme toggle, home previews, todos table view, and the scoped knowledge graph
+
 # v0.6.7 - 2026-06-16
 
 Reworks `nb stream` from an interactive TUI into a simple paged console reader: notes render end-to-end as rich markdown through a scrolling pager (like `less`).

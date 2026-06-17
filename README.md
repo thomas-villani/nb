@@ -1424,26 +1424,32 @@ nb web -n projects        # Scope the viewer to a single notebook
 ```
 
 Features:
+- **FastAPI backend** served by uvicorn; the frontend is a no-build vanilla-JS app that works fully offline (libraries are vendored)
 - Browse notebooks and notes with notebook colors from config
+- **Home previews**: Each notebook card shows its three most recently modified notes, plus quick Stream / New Note buttons
 - **Tree navigation**: Open a notebook or section directly from the sidebar tree (the caret still toggles expand/collapse)
-- Create and edit notes directly in the browser
-- Markdown rendering with syntax highlighting for code blocks
+- **WYSIWYG editor** (Toast UI Editor) with auto-save on navigate-away; YAML frontmatter is preserved verbatim and kept out of the editor
+- Markdown rendering with syntax highlighting for code blocks; clickable breadcrumbs on the note view
 - **Note properties**: Frontmatter shown vertically, with list values rendered as bullet lists
+- **Date views**: Date-based notebooks get Timeline (with content snippets), Calendar, and List views; the History page also has a Calendar view
+- **All Notes stream**: Read every notebook's notes end-to-end in one scrolling view
 - Full-text search across all notes (with notebook scoping)
 - **Clickable links**: Wiki links `[[note]]` and internal markdown links navigate between notes
 - **Backlinks panel**: See which notes link to the current note
-- **Knowledge graph**: Interactive D3.js visualization of note connections
+- **Knowledge graph**: Interactive D3.js visualization, scoped to one or more selected notebooks for performance on large vaults
 - **Kanban board**: Drag-and-drop todo management with customizable columns
-- Todo management: add new todos, toggle completion, view by section, and open (with full path) each todo's source note
+- Todo management: List or condensed Table view, a separate notebook filter, group-by-notebook dividers, an inbox-destination hint, add/toggle todos, and open (with full path) each todo's source note
 - Todo sections: Overdue, In Progress, Due Today, Due This Week, Due Later, No Due Date
 - Sort todos by status, notebook, due date, priority, or created date
 - **Layout toggle**: Switch between full-width and centered reading-width
-- Dark theme, mobile responsive
-- Zero additional dependencies (stdlib HTTP server + CDN for markdown/highlighting/D3)
+- **Dark/light theme** toggle, mobile responsive
+- Net new dependencies are only `fastapi` + `uvicorn` (pip-only); no Node/npm/build step
 
 #### Graph View
 
 Access the interactive knowledge graph from the "Graph" link in the navigation sidebar, or directly at `http://localhost:3000/#graph`.
+
+Select one or more notebooks (via the chips at the top) to scope the graph — nothing loads until you pick at least one, since rendering an entire large vault at once can be slow.
 
 The graph shows three types of nodes:
 - **Notes** (colored by notebook) - click to view the note
@@ -1456,6 +1462,7 @@ Edge types:
 - **Dotted lines**: Note-to-notebook membership
 
 Controls:
+- Select notebooks to include with the chips (or "Select all" / "Clear")
 - Drag nodes to rearrange the layout
 - Scroll to zoom, or use the zoom slider
 - Toggle tags/notebooks visibility with checkboxes

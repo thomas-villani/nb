@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from nb.config import Config
 from nb.utils.hashing import normalize_path
@@ -16,14 +16,15 @@ router = APIRouter()
 
 @router.get("/api/graph")
 def graph(
-    notebook: str | None = None,
+    notebook: list[str] | None = Query(None),
     config: Config = Depends(get_app_config),
 ) -> dict:
     """Nodes (notes, notebooks, tags) and edges for the D3 graph.
 
     Loading every notebook at once is expensive for large vaults, so the graph
-    can be scoped to a single ``notebook`` (only its notes, their tags, and the
-    links between them are returned).
+    can be scoped to one or more notebooks (repeat the ``notebook`` query param);
+    only those notebooks' notes, their tags, and the links between them are
+    returned. Omit ``notebook`` to include the whole vault.
     """
     from nb.index.db import get_db
 
@@ -33,11 +34,13 @@ def graph(
     edges: list[dict] = []
     node_ids: set[str] = set()
 
-    # Get notes as nodes (optionally scoped to a single notebook)
+    # Get notes as nodes (optionally scoped to one or more notebooks)
     if notebook:
+        placeholders = ", ".join("?" for _ in notebook)
         note_rows = db.fetchall(
-            "SELECT path, title, notebook FROM notes WHERE external = 0 AND notebook = ?",
-            (notebook,),
+            f"SELECT path, title, notebook FROM notes "
+            f"WHERE external = 0 AND notebook IN ({placeholders})",
+            tuple(notebook),
         )
     else:
         note_rows = db.fetchall(

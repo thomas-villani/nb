@@ -1033,15 +1033,18 @@ Browse notebooks in a browser.
 
 **Features:**
 
-- Browse notebooks and notes with colors
-- Open a notebook or section directly from the sidebar tree (the caret still toggles expand/collapse)
-- Create and edit notes in browser
-- Markdown rendering with syntax highlighting
+- FastAPI backend served by uvicorn; the frontend is a no-build vanilla-JS app, fully offline
+- Browse notebooks and notes with colors; open a notebook or section directly from the sidebar tree (the caret still toggles expand/collapse)
+- Home cards preview each notebook's three most recently modified notes, with quick Stream / New Note buttons
+- WYSIWYG note editing (Toast UI Editor) with auto-save on navigate-away; YAML frontmatter is preserved verbatim and kept out of the editor
+- Markdown rendering with syntax highlighting; clickable breadcrumbs on the note view
 - Note properties (frontmatter) shown vertically, with list values as bullet lists
+- Date-based notebooks get Timeline (with content snippets), Calendar, and List views; the History page also has a Calendar view
+- "All Notes" stream reads every notebook's notes end-to-end in one scrolling view
 - Full-text search
-- Todo management, including a link to open (and the full path of) each todo's source note
-- Toggle between full-width and centered reading-width layouts
-- Dark theme, mobile responsive
+- Todo management: List or condensed Table view, a separate notebook filter, group-by-notebook dividers, an inbox-destination hint, and a link to open (and the full path of) each todo's source note
+- Knowledge graph, scoped to one or more selected notebooks for performance on large vaults
+- Toggle between full-width and centered reading-width layouts; dark/light theme toggle; mobile responsive
 
 Press ``Ctrl+C`` to stop the server.
 

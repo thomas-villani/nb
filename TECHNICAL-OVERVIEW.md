@@ -959,39 +959,47 @@ Interactive todo review for weekly/daily reviews. Presents todos one at a time w
 
 ### Overview
 
-A modern dark-themed web UI accessible via `nb web`. Launches a local HTTP server (default port 3000) with a single-page application for browsing notes and managing todos.
+A web UI accessible via `nb web`. Launches a local FastAPI server (served by uvicorn, default port 3000) with a single-page application for browsing notes and managing todos. The frontend is a no-build vanilla-JS app and works fully offline (libraries are vendored).
 
 ### Features
 
-- **Notebook Browser**: Cards with color indicators and note counts
+- **Notebook Browser**: Wide cards with color indicators, note counts, and a preview of each notebook's three most recently modified notes, plus Stream / New Note buttons
 - **Sidebar Tree**: Open notebooks/sections from the tree (caret toggles expand/collapse); supports nested section filtering
-- **Note Viewer**: Markdown rendering with syntax highlighting (GitHub dark theme); vertical properties panel with list values as bullet lists
+- **Note Viewer**: Markdown rendering with syntax highlighting; clickable breadcrumbs; vertical properties panel with list values as bullet lists
+- **WYSIWYG Editor**: Toast UI Editor with auto-save on navigate-away; YAML frontmatter is split off and preserved verbatim so it never round-trips through the editor
+- **Date Views**: Date-based notebooks get Timeline (with content snippets), Calendar, and List views; the History page also has a Calendar view
+- **Stream**: An "All Notes" stream reads every notebook's notes end-to-end (paginated, infinite scroll)
 - **Full-text Search**: Live search results as you type
-- **Todo Manager**: Status groups (Overdue, In Progress, Due Today, etc.); each todo links to and shows the path of its source note
-- **Note Editor**: Create and edit notes in-browser
-- **Todo Creation**: Add todos with metadata (@due, @priority, #tags)
+- **Todo Manager**: List or condensed Table view; status groups (Overdue, In Progress, Due Today, etc.) or group-by-notebook with dividers; separate notebook filter; "Show excluded" toggle; inbox-destination hint; optimistic toggling; each todo links to and shows the path of its source note
+- **Knowledge Graph**: D3 force graph scoped to one or more selected notebooks (nothing loads until you pick at least one — full-vault rendering is slow)
+- **Kanban Board**: Drag-and-drop status changes
 - **Notebook Scope**: `nb web -n <notebook>` limits the tree, notebook list and initial view to one notebook
-- **Layout Toggle**: Switch between full-width and centered reading-width (persisted in `localStorage`)
+- **Layout & Theme**: Toggle full-width vs. centered reading-width, and dark/light theme (both persisted in `localStorage`)
 
-### API Endpoints
+### Backend Structure
+
+The server lives in `nb/web/server/` as a `create_app(settings)` factory with `APIRouter` modules (`routers/notebooks.py`, `notes.py`, `search.py`, `todos.py`, `graph.py`, `history.py`). `nb/webserver.py` is a thin `run_server()` wrapper that builds the app and calls `uvicorn.run(...)`. Because uvicorn dispatches sync handlers on a threadpool, the SQLite layer (`nb/index/db.py`) uses `check_same_thread=False` with a `threading.RLock` guarding access.
+
+### Selected API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/notebooks` | GET | List all notebooks with metadata |
-| `/api/notebooks/{name}` | GET | List notes in a notebook |
-| `/api/note` | GET | Get note content (query: `path`) |
-| `/api/note` | POST | Create or update note |
-| `/api/todos` | GET | List todos with filtering |
+| `/api/notebooks` | GET | List notebooks with metadata + recent-note previews |
+| `/api/notebooks/{name}` | GET | List notes in a notebook (with snippets) |
+| `/api/note` | GET/POST | Get / create / update note content |
+| `/api/stream` | GET | Paginated full-content notes (single notebook or `__all__`) |
+| `/api/todos` | GET | List todos (`include_excluded` to surface `todo_exclude` notes) |
 | `/api/todos/{id}/toggle` | POST | Toggle todo completion |
-| `/api/todos` | POST | Create new todo |
+| `/api/todos` | POST | Create new todo (appended to the inbox) |
+| `/api/graph` | GET | Graph nodes/edges, scoped by repeated `notebook` params |
 | `/api/search` | GET | Search notes (query: `q`) |
-| `/api/startup` | GET | Startup info (notebook scope from `nb web -n`) |
+| `/api/startup` | GET | Startup info (notebook scope, inbox file) |
 
 ### Tech Stack
 
-- Pure Python HTTP server (no external framework)
-- Vanilla JavaScript with marked.js for markdown
-- CSS with dark theme and responsive layout
+- FastAPI + uvicorn backend (`uvicorn.run`, sync handlers on a threadpool)
+- Vanilla JavaScript with marked.js for markdown, Toast UI Editor for WYSIWYG editing, D3 for the graph
+- CSS with dark/light theming (CSS variables) and responsive layout
 - highlight.js for code syntax highlighting
 
 ---

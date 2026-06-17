@@ -1728,9 +1728,20 @@
 
         let graphShowTags = true;
         let graphShowNotebooks = true;
-        // Graph scope: a notebook name, '' = none selected (default), or '__all__'
-        // (every notebook — slow on large vaults, so it's opt-in).
-        let graphNotebook = '';
+        // Graph scope: a list of notebook names. Empty = nothing loaded (default),
+        // since loading every notebook at once is slow on large vaults.
+        let graphNotebooks = [];
+
+        function toggleGraphNotebook(name) {
+            const i = graphNotebooks.indexOf(name);
+            if (i === -1) graphNotebooks.push(name); else graphNotebooks.splice(i, 1);
+            loadGraph(false);
+        }
+
+        function setGraphNotebooks(names) {
+            graphNotebooks = names;
+            loadGraph(false);
+        }
 
         async function loadGraph(pushHistory = true) {
             teardownEditor();
@@ -1743,41 +1754,40 @@
                 try { notebooksCache = await api('/notebooks'); } catch (e) {}
             }
             const realNbs = notebooksCache.filter(n => !n.name.startsWith('@'));
-            const nbOptions = realNbs.map(n =>
-                `<option value="${escapeHtml(n.name)}" ${graphNotebook === n.name ? 'selected' : ''}>${escapeHtml(n.name)} (${n.count})</option>`
-            ).join('');
+            const allNames = realNbs.map(n => n.name);
+            const nbChips = realNbs.map(n => {
+                const active = graphNotebooks.includes(n.name);
+                const dot = n.color ? `<span class="color-dot" style="background:${n.color}"></span>` : '';
+                return `<span class="section-chip${active ? ' active' : ''}" onclick="toggleGraphNotebook('${escapeJs(n.name)}')">${dot}${escapeHtml(n.name)} <span class="chip-count">${n.count}</span></span>`;
+            }).join('');
+            const allActive = allNames.length > 0 && allNames.every(n => graphNotebooks.includes(n));
 
             document.getElementById('content').innerHTML = `
                 <h1>Knowledge Graph</h1>
+                <div class="graph-scope">
+                    <div class="section-chips">${nbChips}</div>
+                    <div class="graph-scope-actions">
+                        <button class="btn btn-sm" onclick="setGraphNotebooks(${allActive ? '[]' : JSON.stringify(allNames).replace(/"/g, '&quot;')})">${allActive ? 'Clear all' : 'Select all (slow)'}</button>
+                        ${graphNotebooks.length ? `<button class="btn btn-sm" onclick="setGraphNotebooks([])">Clear</button>` : ''}
+                        <span style="color:var(--text-dim);font-size:0.8rem">${graphNotebooks.length} selected</span>
+                    </div>
+                </div>
                 <div class="graph-controls">
-                    <label>Notebook:
-                        <select id="graphNotebook" style="padding:0.25rem 0.4rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem">
-                            <option value="" ${graphNotebook === '' ? 'selected' : ''}>— Select —</option>
-                            ${nbOptions}
-                            <option value="__all__" ${graphNotebook === '__all__' ? 'selected' : ''}>All notebooks (slow)</option>
-                        </select>
-                    </label>
                     <label><input type="checkbox" id="showTags" ${graphShowTags ? 'checked' : ''}> Show tags</label>
                     <label><input type="checkbox" id="showNotebooks" ${graphShowNotebooks ? 'checked' : ''}> Show notebooks</label>
                     <label>Zoom: <input type="range" id="graphZoom" min="0.1" max="3" step="0.1" value="1"></label>
                     <button class="btn" onclick="resetGraphZoom()">Reset View</button>
                 </div>
                 <div class="graph-container" id="graphContainer">
-                    ${graphNotebook
+                    ${graphNotebooks.length
                         ? '<p class="loading" style="padding:1rem">Loading graph...</p>'
-                        : '<p style="padding:1rem;color:var(--text-dim)">Select a notebook to view its knowledge graph. Loading every notebook at once can be slow on large vaults.</p>'}
+                        : '<p style="padding:1rem;color:var(--text-dim)">Select one or more notebooks above to view their knowledge graph. Loading every notebook at once can be slow on large vaults.</p>'}
                 </div>
             `;
 
-            // Scope selector
-            document.getElementById('graphNotebook').addEventListener('change', (e) => {
-                graphNotebook = e.target.value;
-                loadGraph(false);
-            });
-
-            if (graphNotebook) {
-                const url = graphNotebook === '__all__' ? '/graph' : '/graph?notebook=' + encodeURIComponent(graphNotebook);
-                const data = await api(url);
+            if (graphNotebooks.length) {
+                const qs = graphNotebooks.map(n => 'notebook=' + encodeURIComponent(n)).join('&');
+                const data = await api('/graph?' + qs);
                 renderGraph(data);
             }
 

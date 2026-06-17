@@ -231,6 +231,13 @@ class TestGetEndpoints:
         note_nbs = {n["notebook"] for n in data["nodes"] if n["type"] == "note"}
         assert note_nbs == {"projects"}
 
+        # Multiple notebooks: repeat the query param.
+        multi = client.get(
+            "/api/graph", params=[("notebook", "projects"), ("notebook", "daily")]
+        ).json()
+        multi_nbs = {n["id"] for n in multi["nodes"] if n["type"] == "notebook"}
+        assert multi_nbs == {"notebook:projects", "notebook:daily"}
+
     def test_api_todos_include_excluded_param(self, client: TestClient):
         # Both variants return a list; the param must be accepted.
         assert isinstance(client.get("/api/todos").json(), list)

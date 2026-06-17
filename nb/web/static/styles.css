@@ -336,9 +336,17 @@
         .graph-controls input[type="range"] {
             width: 100px;
         }
+        .graph-scope { margin-bottom: 0.75rem; }
+        .graph-scope .section-chips { margin-bottom: 0.5rem; }
+        .graph-scope-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
 
         /* Notebook grid for home */
-        .notebook-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
+        .notebook-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
         .notebook-card {
             background: var(--surface);
             padding: 1.25rem;
