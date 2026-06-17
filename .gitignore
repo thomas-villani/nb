@@ -16,3 +16,6 @@ etc/
 
 .claude/
 .idea/
+
+# playwright-cli scratch artifacts
+.playwright-cli/
