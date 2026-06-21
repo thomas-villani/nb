@@ -23,6 +23,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Interactive mode** - Keyboard-driven todo management
 - **Web viewer** - Browse notes with clickable links, backlinks panel, and graph view
 - **Quick capture** - Windows global hotkey pops a tiny input to append todos to any note without a terminal (optional)
+- **MCP memory server** - Expose your notes as cross-tool memory (recall/remember) to MCP clients like Claude Desktop (optional)
 - **Meeting recording** - Record audio with auto-stop, live notes, transcription, and LLM meeting notes (optional)
 - **Raindrop inbox** - Pull bookmarks from Raindrop.io and clip them as notes with AI summaries
 - **Git integration** - Version control notes with auto-commit and GitHub sync
@@ -163,6 +164,11 @@ nb quickcapture --hotkey ctrl+shift+space  # Use a custom hotkey
 nb quickcapture install              # Start automatically at login
 nb quickcapture status               # Show autostart state
 nb quickcapture uninstall            # Stop running at login
+
+# MCP memory server: expose notes as cross-tool memory (needs --extra mcp)
+nb serve --mcp                       # Serve over stdio for MCP clients
+nb mcp print-config                  # Emit a client config block to paste
+nb mcp log -f                        # Follow the agent write log
 
 # Stdin piping support
 echo "random thought" | nb add              # Pipe to today's note

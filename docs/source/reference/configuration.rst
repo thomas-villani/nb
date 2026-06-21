@@ -305,6 +305,29 @@ Git options
 
 Template variables: ``{path}``, ``{notebook}``, ``{title}``, ``{date}``
 
+MCP options
+-----------
+
+Settings for the MCP memory server (``nb serve --mcp``). See :doc:`../commands/mcp`.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``memory_notebook``
+     - Notebook that ``remember()`` writes to (default: ``memory``)
+   * - ``profile``
+     - Tool profile: ``memory`` or ``full`` (default: ``memory``)
+   * - ``readable_notebooks``
+     - Notebooks the server may read; empty list means all (default: ``[]``)
+   * - ``recall_recency_boost``
+     - Bias recall toward recent notes, 0-1 (default: 0.3)
+   * - ``recall_default_limit``
+     - Number of passages returned by ``recall`` (default: 6)
+   * - ``log_writes``
+     - Log agent writes to ``.nb/mcp.log`` (default: true)
+
 LLM options
 -----------
 
