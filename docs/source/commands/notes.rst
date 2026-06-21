@@ -451,6 +451,19 @@ Autostart launches the app windowless (via ``pythonw -m nb.quickcapture``)
 using a per-user ``HKCU\...\Run`` registry entry, so no console window appears
 at login and no administrator rights are required.
 
+**Troubleshooting:**
+
+- *"Could not register hotkey"* — the combo is already in use, often because
+  quick-capture is already running (check the tray) or another app owns it.
+  Pick a different one with ``--hotkey`` (e.g. ``ctrl+shift+space``).
+- *Pressing the hotkey does nothing, but startup said "ready"* — another app
+  may be intercepting the combo; try a different ``--hotkey``.
+- *"Quick-capture needs tkinter"* — your Python lacks Tk support (some minimal
+  or uv-managed builds omit it). Install a Python with Tk (e.g. the python.org
+  installer) and reinstall nb there.
+- *"Tray icon unavailable"* — ``pystray`` isn't installed; the hotkey still
+  works. Run ``uv sync --extra quickcapture`` for the tray icon.
+
 nb clip
 -------
 

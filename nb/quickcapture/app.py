@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import queue
 import threading
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from nb.quickcapture.capture import capture_text, list_locations
@@ -34,11 +35,20 @@ class QuickCaptureApp:
         self._queue: queue.Queue[str] = queue.Queue()
         self._stop = threading.Event()
         self._popup_open = False
+        self._hotkey_ready = threading.Event()
+        self.startup_error: str | None = None
+        self.tray_enabled = False
         self.root: tk.Tk | None = None
         self.icon: Any = None
 
     # ----------------------------------------------------------------- run #
-    def run(self) -> None:
+    def run(self, on_ready: Callable[[], None] | None = None) -> bool:
+        """Run the tray app. Returns ``False`` if the hotkey could not be
+        registered (``startup_error`` holds the reason); ``True`` otherwise.
+
+        ``on_ready`` is called once the hotkey is registered and the app is
+        about to start listening — use it to print a confirmation.
+        """
         import tkinter as tk
 
         root = tk.Tk()
@@ -50,7 +60,17 @@ class QuickCaptureApp:
         )
         hotkey_thread.start()
 
-        self._start_tray()
+        # Wait for the hotkey to register (or fail) before committing to the
+        # event loop, so failures are reported synchronously instead of via a
+        # missable tray balloon.
+        self._hotkey_ready.wait(timeout=3.0)
+        if self.startup_error is not None:
+            self._shutdown()
+            return False
+
+        self.tray_enabled = self._start_tray()
+        if on_ready is not None:
+            on_ready()
 
         root.after(50, self._poll)
         try:
@@ -59,23 +79,30 @@ class QuickCaptureApp:
             pass
         finally:
             self.quit()
+        return True
 
     def _run_hotkey(self) -> None:
         try:
             listen(
-                self._modifiers, self._vk, lambda: self._queue.put("show"), self._stop
+                self._modifiers,
+                self._vk,
+                lambda: self._queue.put("show"),
+                self._stop,
+                on_ready=self._hotkey_ready.set,
             )
         except OSError as exc:  # registration failed — surface and stop.
-            self._queue.put(f"error:{exc}")
+            self.startup_error = str(exc)
+            self._hotkey_ready.set()
+            self._queue.put("quit")
 
     # --------------------------------------------------------------- tray #
-    def _start_tray(self) -> None:
+    def _start_tray(self) -> bool:
         try:
             import pystray
             from PIL import Image, ImageDraw
         except ImportError:
             # Tray is optional; the hotkey still works without it.
-            return
+            return False
 
         image = Image.new("RGB", (64, 64), "#1e1e2e")
         draw = ImageDraw.Draw(image)
@@ -89,6 +116,7 @@ class QuickCaptureApp:
         )
         self.icon = pystray.Icon("nb-quickcapture", image, "nb quick capture", menu)
         self.icon.run_detached()
+        return True
 
     def _notify(self, title: str, message: str) -> None:
         if self.icon is not None:
@@ -108,10 +136,6 @@ class QuickCaptureApp:
                 if msg == "show":
                     self._show_popup()
                 elif msg == "quit":
-                    self.quit()
-                    return
-                elif msg.startswith("error:"):
-                    self._notify("Quick-capture error", msg[len("error:") :])
                     self.quit()
                     return
         except queue.Empty:
