@@ -43,6 +43,7 @@ from nb.cli.todos import register_todo_commands
 from nb.cli.transcribe import register_transcribe_commands
 from nb.cli.utils import ensure_setup
 from nb.cli.web import register_web_commands
+from nb.quickcapture.cli import register_quickcapture_commands
 
 
 class AliasedGroup(click.Group):
@@ -231,6 +232,7 @@ register_ai_commands(cli)
 register_assistant_command(cli)
 register_daemon_commands(cli)
 register_mcp_commands(cli)
+register_quickcapture_commands(cli)
 
 
 def main() -> None:

@@ -378,6 +378,79 @@ Supports stdin piping:
    git diff --stat | nb log --note work/changes
    echo "Completed task" | nb log
 
+nb quickcapture
+---------------
+
+Global quick-capture tray app for Windows. Registers a system-wide hotkey that
+opens a tiny popup to append a todo (or plain line) to a chosen note — by
+default today's daily note — without opening a terminal.
+
+Captured todos use the same ``- [ ]`` format as ``nb todo add`` (so
+``@due()``, ``@priority()``, and ``#tags`` are parsed) and appear in
+``nb todo`` immediately.
+
+**Installation:**
+
+The tray icon requires the optional ``quickcapture`` extra (the hotkey and
+popup work without it):
+
+.. code-block:: bash
+
+   uv sync --extra quickcapture
+
+**Usage:** ``nb quickcapture [OPTIONS] [COMMAND]``
+
+**Options:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``--hotkey TEXT``
+     - Global hotkey that opens the popup (default: ``ctrl+alt+n``)
+
+**Subcommands:**
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Command
+     - Description
+   * - ``install``
+     - Run quick-capture automatically at login (per-user, no admin)
+   * - ``uninstall``
+     - Stop running at login
+   * - ``status``
+     - Show whether autostart is enabled
+
+**In the popup:**
+
+- Type the text and press **Enter** to save, **Esc** to cancel.
+- Use the dropdown to choose the destination (Today's daily note, or any
+  notebook).
+- Toggle **as todo** off to append a timestamped plain line (like ``nb log``)
+  instead of a checkbox.
+- The popup remembers your last-used destination and toggle, so it reopens
+  where you left off.
+
+**Examples:**
+
+.. code-block:: bash
+
+   nb quickcapture                              # run now (Ctrl+Alt+N to capture)
+   nb quickcapture --hotkey ctrl+shift+space    # run with a custom hotkey
+   nb quickcapture install                      # start automatically at login
+   nb quickcapture install --hotkey ctrl+alt+j  # autostart with a custom hotkey
+   nb quickcapture status                       # show autostart state
+   nb quickcapture uninstall                    # stop running at login
+
+Autostart launches the app windowless (via ``pythonw -m nb.quickcapture``)
+using a per-user ``HKCU\...\Run`` registry entry, so no console window appears
+at login and no administrator rights are required.
+
 nb clip
 -------
 

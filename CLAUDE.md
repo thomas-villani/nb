@@ -30,6 +30,7 @@ nb/cli/         CLI commands (Click framework)
 nb/core/        Business logic (note/todo operations)
 nb/index/       SQLite database, file scanning, hybrid search
 nb/tui/         Interactive terminal UI (Rich)
+nb/quickcapture/ Windows global-hotkey quick-capture tray app
 nb/utils/       Date parsing, markdown, hashing utilities
 nb/models.py    Data models (Note, Todo, Attachment)
 nb/config.py    Configuration management

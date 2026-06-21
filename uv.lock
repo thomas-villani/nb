@@ -1546,6 +1546,8 @@ all = [
     { name = "deepgram-sdk" },
     { name = "fastmcp" },
     { name = "numpy" },
+    { name = "pillow", marker = "sys_platform == 'win32'" },
+    { name = "pystray", marker = "sys_platform == 'win32'" },
     { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "sounddevice" },
     { name = "soundfile" },
@@ -1575,6 +1577,10 @@ docs = [
 mcp = [
     { name = "fastmcp" },
 ]
+quickcapture = [
+    { name = "pillow", marker = "sys_platform == 'win32'" },
+    { name = "pystray", marker = "sys_platform == 'win32'" },
+]
 recorder = [
     { name = "deepgram-sdk" },
     { name = "numpy" },
@@ -1599,8 +1605,12 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy", marker = "extra == 'all'", specifier = ">=2.4.6" },
     { name = "numpy", marker = "extra == 'recorder'", specifier = ">=2.4.0" },
+    { name = "pillow", marker = "sys_platform == 'win32' and extra == 'all'", specifier = ">=10.0.0" },
+    { name = "pillow", marker = "sys_platform == 'win32' and extra == 'quickcapture'", specifier = ">=10.0.0" },
     { name = "psutil", specifier = ">=7.1.3" },
     { name = "pyperclip", specifier = ">=1.11.0" },
+    { name = "pystray", marker = "sys_platform == 'win32' and extra == 'all'", specifier = ">=0.19.0" },
+    { name = "pystray", marker = "sys_platform == 'win32' and extra == 'quickcapture'", specifier = ">=0.19.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "python-dateutil", specifier = ">=2.8" },
@@ -1625,7 +1635,7 @@ requires-dist = [
     { name = "watchdog", marker = "extra == 'daemon'", specifier = ">=4.0.0" },
     { name = "wijjit", path = "wheels/wijjit-0.1.0a0-py3-none-any.whl" },
 ]
-provides-extras = ["recorder", "calendar", "daemon", "mcp", "all", "dev", "docs"]
+provides-extras = ["recorder", "calendar", "daemon", "mcp", "quickcapture", "all", "dev", "docs"]
 
 [[package]]
 name = "networkx"
@@ -2414,6 +2424,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/07/07/1613cbbef810e7f46a9ded1eb6c3e29ae33a15bcd545581b631a02d77b44/pyppmd-1.2.0-cp313-cp313-win32.whl", hash = "sha256:4b3249256f8a7ecdd36477f277b232a46ee2c8ca280b23faaeacb7f50cab949a", size = 41820, upload-time = "2025-05-01T11:36:45.231Z" },
     { url = "https://files.pythonhosted.org/packages/58/46/4554bc202b4ec0307de72aeb3b7ea6e8585f102d832b2d22ab0e8fc0c3ee/pyppmd-1.2.0-cp313-cp313-win_amd64.whl", hash = "sha256:625896f5da7038fe7145907b68b0b58f7c13b88ad6bbfdc1c20c05654c17fa6c", size = 46612, upload-time = "2025-05-01T11:36:46.297Z" },
     { url = "https://files.pythonhosted.org/packages/29/ec/5eef76498779a2d31230f3a383a0fa5d7e0cf0e4296362dd70fc7b236b57/pyppmd-1.2.0-cp313-cp313-win_arm64.whl", hash = "sha256:bec8abbf1edb0300c0a2e4f1bbad6a96154de3e507a2b054a0b1187f1c2e4982", size = 44747, upload-time = "2025-05-01T11:36:47.858Z" },
+]
+
+[[package]]
+name = "pystray"
+version = "0.19.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pillow" },
+    { name = "six" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5c/64/927a4b9024196a4799eba0180e0ca31568426f258a4a5c90f87a97f51d28/pystray-0.19.5-py2.py3-none-any.whl", hash = "sha256:a0c2229d02cf87207297c22d86ffc57c86c227517b038c0d3c59df79295ac617", size = 49068, upload-time = "2023-09-17T13:44:26.872Z" },
 ]
 
 [[package]]

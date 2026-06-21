@@ -22,6 +22,7 @@ A plaintext-first command-line tool for managing notes and todos in markdown fil
 - **Attachments** - Attach files and URLs to notes and todos
 - **Interactive mode** - Keyboard-driven todo management
 - **Web viewer** - Browse notes with clickable links, backlinks panel, and graph view
+- **Quick capture** - Windows global hotkey pops a tiny input to append todos to any note without a terminal (optional)
 - **Meeting recording** - Record audio with auto-stop, live notes, transcription, and LLM meeting notes (optional)
 - **Raindrop inbox** - Pull bookmarks from Raindrop.io and clip them as notes with AI summaries
 - **Git integration** - Version control notes with auto-commit and GitHub sync
@@ -155,6 +156,13 @@ nb add --paste --note work/project   # Append clipboard to specific note
 nb log "Started feature X"           # Append with timestamp to today's note
 nb log "Meeting notes" -N project    # Timestamp + content to specific note
 nb log --paste                       # Log clipboard content with timestamp
+
+# Quick capture (Windows): global hotkey -> tiny popup, no terminal needed
+nb quickcapture                      # Run tray app (default hotkey Ctrl+Alt+N)
+nb quickcapture --hotkey ctrl+shift+space  # Use a custom hotkey
+nb quickcapture install              # Start automatically at login
+nb quickcapture status               # Show autostart state
+nb quickcapture uninstall            # Stop running at login
 
 # Stdin piping support
 echo "random thought" | nb add              # Pipe to today's note
