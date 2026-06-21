@@ -259,6 +259,22 @@ class LLMConfig:
 
 
 @dataclass
+class McpConfig:
+    """Settings for the MCP memory server (`nb serve --mcp`).
+
+    Exposes an `nb` notes store as cross-tool memory over the Model Context
+    Protocol. See etc/mcp-memory-spec.md.
+    """
+
+    memory_notebook: str = "memory"  # default sink for remember()
+    profile: str = "memory"  # memory | full (only "memory" honored currently)
+    readable_notebooks: list[str] = field(default_factory=list)  # [] => all notebooks
+    recall_recency_boost: float = 0.3  # passed to NoteSearch.search recency_boost
+    recall_default_limit: int = 6  # default number of passages returned by recall
+    log_writes: bool = True  # append agent writes to .nb/mcp.log
+
+
+@dataclass
 class TodoViewConfig:
     """Configuration for a saved todo view.
 
@@ -359,6 +375,7 @@ class Config:
     inbox: InboxConfig = field(default_factory=InboxConfig)
     git: GitConfig = field(default_factory=GitConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
+    mcp: McpConfig = field(default_factory=McpConfig)
     date_format: str = "%Y-%m-%d"
     time_format: str = "%H:%M"
     daily_title_format: str = "%A, %B %d, %Y"  # e.g., "Friday, November 28, 2025"

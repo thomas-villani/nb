@@ -1544,6 +1544,7 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "deepgram-sdk" },
+    { name = "fastmcp" },
     { name = "numpy" },
     { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "sounddevice" },
@@ -1571,6 +1572,9 @@ docs = [
     { name = "sphinx" },
     { name = "sphinx-rtd-theme" },
 ]
+mcp = [
+    { name = "fastmcp" },
+]
 recorder = [
     { name = "deepgram-sdk" },
     { name = "numpy" },
@@ -1586,6 +1590,8 @@ requires-dist = [
     { name = "deepgram-sdk", marker = "extra == 'all'", specifier = ">=3.0.0" },
     { name = "deepgram-sdk", marker = "extra == 'recorder'", specifier = ">=3.0.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "fastmcp", marker = "extra == 'all'", specifier = ">=2.0.0" },
+    { name = "fastmcp", marker = "extra == 'mcp'", specifier = ">=2.0.0" },
     { name = "gitpython", specifier = ">=3.1.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=7.0.0" },
@@ -1619,7 +1625,7 @@ requires-dist = [
     { name = "watchdog", marker = "extra == 'daemon'", specifier = ">=4.0.0" },
     { name = "wijjit", path = "wheels/wijjit-0.1.0a0-py3-none-any.whl" },
 ]
-provides-extras = ["recorder", "calendar", "daemon", "all", "dev", "docs"]
+provides-extras = ["recorder", "calendar", "daemon", "mcp", "all", "dev", "docs"]
 
 [[package]]
 name = "networkx"

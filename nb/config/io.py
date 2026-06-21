@@ -19,6 +19,7 @@ from .models import (
     InboxConfig,
     LLMConfig,
     LLMModelConfig,
+    McpConfig,
     NotebookConfig,
     RaindropConfig,
     RecorderConfig,
@@ -30,6 +31,7 @@ from .parsers import (
     _parse_inbox_config,
     _parse_kanban_boards,
     _parse_llm_config,
+    _parse_mcp_config,
     _parse_notebooks,
     _parse_recorder_config,
     _parse_search,
@@ -107,6 +109,7 @@ def load_config(config_path: Path | None = None) -> Config:
     inbox_config = _parse_inbox_config(data.get("inbox"))
     git_config = _parse_git_config(data.get("git"))
     llm_config = _parse_llm_config(data.get("llm"))
+    mcp_config = _parse_mcp_config(data.get("mcp"))
     date_format = data.get("date_format", "%Y-%m-%d")
     time_format = data.get("time_format", "%H:%M")
     daily_title_format = data.get("daily_title_format", "%A, %B %d, %Y")
@@ -127,6 +130,7 @@ def load_config(config_path: Path | None = None) -> Config:
         inbox=inbox_config,
         git=git_config,
         llm=llm_config,
+        mcp=mcp_config,
         date_format=date_format,
         time_format=time_format,
         daily_title_format=daily_title_format,
@@ -286,6 +290,10 @@ def save_config(config: Config) -> None:
     git_defaults = GitConfig()
     git_data = _serialize_dataclass_fields(config.git, defaults=git_defaults)
 
+    # MCP: only non-default values
+    mcp_defaults = McpConfig()
+    mcp_data = _serialize_dataclass_fields(config.mcp, defaults=mcp_defaults)
+
     # LLM: only non-default values, exclude api_key (use env var)
     llm_data: dict[str, Any] = {}
     llm_defaults = LLMConfig()
@@ -358,6 +366,8 @@ def save_config(config: Config) -> None:
         data["git"] = git_data
     if llm_data:
         data["llm"] = llm_data
+    if mcp_data:
+        data["mcp"] = mcp_data
 
     config.config_path.parent.mkdir(parents=True, exist_ok=True)
 

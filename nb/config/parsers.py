@@ -16,6 +16,7 @@ from .models import (
     KanbanColumnConfig,
     LLMConfig,
     LLMModelConfig,
+    McpConfig,
     NotebookConfig,
     RaindropCollectionConfig,
     RaindropConfig,
@@ -344,4 +345,18 @@ def _parse_llm_config(data: dict[str, Any] | None) -> LLMConfig:
         max_tokens=data.get("max_tokens", 4096),
         temperature=data.get("temperature", 0.7),
         system_prompt=data.get("system_prompt"),
+    )
+
+
+def _parse_mcp_config(data: dict[str, Any] | None) -> McpConfig:
+    """Parse MCP memory server configuration."""
+    if data is None:
+        return McpConfig()
+    return McpConfig(
+        memory_notebook=data.get("memory_notebook", "memory"),
+        profile=data.get("profile", "memory"),
+        readable_notebooks=list(data.get("readable_notebooks", [])),
+        recall_recency_boost=data.get("recall_recency_boost", 0.3),
+        recall_default_limit=data.get("recall_default_limit", 6),
+        log_writes=data.get("log_writes", True),
     )

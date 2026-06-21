@@ -45,6 +45,11 @@ CONFIGURABLE_SETTINGS = {
     "llm.max_tokens": "Max tokens in LLM response (default 4096)",
     "llm.temperature": "Sampling temperature (0.0-1.0, default 0.7)",
     "llm.system_prompt": "Global system prompt for AI commands",
+    "mcp.memory_notebook": "Default notebook for MCP remember() writes (default: memory)",
+    "mcp.profile": "MCP tool profile (memory or full; default: memory)",
+    "mcp.recall_recency_boost": "Recency boost for MCP recall (0.0-1.0, default 0.3)",
+    "mcp.recall_default_limit": "Default number of passages returned by MCP recall (default 6)",
+    "mcp.log_writes": "Log MCP agent writes to .nb/mcp.log (true/false)",
 }
 
 # Notebook-specific settings (accessed via notebook.<name>.<setting>)
@@ -285,6 +290,11 @@ def get_config_value(key: str) -> Any:
         attr = parts[2]
         if hasattr(config.llm.models, attr):
             return getattr(config.llm.models, attr)
+    elif parts[0] == "mcp" and len(parts) == 2:
+        # MCP setting
+        attr = parts[1]
+        if hasattr(config.mcp, attr):
+            return getattr(config.mcp, attr)
     elif parts[0] == "notebook" and len(parts) == 3:
         # Notebook-specific setting: notebook.<name>.<setting>
         nb_name, setting = parts[1], parts[2]
@@ -536,6 +546,46 @@ def set_config_value(key: str, value: str) -> bool:
             config.llm.models.smart = value
         elif attr == "fast":
             config.llm.models.fast = value
+        else:
+            return False
+    elif parts[0] == "mcp" and len(parts) == 2:
+        # MCP memory server setting
+        attr = parts[1]
+        if attr == "memory_notebook":
+            config.mcp.memory_notebook = value if value else "memory"
+        elif attr == "profile":
+            valid_profiles = ("memory", "full")
+            if value not in valid_profiles:
+                raise ValueError(
+                    f"mcp.profile must be one of: {', '.join(valid_profiles)}"
+                )
+            config.mcp.profile = value
+        elif attr == "recall_recency_boost":
+            try:
+                boost = float(value)
+                if not 0 <= boost <= 1:
+                    raise ValueError("recall_recency_boost must be between 0 and 1")
+                config.mcp.recall_recency_boost = boost
+            except ValueError as e:
+                if "could not convert" in str(e).lower():
+                    raise ValueError(
+                        f"recall_recency_boost must be a number, got '{value}'"
+                    ) from None
+                raise
+        elif attr == "recall_default_limit":
+            try:
+                limit = int(value)
+                if limit < 1:
+                    raise ValueError("recall_default_limit must be at least 1")
+                config.mcp.recall_default_limit = limit
+            except ValueError as e:
+                if "invalid literal" in str(e).lower():
+                    raise ValueError(
+                        f"recall_default_limit must be an integer, got '{value}'"
+                    ) from None
+                raise
+        elif attr == "log_writes":
+            config.mcp.log_writes = parse_bool_strict(value, "mcp.log_writes")
         else:
             return False
     elif parts[0] == "notebook" and len(parts) == 3:

@@ -29,6 +29,7 @@ from nb.cli.git import register_git_commands
 from nb.cli.graph import register_graph_commands
 from nb.cli.inbox import register_inbox_commands
 from nb.cli.links import register_link_commands
+from nb.cli.mcp import register_mcp_commands
 from nb.cli.note_links import register_note_link_commands
 from nb.cli.notebooks import register_notebook_commands
 from nb.cli.notes import register_note_commands, today
@@ -229,6 +230,7 @@ register_git_commands(cli)
 register_ai_commands(cli)
 register_assistant_command(cli)
 register_daemon_commands(cli)
+register_mcp_commands(cli)
 
 
 def main() -> None:
