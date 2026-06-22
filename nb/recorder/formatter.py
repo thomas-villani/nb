@@ -6,12 +6,13 @@ Converts TranscriptResult to JSON and Markdown formats.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from nb.config import get_config
-from nb.recorder.transcriber import TranscriptResult
+from nb.recorder.transcriber import TranscriptResult, Utterance
 
 
 def format_duration(seconds: float) -> str:
@@ -124,6 +125,90 @@ def to_json(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+@dataclass
+class LoadedTranscript:
+    """A transcript reconstructed from a saved recording JSON file.
+
+    Bundles the :class:`TranscriptResult` with the metadata that was stored
+    alongside it (recording timestamp, speaker labels, attendees), so a note
+    can be rebuilt without re-transcribing the audio.
+    """
+
+    result: TranscriptResult
+    recorded_at: datetime
+    speaker_names: dict[int, str] = field(default_factory=dict)
+    source_file: str | None = None
+    attendees: list[str] = field(default_factory=list)
+
+
+def from_json(json_path: Path) -> LoadedTranscript:
+    """Reconstruct a transcript from a recording JSON file written by to_json.
+
+    This is the inverse of :func:`to_json`. It lets the note-building half of
+    the transcription workflow run against an existing transcript without
+    calling Deepgram again — used by ``nb record recover``.
+
+    Note: the stored JSON does not preserve per-word confidence scores, so the
+    reconstructed utterances have ``confidence=0.0``. Channel is recovered from
+    the speakers table.
+
+    Args:
+        json_path: Path to a recording JSON file.
+
+    Returns:
+        A LoadedTranscript with the result and saved metadata.
+
+    Raises:
+        KeyError, ValueError: If the JSON is missing required fields or malformed.
+    """
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    meta = data.get("meta", {})
+
+    speakers = data.get("speakers", {})
+    speaker_channel = {
+        int(sid): info.get("channel", 0) for sid, info in speakers.items()
+    }
+    speaker_names = {
+        int(sid): info["label"] for sid, info in speakers.items() if "label" in info
+    }
+
+    utterances = [
+        Utterance(
+            speaker=u["speaker"],
+            channel=speaker_channel.get(u["speaker"], 0),
+            start=u.get("start", 0.0),
+            end=u.get("end", 0.0),
+            text=u.get("text", ""),
+        )
+        for u in data.get("utterances", [])
+    ]
+    utterances.sort(key=lambda u: u.start)
+
+    recording_id = meta.get("recording_id") or json_path.stem
+    result = TranscriptResult(
+        recording_id=recording_id,
+        duration=meta.get("duration_seconds", 0.0),
+        utterances=utterances,
+    )
+
+    recorded_at_raw = meta.get("recorded_at")
+    if recorded_at_raw:
+        try:
+            recorded_at = datetime.fromisoformat(recorded_at_raw)
+        except ValueError:
+            recorded_at = datetime.now()
+    else:
+        recorded_at = datetime.now()
+
+    return LoadedTranscript(
+        result=result,
+        recorded_at=recorded_at,
+        speaker_names=speaker_names,
+        source_file=meta.get("source_file"),
+        attendees=list(meta.get("attendees", [])),
+    )
 
 
 def to_markdown(

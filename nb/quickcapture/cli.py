@@ -26,6 +26,35 @@ def _validate_hotkey(hotkey: str) -> None:
         raise SystemExit(1) from None
 
 
+def _check_gui_deps() -> None:
+    """Fail loudly when the popup can't be shown; warn when the tray can't.
+
+    tkinter is part of the standard library but is omitted from some minimal
+    or uv-managed Python builds, in which case the popup silently can't open.
+    """
+    import importlib.util
+
+    try:
+        import tkinter  # noqa: F401
+    except Exception as exc:  # ImportError, or missing _tkinter C extension
+        console.print(
+            f"[red]Quick-capture needs tkinter, which isn't available:[/red] {exc}"
+        )
+        console.print(
+            "[dim]tkinter ships with the standard python.org installers but is "
+            "omitted from some minimal/uv-managed Python builds. Install a Python "
+            "with Tk support and reinstall nb there.[/dim]"
+        )
+        raise SystemExit(1) from None
+
+    if importlib.util.find_spec("pystray") is None:
+        console.print(
+            "[yellow]Tray icon unavailable[/yellow] (pystray not installed); the "
+            "hotkey still works."
+        )
+        console.print("[dim]For the tray icon: uv sync --extra quickcapture[/dim]")
+
+
 def register_quickcapture_commands(cli: click.Group) -> None:
     """Register the `quickcapture` command group on the root CLI group."""
 
@@ -57,15 +86,39 @@ def register_quickcapture_commands(cli: click.Group) -> None:
 
         _require_windows()
         _validate_hotkey(hotkey)
+        _check_gui_deps()
 
         from nb.quickcapture.app import QuickCaptureApp
 
-        console.print(
-            f"[green]nb quick-capture running[/green] — press "
-            f"[bold]{hotkey}[/bold] to capture."
-        )
-        console.print("[dim]Quit via the tray icon, or Ctrl-C here.[/dim]")
-        QuickCaptureApp(hotkey=hotkey).run()
+        app = QuickCaptureApp(hotkey=hotkey)
+
+        def _ready() -> None:
+            tray = (
+                "tray icon active"
+                if app.tray_enabled
+                else "no tray (pystray not installed)"
+            )
+            console.print(
+                f"[green]Quick-capture ready[/green] — press [bold]{hotkey}[/bold] "
+                f"to capture. [dim]({tray}; Ctrl-C to quit)[/dim]"
+            )
+            if not app.tray_enabled:
+                console.print(
+                    "[dim]If nothing appears when you press the hotkey, another app may own "
+                    "it — retry with e.g. [bold]nb quickcapture --hotkey ctrl+shift+space[/bold].[/dim]"
+                )
+
+        console.print(f"[dim]Registering {hotkey}…[/dim]")
+        if not app.run(on_ready=_ready):
+            console.print(
+                f"[red]Could not register hotkey '{hotkey}':[/red] {app.startup_error}"
+            )
+            console.print(
+                "[dim]It is likely already in use — by another application, or because "
+                "quick-capture is already running. Try a different combo, e.g. "
+                "[bold]nb quickcapture --hotkey ctrl+shift+space[/bold].[/dim]"
+            )
+            raise SystemExit(1)
 
     @quickcapture.command("install")
     @click.option(

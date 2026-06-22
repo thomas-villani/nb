@@ -93,12 +93,15 @@ def listen(
     on_press: Callable[[], None],
     stop: Event,
     hotkey_id: int = 1,
+    on_ready: Callable[[], None] | None = None,
 ) -> None:
     """Register the hotkey and pump messages until ``stop`` is set.
 
     Intended to run on a dedicated thread. ``on_press`` is invoked (on this
     thread) each time the hotkey fires; keep it cheap and thread-safe — the
-    quick-capture app just enqueues a request for the Tk thread.
+    quick-capture app just enqueues a request for the Tk thread. ``on_ready``,
+    if given, is called once immediately after the hotkey is registered, so the
+    caller can confirm startup succeeded.
 
     Raises:
         OSError: If the hotkey could not be registered (e.g. already taken).
@@ -113,6 +116,9 @@ def listen(
             "Failed to register global hotkey (it may already be in use by "
             "another application)."
         )
+
+    if on_ready is not None:
+        on_ready()
 
     try:
         msg = wintypes.MSG()

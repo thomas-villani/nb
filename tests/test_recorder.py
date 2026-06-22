@@ -235,6 +235,66 @@ class TestFormatterOutput:
         assert "Hi there" in content
         assert "duration: 2:03" in content
 
+    def test_from_json_round_trip(self, tmp_path: Path, mock_cli_config: Config):
+        from nb.recorder.formatter import from_json, to_json
+        from nb.recorder.transcriber import TranscriptResult, Utterance
+
+        result = TranscriptResult(
+            recording_id="2025-12-01_1430_standup",
+            duration=123.45,
+            utterances=[
+                Utterance(speaker=0, channel=0, start=0.0, end=5.0, text="Hello world"),
+                Utterance(speaker=100, channel=1, start=5.5, end=10.0, text="Hi there"),
+            ],
+        )
+
+        json_path = tmp_path / "rec.json"
+        to_json(
+            result,
+            json_path,
+            source_file="rec.wav",
+            speaker_names={100: "Client"},
+            attendees=["Me", "Client"],
+        )
+
+        loaded = from_json(json_path)
+
+        assert loaded.result.recording_id == "2025-12-01_1430_standup"
+        assert loaded.result.duration == 123.45
+        assert loaded.result.full_text == "Hello world Hi there"
+        # Channel is recovered from the speakers table
+        assert {u.speaker: u.channel for u in loaded.result.utterances} == {
+            0: 0,
+            100: 1,
+        }
+        # Speaker labels are preserved (0 -> mic label, 100 -> custom)
+        assert loaded.speaker_names[100] == "Client"
+        assert loaded.source_file == "rec.wav"
+        assert loaded.attendees == ["Me", "Client"]
+
+    def test_from_json_sorts_and_handles_missing_recorded_at(self, tmp_path: Path):
+        import json
+
+        from nb.recorder.formatter import from_json
+
+        data = {
+            "meta": {"recording_id": "rec", "duration_seconds": 12.0},
+            "speakers": {"0": {"label": "You", "channel": 0}},
+            "utterances": [
+                {"speaker": 0, "start": 9.0, "end": 12.0, "text": "second"},
+                {"speaker": 0, "start": 0.0, "end": 3.0, "text": "first"},
+            ],
+        }
+        json_path = tmp_path / "rec.json"
+        json_path.write_text(json.dumps(data), encoding="utf-8")
+
+        loaded = from_json(json_path)
+
+        # Utterances sorted by start time
+        assert [u.text for u in loaded.result.utterances] == ["first", "second"]
+        # Missing recorded_at falls back to a datetime (does not raise)
+        assert loaded.recorded_at is not None
+
     def test_to_markdown_groups_consecutive_speaker(self, tmp_path: Path):
         from nb.recorder.formatter import to_markdown
         from nb.recorder.transcriber import TranscriptResult, Utterance
@@ -387,6 +447,126 @@ class TestRecordCLI:
             "No recordings found" in result.output
             or "Recent recordings" in result.output
         )
+
+    def _write_recording_json(self, config: Config, recording_id: str) -> Path:
+        """Write a minimal recording JSON to .nb/recordings/ and return its path."""
+        from nb.recorder.formatter import to_json
+        from nb.recorder.transcriber import TranscriptResult, Utterance
+
+        recordings_dir = config.nb_dir / "recordings"
+        recordings_dir.mkdir(parents=True, exist_ok=True)
+        result = TranscriptResult(
+            recording_id=recording_id,
+            duration=30.0,
+            utterances=[
+                Utterance(speaker=0, channel=0, start=0.0, end=5.0, text="Hello"),
+                Utterance(speaker=100, channel=1, start=5.0, end=10.0, text="Hi back"),
+            ],
+        )
+        json_path = recordings_dir / f"{recording_id}.json"
+        to_json(result, json_path, source_file=f"{recording_id}.wav")
+        return json_path
+
+    def test_record_recover_help(self, cli_runner: CliRunner):
+        result = cli_runner.invoke(cli, ["record", "recover", "--help"])
+
+        assert result.exit_code == 0
+        assert "--notebook" in result.output
+        assert "--summarize" in result.output
+        assert "--force" in result.output
+
+    def test_record_recover_lists_orphans(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """With no ID, recover lists transcripts that have no note yet."""
+        self._write_recording_json(mock_cli_config, "2025-12-01_1430_standup")
+
+        result = cli_runner.invoke(cli, ["record", "recover", "-n", "daily"])
+
+        assert result.exit_code == 0
+        assert "2025-12-01_1430_standup" in result.output
+
+    def test_record_recover_builds_note(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Recover rebuilds the markdown note from an existing JSON."""
+        self._write_recording_json(mock_cli_config, "2025-12-01_1430_standup")
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "record",
+                "recover",
+                "2025-12-01_1430_standup",
+                "-n",
+                "daily",
+                "--no-summarize",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Recovery complete" in result.output
+        notes = list((mock_cli_config.notes_root / "daily").rglob("*.md"))
+        assert any("2025-12-01_1430_standup" in p.name for p in notes)
+
+    def test_record_recover_not_found(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        (mock_cli_config.nb_dir / "recordings").mkdir(parents=True, exist_ok=True)
+
+        result = cli_runner.invoke(cli, ["record", "recover", "does-not-exist"])
+
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower()
+
+    def test_record_recover_existing_note_needs_force(
+        self, cli_runner: CliRunner, mock_cli_config: Config
+    ):
+        """Recover refuses to overwrite an existing note without --force."""
+        self._write_recording_json(mock_cli_config, "2025-12-01_1430_standup")
+
+        first = cli_runner.invoke(
+            cli,
+            [
+                "record",
+                "recover",
+                "2025-12-01_1430_standup",
+                "-n",
+                "daily",
+                "--no-summarize",
+            ],
+        )
+        assert first.exit_code == 0, first.output
+
+        # Second run without --force should refuse
+        second = cli_runner.invoke(
+            cli,
+            [
+                "record",
+                "recover",
+                "2025-12-01_1430_standup",
+                "-n",
+                "daily",
+                "--no-summarize",
+            ],
+        )
+        assert second.exit_code != 0
+        assert "already exists" in second.output.lower()
+
+        # With --force it succeeds
+        forced = cli_runner.invoke(
+            cli,
+            [
+                "record",
+                "recover",
+                "2025-12-01_1430_standup",
+                "-n",
+                "daily",
+                "--no-summarize",
+                "--force",
+            ],
+        )
+        assert forced.exit_code == 0, forced.output
 
     def test_transcribe_help(self, cli_runner: CliRunner):
         result = cli_runner.invoke(cli, ["transcribe", "--help"])

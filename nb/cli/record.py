@@ -21,6 +21,7 @@ from nb.config import get_config
 
 if TYPE_CHECKING:
     from nb.recorder.audio import RecordingSession
+    from nb.recorder.transcriber import TranscriptResult
 
 console = Console()
 
@@ -62,6 +63,7 @@ def record_group() -> None:
       nb record start --mic-only        # Record microphone only
       nb record list                    # List recordings
       nb record transcribe <id>         # Re-transcribe a recording
+      nb record recover [<id>]          # Rebuild a note from an existing transcript
       nb record purge                   # Delete old audio files
 
     \b
@@ -428,6 +430,150 @@ def record_transcribe(
         attendees=attendees,
         delete_audio=delete_audio,
     )
+
+
+@record_group.command("recover")
+@click.argument("recording_id", required=False)
+@click.option(
+    "--notebook",
+    "-n",
+    help="Notebook to save the note to (default: daily)",
+    shell_complete=complete_notebook,
+)
+@click.option(
+    "--speakers",
+    "-s",
+    help="Override speaker names (e.g., '0:Alice,1:Bob'); defaults to labels in the JSON",
+)
+@click.option(
+    "--summarize/--no-summarize",
+    default=True,
+    show_default=True,
+    help="Generate meeting notes from transcript using LLM",
+)
+@click.option(
+    "--dictation",
+    "-d",
+    is_flag=True,
+    help="Treat as a voice note (dictation) rather than a meeting",
+)
+@click.option(
+    "--force", "-f", is_flag=True, help="Overwrite the note if it already exists"
+)
+def record_recover(
+    recording_id: str | None,
+    notebook: str | None,
+    speakers: str | None,
+    summarize: bool,
+    dictation: bool,
+    force: bool,
+) -> None:
+    """Rebuild a note from an existing transcript JSON (no re-transcription).
+
+    Use this when a recording was transcribed (a .json exists in
+    .nb/recordings/) but the markdown note was never written — e.g. the machine
+    shut down before the note was saved. Unlike `nb record transcribe`, this
+    does NOT call Deepgram or need the .wav file; it rebuilds the note straight
+    from the saved transcript.
+
+    With no RECORDING_ID, lists transcripts whose note appears to be missing.
+
+    \b
+    Examples:
+      nb record recover                        # List transcripts with no note
+      nb record recover 2026-06-15_1003_hcanj  # Rebuild that note
+      nb record recover <id> -n work           # Save to a specific notebook
+      nb record recover <id> --no-summarize    # Skip LLM meeting notes
+      nb record recover <id> --force           # Overwrite an existing note
+    """
+    if not _check_recorder_available():
+        raise SystemExit(1)
+
+    from nb.core.notebooks import get_default_transcript_notebook
+    from nb.recorder.formatter import from_json, parse_speaker_names
+
+    config = get_config()
+    recordings_dir = config.nb_dir / "recordings"
+    target_notebook = notebook or get_default_transcript_notebook()
+
+    # No ID: list transcripts that have no note anywhere under notes_root.
+    # We match by note filename (<recording_id>.md) rather than checking a
+    # single notebook, so notes saved to non-default notebooks aren't reported
+    # as missing.
+    if not recording_id:
+        jsons = sorted(recordings_dir.glob("*.json")) if recordings_dir.exists() else []
+        if not jsons:
+            console.print("[dim]No transcripts found.[/dim]")
+            return
+
+        existing_notes = {p.stem for p in config.notes_root.rglob("*.md")}
+        orphans = [jp.stem for jp in jsons if jp.stem not in existing_notes]
+
+        if not orphans:
+            console.print("[green]All transcripts have a note.[/green]")
+            return
+
+        console.print("[bold]Transcripts with no note:[/bold]\n")
+        for stem in orphans:
+            console.print(f"  {stem}")
+        console.print("\n[dim]Recover one with: nb record recover <recording_id>[/dim]")
+        return
+
+    # Find the JSON (exact match, then suffix match like 'transcribe' does)
+    json_path = recordings_dir / f"{recording_id}.json"
+    if not json_path.exists():
+        matches = list(recordings_dir.glob(f"*_{recording_id}.json"))
+        if matches:
+            json_path = matches[0]
+        else:
+            console.print(f"[red]Transcript not found: {recording_id}[/red]")
+            console.print(
+                "[dim]Run 'nb record recover' to list transcripts missing a note.[/dim]"
+            )
+            raise SystemExit(1)
+
+    try:
+        loaded = from_json(json_path)
+    except Exception as e:
+        console.print(f"[red]Failed to read transcript: {e}[/red]")
+        raise SystemExit(1) from e
+
+    if not loaded.result.utterances:
+        console.print(f"[yellow]Transcript is empty: {json_path.name}[/yellow]")
+        console.print(
+            "[dim]Re-transcribe from audio with: nb record transcribe <id>[/dim]"
+        )
+        raise SystemExit(1)
+
+    # Speaker names: CLI override wins, otherwise reuse the labels saved in the JSON
+    speaker_names = parse_speaker_names(speakers) or loaded.speaker_names
+
+    md_path = _resolve_note_path(
+        target_notebook, loaded.result.recording_id, loaded.recorded_at
+    )
+    if md_path.exists() and not force:
+        console.print(
+            f"[yellow]Note already exists:[/yellow] {md_path.relative_to(config.notes_root)}"
+        )
+        console.print("[dim]Use --force to overwrite.[/dim]")
+        raise SystemExit(1)
+
+    console.print(f"[cyan]Rebuilding note from {json_path.name}...[/cyan]")
+    _write_transcript_note(
+        loaded.result,
+        recording_id=loaded.result.recording_id,
+        recorded_at=loaded.recorded_at,
+        notebook=target_notebook,
+        speaker_names=speaker_names,
+        dictation=dictation,
+        summarize=summarize,
+    )
+
+    console.print()
+    console.print("[bold]Recovery complete[/bold]")
+    console.print(f"  Duration: {_format_duration(loaded.result.duration)}")
+    console.print(f"  Speakers: {len(loaded.result.speaker_ids)}")
+    console.print(f"  Utterances: {len(loaded.result.utterances)}")
 
 
 @record_group.command("list")
@@ -904,6 +1050,99 @@ def _process_dictation_text(text: str) -> str:
     return text
 
 
+def _transcript_title(recording_id: str, dictation: bool) -> str:
+    """Build a note title from a recording ID (e.g. "2025-12-01_1430_standup")."""
+    parts = recording_id.split("_", 2)  # date_time_name
+    if len(parts) >= 2:
+        name = parts[-1] if len(parts) > 2 else parts[1]
+        pretty = name.replace("-", " ").replace("_", " ").title()
+        return f"Voice Note: {pretty}" if dictation else f"Meeting: {pretty}"
+    return "Voice Note" if dictation else f"Meeting: {recording_id}"
+
+
+def _resolve_note_path(notebook: str, recording_id: str, recorded_at: datetime) -> Path:
+    """Compute the markdown note path for a recording (no directories created).
+
+    For date-based notebooks the date is taken from the recording ID prefix,
+    falling back to ``recorded_at`` if the prefix isn't a parseable date.
+    """
+    from nb.core.notebooks import is_notebook_date_based
+
+    config = get_config()
+    nb_path = config.get_notebook_path(notebook) or (config.notes_root / notebook)
+
+    if is_notebook_date_based(notebook):
+        from nb.utils.dates import get_week_folder_name
+
+        date_str = recording_id.split("_", 1)[0]
+        try:
+            recording_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            recording_date = recorded_at.date()
+        week_folder = (
+            nb_path / str(recording_date.year) / get_week_folder_name(recording_date)
+        )
+        return week_folder / f"{recording_id}.md"
+
+    return nb_path / f"{recording_id}.md"
+
+
+def _write_transcript_note(
+    result: TranscriptResult,
+    recording_id: str,
+    recorded_at: datetime,
+    notebook: str | None = None,
+    speaker_names: dict[int, str] | None = None,
+    dictation: bool = False,
+    user_notes: str | None = None,
+    summarize: bool = False,
+) -> Path:
+    """Build the markdown note for a transcript and write it to the notebook.
+
+    Shared by ``nb record start``/``transcribe`` (live transcription) and
+    ``nb record recover`` (rebuild from an existing JSON). Resolves the target
+    notebook and path, optionally generates LLM meeting notes, writes the
+    markdown, and returns the note path. Parent directories are created by
+    ``to_markdown``.
+    """
+    from nb.recorder.formatter import to_markdown
+
+    config = get_config()
+
+    if notebook is None:
+        from nb.core.notebooks import get_default_transcript_notebook
+
+        notebook = get_default_transcript_notebook()
+
+    title = _transcript_title(recording_id, dictation)
+    md_path = _resolve_note_path(notebook, recording_id, recorded_at)
+
+    # Generate meeting notes with LLM if requested
+    meeting_summary = None
+    if summarize and not dictation and result.full_text.strip():
+        from nb.recorder.meeting_notes import generate_meeting_notes
+
+        meeting_summary = generate_meeting_notes(result.full_text)
+        if meeting_summary:
+            console.print("[green]Meeting notes generated.[/green]")
+
+    tags = ["voice-note", "dictation"] if dictation else ["meeting", "transcript"]
+    to_markdown(
+        result,
+        md_path,
+        title=title,
+        recorded_at=recorded_at,
+        speaker_names=speaker_names,
+        tags=tags,
+        user_notes=user_notes,
+        meeting_summary=meeting_summary,
+    )
+    console.print(
+        f"[green]Transcript saved:[/green] {md_path.relative_to(config.notes_root)}"
+    )
+    return md_path
+
+
 def _transcribe_recording(
     wav_path: Path,
     notebook: str | None = None,
@@ -919,9 +1158,8 @@ def _transcribe_recording(
         parse_attendees,
         parse_speaker_names,
         to_json,
-        to_markdown,
     )
-    from nb.recorder.transcriber import TranscriptResult, get_api_key, transcribe
+    from nb.recorder.transcriber import get_api_key, transcribe
 
     # Get config for paths and settings
     config = get_config()
@@ -970,79 +1208,16 @@ def _transcribe_recording(
     )
     console.print(f"[green]JSON saved:[/green] {json_path.name}")
 
-    # Save Markdown to notebook
-    if notebook is None:
-        from nb.core.notebooks import get_default_transcript_notebook
-
-        notebook = get_default_transcript_notebook()
-
-    # Determine markdown output path
-    from nb.core.notebooks import is_notebook_date_based
-
-    # Extract date and name from recording ID (e.g., "2025-12-01_1430_standup")
-    recording_id = wav_path.stem
-    parts = recording_id.split("_", 2)  # date_time_name
-    if len(parts) >= 2:
-        date_str = parts[0]
-        name = parts[-1] if len(parts) > 2 else parts[1]
-        if dictation:
-            title = f"Voice Note: {name.replace('-', ' ').replace('_', ' ').title()}"
-        else:
-            title = f"Meeting: {name.replace('-', ' ').replace('_', ' ').title()}"
-    else:
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        name = recording_id
-        title = "Voice Note" if dictation else f"Meeting: {name}"
-
-    # Create note in the target notebook
-    if is_notebook_date_based(notebook):
-        # For date-based notebooks, use the recording date
-        from datetime import datetime as dt
-
-        from nb.utils.dates import get_week_folder_name
-
-        try:
-            recording_date = dt.strptime(date_str, "%Y-%m-%d").date()
-        except ValueError:
-            recording_date = dt.now().date()
-
-        # Construct path in the notebook's date structure
-        nb_path = config.get_notebook_path(notebook)
-        if nb_path is None:
-            nb_path = config.notes_root / notebook
-        year_folder = nb_path / str(recording_date.year)
-        week_folder = year_folder / get_week_folder_name(recording_date)
-        week_folder.mkdir(parents=True, exist_ok=True)
-        md_path = week_folder / f"{recording_id}.md"
-    else:
-        # For non-date-based notebooks, just put in root
-        nb_path = config.get_notebook_path(notebook)
-        if nb_path is None:
-            nb_path = config.notes_root / notebook
-        md_path = nb_path / f"{recording_id}.md"
-
-    # Generate meeting notes with LLM if requested
-    meeting_summary = None
-    if summarize and not dictation and result.full_text.strip():
-        from nb.recorder.meeting_notes import generate_meeting_notes
-
-        meeting_summary = generate_meeting_notes(result.full_text)
-        if meeting_summary:
-            console.print("[green]Meeting notes generated.[/green]")
-
-    # Write markdown
-    tags = ["voice-note", "dictation"] if dictation else ["meeting", "transcript"]
-    to_markdown(
+    # Build and write the markdown note (notebook resolution, path, LLM notes)
+    _write_transcript_note(
         result,
-        md_path,
-        title=title,
+        recording_id=wav_path.stem,
+        recorded_at=datetime.now(),
+        notebook=notebook,
         speaker_names=speaker_names,
-        tags=tags,
+        dictation=dictation,
         user_notes=user_notes,
-        meeting_summary=meeting_summary,
-    )
-    console.print(
-        f"[green]Transcript saved:[/green] {md_path.relative_to(config.notes_root)}"
+        summarize=summarize,
     )
 
     # Delete audio file if requested
