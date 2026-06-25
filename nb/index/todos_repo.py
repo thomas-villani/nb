@@ -74,6 +74,7 @@ def _row_to_todo(row) -> Todo:
         attachments=[],  # Loaded separately if needed
         details=row["details"] if "details" in row.keys() else None,
         section=row["section"] if "section" in row.keys() else None,
+        owner=row["owner"] if "owner" in row.keys() else None,
     )
 
 
@@ -171,8 +172,8 @@ def upsert_todo(
         INSERT OR REPLACE INTO todos (
             id, content, raw_content, completed, status, source_type, source_path,
             source_external, source_alias, line_number, created_date, completed_date,
-            due_date, priority, project, parent_id, content_hash, details, section
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            due_date, priority, project, parent_id, content_hash, details, section, owner
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             todo.id,
@@ -194,6 +195,7 @@ def upsert_todo(
             None,  # content_hash not used currently
             todo.details,
             todo.section,
+            todo.owner,
         ),
     )
 
@@ -407,6 +409,7 @@ def query_todos(
     completed_date_end: date | None = None,
     overdue: bool = False,
     priority: int | None = None,
+    owner: str | None = None,
     notebooks: list[str] | None = None,
     notes: list[str] | None = None,
     sections: list[str] | None = None,
@@ -434,6 +437,7 @@ def query_todos(
         completed_date_end: Filter by completion date <= this
         overdue: Only include overdue todos
         priority: Filter by priority level (1, 2, or 3)
+        owner: Filter by owner/assignee handle (from @owner(handle))
         notebooks: Filter by notebook names (stored as project in DB)
         notes: Filter by specific note paths (relative to notes root)
         sections: Filter by section names (markdown headings, partial match)
@@ -537,6 +541,11 @@ def query_todos(
     if priority:
         conditions.append("t.priority = ?")
         params.append(priority)
+
+    # Filter by owner/assignee (case-insensitive; handles stored lowercased)
+    if owner:
+        conditions.append("LOWER(t.owner) = ?")
+        params.append(owner.lower())
 
     # Filter by notebooks
     if notebooks:
@@ -680,6 +689,7 @@ def get_sorted_todos(
     sections: list[str] | None = None,
     exclude_notebooks: list[str] | None = None,
     priority: int | None = None,
+    owner: str | None = None,
     due_start: date | None = None,
     due_end: date | None = None,
     created_start: date | None = None,
@@ -708,6 +718,7 @@ def get_sorted_todos(
         sections=sections,
         exclude_notebooks=exclude_notebooks,
         priority=priority,
+        owner=owner,
         due_start=due_start,
         due_end=due_end,
         created_start=created_start,

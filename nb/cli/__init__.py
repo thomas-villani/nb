@@ -36,8 +36,10 @@ from nb.cli.notes import register_note_commands, today
 from nb.cli.record import register_record_commands
 from nb.cli.related import register_related_commands
 from nb.cli.search import register_search_commands
+from nb.cli.share import register_share_commands
 from nb.cli.stats import register_stats_commands
 from nb.cli.tags import register_tags_commands
+from nb.cli.team import register_team_commands
 from nb.cli.templates import register_template_commands
 from nb.cli.todos import register_todo_commands
 from nb.cli.transcribe import register_transcribe_commands
@@ -228,6 +230,8 @@ register_clip_commands(cli)
 register_export_commands(cli)
 register_inbox_commands(cli)
 register_git_commands(cli)
+register_team_commands(cli)
+register_share_commands(cli)
 register_ai_commands(cli)
 register_assistant_command(cli)
 register_daemon_commands(cli)

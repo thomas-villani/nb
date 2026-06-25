@@ -23,6 +23,7 @@ from .models import (
     RecorderConfig,
     SearchConfig,
     SectionConfig,
+    TeamConfig,
     TodoConfig,
     TodoViewConfig,
 )
@@ -92,6 +93,8 @@ def _parse_notebooks(data: list[Any]) -> list[NotebookConfig]:
                     icon=item.get("icon"),
                     template=item.get("template"),
                     sections=sections,
+                    shared=item.get("shared", False),
+                    subdir=item.get("subdir"),
                 )
             )
     return result
@@ -345,6 +348,17 @@ def _parse_llm_config(data: dict[str, Any] | None) -> LLMConfig:
         max_tokens=data.get("max_tokens", 4096),
         temperature=data.get("temperature", 0.7),
         system_prompt=data.get("system_prompt"),
+    )
+
+
+def _parse_team_config(data: dict[str, Any] | None) -> TeamConfig:
+    """Parse team/identity configuration for shared notebooks."""
+    if data is None:
+        return TeamConfig()
+    return TeamConfig(
+        name=data.get("name"),
+        handle=data.get("handle"),
+        email=data.get("email"),
     )
 
 

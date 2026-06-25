@@ -51,7 +51,12 @@ note where tag=#research and modified > -30d and links-to "API design"
 Saved as named views that auto-refresh, exportable as a markdown table embedded in a note (a "dynamic block" that re-renders on index). This is the unifying primitive under todo views, search, and stats.
 
 ### M5. Multiplayer notebooks
-Shared notebooks over git (you already have git sync). Add:
+> ✅ **Phase 1 shipped:** shared notebooks (external notebook = its own git repo, registered
+> per-machine via gitignored config), `nb team` identity, `@owner(handle)` todo ownership with
+> `nb todo --mine`/`--owner`, and `nb share add/init/list/status/sync`. See CLAUDE.md
+> "Multiplayer Notebooks" and `nb/core/share.py` + `nb/core/team.py`.
+
+Shared notebooks over git (you already have git sync). Still to add:
 - Per-note presence/attribution (who touched what, via git blame surfaced in the UI).
 - `@mentions` that generate todos for the mentioned person on their next sync.
 - Conflict-aware merge for daily notes (section-level, not line-level).

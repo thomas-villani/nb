@@ -34,6 +34,8 @@ DUE_PATTERN = re.compile(r"@due\((?P<date>[^)]+)\)")
 PRIORITY_PATTERN = re.compile(
     r"@priority\((?P<level>[123]|high|medium|low)\)", re.IGNORECASE
 )
+# Owner/assignee: @owner(handle) or @for(handle)
+OWNER_PATTERN = re.compile(r"@(?:owner|for)\((?P<handle>[^)]+)\)", re.IGNORECASE)
 
 # Named priority to integer mapping
 PRIORITY_NAMES: dict[str, int] = {"high": 1, "medium": 2, "low": 3}
@@ -58,6 +60,8 @@ def clean_todo_content(content: str) -> str:
     content = DUE_PATTERN.sub("", content)
     # Remove @priority(...)
     content = PRIORITY_PATTERN.sub("", content)
+    # Remove @owner(...)/@for(...)
+    content = OWNER_PATTERN.sub("", content)
     # Remove #tags
     content = TAG_REMOVAL_PATTERN.sub("", content)
     # Clean up extra whitespace
@@ -94,6 +98,18 @@ def parse_priority(content: str) -> Priority | None:
         else:
             level = int(level_str)
         return Priority.from_int(level)
+    return None
+
+
+def parse_owner(content: str) -> str | None:
+    """Extract the owner/assignee handle from todo content.
+
+    Supports @owner(handle) and @for(handle). Returns the lowercased handle,
+    or None if no owner marker is present.
+    """
+    match = OWNER_PATTERN.search(content)
+    if match:
+        return match.group("handle").strip().lower()
     return None
 
 
@@ -279,6 +295,7 @@ def extract_todos(
         clean_content = clean_todo_content(raw_content)
         due_date = parse_due_date(raw_content)
         priority = parse_priority(raw_content)
+        owner = parse_owner(raw_content)
         inline_tags = parse_tags(raw_content)
         # Merge inherited note tags with inline tags (deduplicated)
         all_tags = list(dict.fromkeys(note_tags + inline_tags))
@@ -294,6 +311,7 @@ def extract_todos(
             due_date=due_date,
             priority=priority,
             tags=all_tags,
+            owner=owner,
             notebook=project,  # Local var is 'project' for legacy reasons
             parent_id=None,
             children=[],
@@ -599,6 +617,7 @@ def add_todo_to_inbox(text: str, notes_root: Path | None = None) -> Todo:
         due_date=parse_due_date(text),
         priority=parse_priority(text),
         tags=parse_tags(text),
+        owner=parse_owner(text),
         notebook=None,
         parent_id=None,
         children=[],
@@ -851,6 +870,7 @@ def add_todo_to_note(
         due_date=parse_due_date(text),
         priority=parse_priority(text),
         tags=parse_tags(text),
+        owner=parse_owner(text),
         notebook=notebook,
         parent_id=None,
         children=[],
@@ -1126,6 +1146,7 @@ def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
         due_date=parse_due_date(text),
         priority=parse_priority(text),
         tags=parse_tags(text),
+        owner=parse_owner(text),
         notebook="daily",
         parent_id=None,
         children=[],
