@@ -23,6 +23,7 @@ from .models import (
     NotebookConfig,
     RaindropConfig,
     RecorderConfig,
+    TeamConfig,
 )
 from .parsers import (
     _parse_clip_config,
@@ -35,6 +36,7 @@ from .parsers import (
     _parse_notebooks,
     _parse_recorder_config,
     _parse_search,
+    _parse_team_config,
     _parse_todo_config,
     _parse_todo_views,
     expand_path,
@@ -110,6 +112,7 @@ def load_config(config_path: Path | None = None) -> Config:
     git_config = _parse_git_config(data.get("git"))
     llm_config = _parse_llm_config(data.get("llm"))
     mcp_config = _parse_mcp_config(data.get("mcp"))
+    team_config = _parse_team_config(data.get("team"))
     date_format = data.get("date_format", "%Y-%m-%d")
     time_format = data.get("time_format", "%H:%M")
     daily_title_format = data.get("daily_title_format", "%A, %B %d, %Y")
@@ -131,6 +134,7 @@ def load_config(config_path: Path | None = None) -> Config:
         git=git_config,
         llm=llm_config,
         mcp=mcp_config,
+        team=team_config,
         date_format=date_format,
         time_format=time_format,
         daily_title_format=daily_title_format,
@@ -217,6 +221,10 @@ def _serialize_notebook(nb: NotebookConfig) -> dict[str, Any]:
         result["icon"] = nb.icon
     if nb.template is not None:
         result["template"] = nb.template
+    if nb.shared:
+        result["shared"] = True
+    if nb.subdir is not None:
+        result["subdir"] = nb.subdir
     if nb.sections:
         sections_data = []
         for sec in nb.sections:
@@ -294,6 +302,9 @@ def save_config(config: Config) -> None:
     mcp_defaults = McpConfig()
     mcp_data = _serialize_dataclass_fields(config.mcp, defaults=mcp_defaults)
 
+    # Team: only non-default (non-None) values
+    team_data = _serialize_dataclass_fields(config.team, defaults=TeamConfig())
+
     # LLM: only non-default values, exclude api_key (use env var)
     llm_data: dict[str, Any] = {}
     llm_defaults = LLMConfig()
@@ -368,6 +379,8 @@ def save_config(config: Config) -> None:
         data["llm"] = llm_data
     if mcp_data:
         data["mcp"] = mcp_data
+    if team_data:
+        data["team"] = team_data
 
     config.config_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -440,6 +453,8 @@ def add_notebook(
     path: Path | None = None,
     color: str | None = None,
     icon: str | None = None,
+    shared: bool = False,
+    subdir: str | None = None,
 ) -> NotebookConfig:
     """Add a new notebook to the configuration.
 
@@ -451,6 +466,8 @@ def add_notebook(
         path: External path (None for internal notebook)
         color: Display color for the notebook
         icon: Display icon/emoji for the notebook
+        shared: Whether this is a multiplayer notebook synced over git
+        subdir: For shared notebooks, the content dir relative to the repo root
 
     Returns:
         The created NotebookConfig
@@ -476,6 +493,8 @@ def add_notebook(
         path=path,
         color=color,
         icon=icon,
+        shared=shared,
+        subdir=subdir,
     )
 
     # Add to config and save

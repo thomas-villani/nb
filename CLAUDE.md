@@ -295,6 +295,73 @@ nb link include-todos <alias>
 - `todo_exclude`: Hide todos from `nb todo` (default: `false`)
 - `sync`: Sync todo completions back to source (default: `true`)
 
+## Multiplayer Notebooks (Shared notebooks + todo ownership)
+
+Share *some* notebooks with teammates over git without sharing your whole notes tree, and track
+who owns which todos. Roadmap item M5.
+
+**The model**: a *shared notebook* is an external notebook (`path:` outside `notes_root`) whose
+content lives inside a standalone git repo with a remote. `notes_root` stays private (need not be
+git). Config (`.nb/config.yaml`) is gitignored and per-machine, so each teammate registers shared
+notebooks independently. All git operations reuse `nb/core/git.py` parameterized by the repo
+*root* (derived via `find_repo_root`, which walks up to the enclosing `.git` — important when a
+notebook points at a `subdir` of a larger repo).
+
+Core: `nb/core/share.py` and `nb/core/team.py`. CLI: `nb/cli/share.py` and `nb/cli/team.py`.
+
+### Identity
+
+```bash
+nb team set --name "Thomas Villani" --handle thomas   # stored per-machine, never shared
+nb team whoami                                         # resolved identity (+ source)
+```
+
+Blank fields fall back to git `user.name` / `user.email`; `handle` is derived from name/email if
+unset (`nb/core/team.py::get_identity`). The handle powers `nb todo --mine`.
+
+### Todo ownership
+
+Assign a todo with `@owner(handle)` (alias `@for(handle)`) — parsed like `@due`/`@priority`:
+
+```
+- [ ] Ship the API @owner(federico) @due(friday) #backend
+```
+
+```bash
+nb todo --owner federico    # todos owned by federico
+nb todo --mine              # todos owned by you (your configured handle)
+```
+
+Stored in the `todos.owner` column (DB schema v20). Ownership matches on the `@owner()` token in
+todo *content*, so it is stable across machines without needing stable todo IDs.
+
+### Shared notebook commands
+
+```bash
+nb share init projectx --remote git@github.com:team/projectx.git  # promote an internal notebook
+nb share add <url> projectx                       # teammate clones into .nb/shared/projectx
+nb share add ~/repos/code projnotes --subdir docs # hang notes off an existing repo subdir
+nb share list                                     # shared notebooks + ahead/behind/dirty
+nb share status [notebook]                         # git status per shared notebook
+nb share sync [notebook]                           # commit local edits, pull+push, then re-index
+```
+
+`nb share sync` commits working-tree changes first (shared notebooks are edited directly), then
+pulls/pushes, then re-indexes that notebook (`remove_deleted_notes` + `index_all_notes(force=True)`).
+Merge conflicts are isolated per-notebook (one failure does not abort the others); on conflict it
+prints manual-resolution steps.
+
+### Data model additions
+
+- `NotebookConfig.shared: bool` — marks a multiplayer notebook.
+- `NotebookConfig.subdir: str | None` — content dir relative to the repo root (the repo root may be
+  an ancestor of `path`).
+- `TeamConfig(name, handle, email)` — per-machine identity (`config.team`).
+- `Todo.owner: str | None` — assignee handle.
+
+**Deferred** (not yet built): `@mention`→auto-todo, `nb share blame`, section-level conflict-aware
+merge, and `nb share digest`.
+
 ## Code Style
 
 - Line length: 120 (configured in pyproject.toml)

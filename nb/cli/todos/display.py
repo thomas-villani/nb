@@ -18,6 +18,7 @@ def _list_todos(
     due_week: bool = False,
     overdue: bool = False,
     priority: int | None = None,
+    owner: str | None = None,
     tag: str | None = None,
     exclude_tags: list[str] | None = None,
     notebooks: list[str] | None = None,
@@ -72,6 +73,7 @@ def _list_todos(
             completed=completed,
             overdue=True,
             priority=priority,
+            owner=owner,
             tag=tag,
             exclude_tags=exclude_tags,
             notebooks=notebooks,
@@ -89,6 +91,7 @@ def _list_todos(
         todos = get_sorted_todos(
             completed=completed,
             priority=priority,
+            owner=owner,
             tag=tag,
             exclude_tags=exclude_tags,
             notebooks=notebooks,

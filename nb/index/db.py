@@ -13,7 +13,7 @@ from typing import Any
 _logger = logging.getLogger(__name__)
 
 # Current schema version
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 # Phase 1 schema: notes, tags, links
 SCHEMA_V1 = """
@@ -355,6 +355,13 @@ SCHEMA_V19 = """
 ALTER TABLE linked_notes ADD COLUMN section TEXT;
 """
 
+# Phase 20 additions: todo ownership/assignee for multiplayer notebooks
+SCHEMA_V20 = """
+-- Add owner column to todos for @owner(handle) attribution
+ALTER TABLE todos ADD COLUMN owner TEXT;
+CREATE INDEX IF NOT EXISTS idx_todos_owner ON todos(owner);
+"""
+
 # Migration scripts (indexed by target version)
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
@@ -376,6 +383,7 @@ MIGRATIONS: dict[int, str] = {
     17: SCHEMA_V17,
     18: SCHEMA_V18,
     19: SCHEMA_V19,
+    20: SCHEMA_V20,
 }
 
 

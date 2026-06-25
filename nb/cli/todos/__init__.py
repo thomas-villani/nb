@@ -58,6 +58,16 @@ def register_todo_commands(cli: click.Group) -> None:
 @click.option("--week", "-W", is_flag=True, help="Show only todos due this week")
 @click.option("--overdue", is_flag=True, help="Show only overdue todos")
 @click.option("--priority", "-p", type=int, help="Filter by priority (1, 2, or 3)")
+@click.option(
+    "--owner",
+    "-O",
+    help="Filter by owner/assignee handle (from @owner(handle))",
+)
+@click.option(
+    "--mine",
+    is_flag=True,
+    help="Show only todos assigned to you (your configured handle)",
+)
 @click.option("--tag", "-t", help="Filter by tag", shell_complete=complete_tag)
 @click.option(
     "--exclude-tag",
@@ -164,6 +174,8 @@ def todo(
     week: bool,
     overdue: bool,
     priority: int | None,
+    owner: str | None,
+    mine: bool,
     tag: str | None,
     exclude_tag: tuple[str, ...],
     notebook: tuple[str, ...],
@@ -204,6 +216,8 @@ def todo(
       nb todo -t work         Show only todos tagged #work
       nb todo -xt waiting     Exclude todos tagged #waiting
       nb todo -p 1            Show only high priority todos
+      nb todo --mine          Show todos assigned to you (@owner)
+      nb todo -O federico     Show todos owned by 'federico'
       nb todo -n daily        Show todos from 'daily' notebook only
       nb todo -n daily -n work  Filter by multiple notebooks
       nb todo --note myproject  Filter by specific note
@@ -396,6 +410,20 @@ def todo(
         )
         return
 
+    # Resolve owner filter: --mine maps to the configured identity handle
+    effective_owner = owner
+    if mine:
+        from nb.core.team import get_identity
+
+        identity = get_identity()
+        if not identity.handle:
+            console.print(
+                "[red]No identity configured.[/red] "
+                "Set one with: [cyan]nb team set --handle <you>[/cyan]"
+            )
+            return
+        effective_owner = identity.handle
+
     # Regular list view
     _list_todos(
         created_today=created_today,
@@ -404,6 +432,7 @@ def todo(
         due_week=week,
         overdue=overdue,
         priority=priority,
+        owner=effective_owner,
         tag=tag,
         exclude_tags=list(exclude_tag) if exclude_tag else None,
         notebooks=effective_notebooks if effective_notebooks else None,
@@ -1101,6 +1130,8 @@ def todo_show(todo_id: str, copy_to_clip: bool) -> None:
         console.print(f"Due: {t.due_date}")
     if t.priority:
         console.print(f"Priority: {t.priority.value}")
+    if t.owner:
+        console.print(f"Owner: @{t.owner}")
     if t.tags:
         console.print(f"Tags: {', '.join(t.tags)}")
     if t.notebook:

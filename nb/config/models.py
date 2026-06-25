@@ -34,6 +34,8 @@ class NotebookConfig:
     icon: str | None = None  # Display icon/emoji (e.g., "📝", "🔧")
     template: str | None = None  # Default template name for new notes
     sections: list[SectionConfig] = field(default_factory=list)  # Per-section settings
+    shared: bool = False  # If True, this is a multiplayer notebook synced over git
+    subdir: str | None = None  # For shared notebooks: content dir relative to repo root
 
     @property
     def is_external(self) -> bool:
@@ -233,6 +235,21 @@ class GitConfig:
 
 
 @dataclass
+class TeamConfig:
+    """Identity for multiplayer/shared notebooks.
+
+    Used to attribute todos (`@owner(handle)`) and resolve `nb todo --mine`.
+    Stored per-machine in the gitignored .nb/config.yaml — never shared.
+    Blank fields fall back to git user.name / user.email at resolution time
+    (see nb/core/team.py::get_identity).
+    """
+
+    name: str | None = None  # Display name (e.g. "Thomas Villani")
+    handle: str | None = None  # Short handle used in @owner() (e.g. "thomas")
+    email: str | None = None  # Email, for attribution
+
+
+@dataclass
 class LLMModelConfig:
     """Configuration for LLM model selection per use case."""
 
@@ -376,6 +393,7 @@ class Config:
     git: GitConfig = field(default_factory=GitConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
+    team: TeamConfig = field(default_factory=TeamConfig)
     date_format: str = "%Y-%m-%d"
     time_format: str = "%H:%M"
     daily_title_format: str = "%A, %B %d, %Y"  # e.g., "Friday, November 28, 2025"

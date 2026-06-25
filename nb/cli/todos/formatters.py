@@ -40,6 +40,10 @@ def format_todo_as_checkbox(t) -> str:
     if t.priority:
         parts.append(f"@priority({t.priority.value})")
 
+    # Add owner/assignee
+    if t.owner:
+        parts.append(f"@owner({t.owner})")
+
     # Add tags
     for tag in t.tags:
         parts.append(f"#{tag}")
@@ -848,7 +852,12 @@ def _print_todo(
         content_part = content_display
 
     priority_part = f"[magenta]{priority_str:>2}[/magenta]" if priority_str else "  "
+    # Owner chip shown alongside tags in the full layout (rightmost channel)
+    owner_part = ""
+    if t.owner and show_created:
+        owner_part = f"  [green]@{t.owner}[/green]"
     tags_part = f"  [cyan]{tags_str}[/cyan]" if tags_str else ""
+    tags_part = owner_part + tags_part
 
     # Build line based on visible columns
     # ID stays left-aligned, indent comes after ID before checkbox
