@@ -110,6 +110,7 @@ class Todo:
     due_date: datetime | None = None  # Supports optional time component
     priority: Priority | None = None
     tags: list[str] = field(default_factory=list)
+    owner: str | None = None  # Assignee handle from @owner(handle), if any
     notebook: str | None = None  # Database column is 'project' for legacy reasons
     parent_id: str | None = None
     children: list[Todo] = field(default_factory=list)

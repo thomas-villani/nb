@@ -44,6 +44,7 @@ from .models import (
     RaindropConfig,
     RecorderConfig,
     SearchConfig,
+    TeamConfig,
     TodoConfig,
     TodoViewConfig,
 )
@@ -128,6 +129,7 @@ __all__ = [
     "RaindropConfig",
     "RecorderConfig",
     "SearchConfig",
+    "TeamConfig",
     "TodoConfig",
     "TodoViewConfig",
     "_parse_embeddings",
