@@ -362,6 +362,62 @@ prints manual-resolution steps.
 **Deferred** (not yet built): `@mention`→auto-todo, `nb share blame`, section-level conflict-aware
 merge, and `nb share digest`.
 
+## Audio Recording (`nb record`)
+
+`nb/recorder/audio.py` captures the mic and system audio into a stereo WAV
+(**left = mic, right = system audio**), which `nb record start` then sends to Deepgram.
+
+### System audio: WASAPI loopback, not Stereo Mix
+
+System audio is captured with **WASAPI loopback** via the `soundcard` package, which taps
+whichever output device Windows is *currently* using. The legacy Stereo Mix path is kept only as
+a fallback.
+
+This matters: Stereo Mix only taps the **onboard** audio chip. The moment playback moves to USB
+headphones or Bluetooth, Stereo Mix records digital silence and every meeting participant is
+lost — silently, with no error. Prefer loopback; it works identically with and without headphones.
+
+- `_start_wasapi_loopback()` tries loopback and returns False to fall back to Stereo Mix.
+- An explicit `--loopback <index>` opts back into the Stereo Mix path.
+- `session.loopback_method` is `"wasapi-loopback"`, `"stereo-mix"`, or `"none"`; the CLI prints it
+  at start and warns when a channel records nothing.
+- `nb record test` must never save a `loopback_device` while loopback is available — pinning an
+  index is precisely what opts you back into the broken Stereo Mix path.
+
+**A loopback client is bound to one endpoint.** If Windows changes the default output mid-recording
+(headphones plugged in during a meeting), that client keeps capturing the now-idle device — silence
+for the remainder. The worker therefore polls `sc.default_speaker()` every `_DEVICE_POLL_INTERVAL`
+and re-binds on change, counting them in `session.loopback_switches`. Measured cost of a re-bind is
+~0.15 s of audio. Reopen failures after the first successful open are retried rather than raised:
+losing the rest of a meeting to a transient enumeration blip is far worse than a short gap.
+
+**COM threading gotcha**: `soundcard` initializes COM once, on whichever thread imported it.
+PortAudio calls `CoUninitialize()` when tearing down streams (device detection does this a lot),
+which drops the refcount to zero and makes every later soundcard call fail with
+`CO_E_NOTINITIALIZED` (`0x800401f0`). `_init_com_for_thread()` initializes COM on the loopback
+worker thread so it's immune to whatever PortAudio does on the main thread. Don't remove it —
+the failure is order-dependent and looks like flakiness.
+
+### Sample rate and WASAPI
+
+`recorder.sample_rate` defaults to 16000 (speech), but WASAPI shared mode only accepts the
+device's native mix rate (usually 48 kHz). Every WASAPI mic stream must therefore pass
+`_wasapi_extra_settings()` (`WasapiSettings(auto_convert=True)`), or it fails to open and device
+detection silently falls through to the lower-quality DirectSound/MME backends.
+
+### Level normalization
+
+`normalize_recording()` runs as a **second pass over the finished WAV** in `stop_recording()`,
+scaling each channel independently. Two deliberate choices:
+
+- **Post-pass, not during capture** — a crash mid-meeting still leaves a valid, recoverable file
+  (see `nb record recover`).
+- **Percentile reference, not true peak** — a real capture measured `peak=1.0` from 31 stray USB
+  glitch samples while `p99.9` was only `0.179`; peak normalization would have made it *quieter*.
+
+Channels below `_SILENT_RMS` are left untouched — amplifying a dead source by 20× produces
+full-scale hiss that wrecks transcription.
+
 ## Code Style
 
 - Line length: 120 (configured in pyproject.toml)

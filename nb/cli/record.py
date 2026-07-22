@@ -254,6 +254,25 @@ def record_start(
 
     console.print(f"[green]Recording started:[/green] {name}")
     console.print(f"    Mode: {mode_str}")
+    if mode in (RecordingMode.BOTH, RecordingMode.SYSTEM_ONLY):
+        if session.loopback_method == "wasapi-loopback":
+            console.print(
+                f"    System audio: {session.loopback_name} [dim](WASAPI loopback)[/dim]"
+            )
+        elif session.loopback_method == "stereo-mix":
+            console.print(
+                f"    System audio: {session.loopback_name} [dim](Stereo Mix)[/dim]"
+            )
+            console.print(
+                "    [yellow]Warning:[/yellow] Stereo Mix only captures the onboard "
+                "audio chip. If playback is on headphones or a USB/Bluetooth device, "
+                "participants will not be recorded."
+            )
+        else:
+            console.print(
+                "    [red]System audio: NOT being captured[/red] "
+                "[dim](other participants will be missing)[/dim]"
+            )
     console.print(f"    Output: {output_path.name}")
     if timeout_seconds:
         console.print(f"    Auto-stop: {duration} min")
@@ -283,6 +302,7 @@ def record_start(
         console.print(
             f"[green]Recording saved:[/green] {result_path.name} ({duration_str})"
         )
+        _report_levels(session, mode)
 
         # Auto-transcribe unless --audio-only
         if not audio_only:
@@ -825,7 +845,10 @@ def record_test(save: bool) -> None:
     ]
 
     working_mic = None
-    for dev in mic_candidates:
+    # Pick the recommendation with the same API preference start_recording uses
+    # (WASAPI first), so --save can't pin a worse device than auto-detection
+    # would have chosen on its own.
+    for dev in sorted(mic_candidates, key=_mic_api_rank):
         channels = min(1, dev.max_input_channels)
         works = test_device(dev.index, channels=channels, sample_rate=sample_rate)
         status = "[green]OK[/green]" if works else "[red]FAILED[/red]"
@@ -837,8 +860,19 @@ def record_test(save: bool) -> None:
     if not mic_candidates:
         console.print("  [dim]No microphone devices found[/dim]")
 
-    # Test loopback devices
+    # Test system audio. WASAPI loopback is the preferred path and needs no
+    # configured device, so report it before falling back to Stereo Mix.
     console.print("\n[cyan]System Audio (Loopback):[/cyan]")
+
+    from nb.recorder.audio import get_default_output_name
+
+    loopback_name = get_default_output_name()
+    if loopback_name:
+        console.print(
+            f"  WASAPI loopback: {loopback_name} [green]OK[/green] "
+            "[dim](current output device)[/dim]"
+        )
+
     loopback_candidates = [
         dev
         for dev in all_devices
@@ -871,9 +905,21 @@ def record_test(save: bool) -> None:
     else:
         console.print("  Microphone: [red]None found[/red]")
 
-    if working_loopback:
+    if loopback_name:
+        console.print(
+            f"  System audio: {loopback_name} [green](WASAPI loopback)[/green]"
+        )
+        console.print(
+            "    [dim]Follows the current Windows output device, so it keeps working "
+            "with headphones.[/dim]"
+        )
+    elif working_loopback:
         console.print(
             f"  System audio: [{working_loopback.index}] {working_loopback.name} [green](working)[/green]"
+        )
+        console.print(
+            "    [yellow]Stereo Mix only captures the onboard audio chip — participants "
+            "will be missing if you play audio through headphones.[/yellow]"
         )
     else:
         console.print("  System audio: [yellow]None found[/yellow]")
@@ -886,9 +932,15 @@ def record_test(save: bool) -> None:
     console.print(f"  mic_device: {config.recorder.mic_device}")
     console.print(f"  loopback_device: {config.recorder.loopback_device}")
 
-    # Check if config needs updating
+    # Check if config needs updating. Never pin a loopback_device when WASAPI
+    # loopback is available: an explicit index opts back into the Stereo Mix
+    # path, which is exactly the setup that silently drops participants.
     new_mic = working_mic.index if working_mic else None
-    new_loopback = working_loopback.index if working_loopback else None
+    new_loopback = (
+        None
+        if loopback_name
+        else (working_loopback.index if working_loopback else None)
+    )
     needs_update = (
         config.recorder.mic_device != new_mic
         or config.recorder.loopback_device != new_loopback
@@ -903,8 +955,12 @@ def record_test(save: bool) -> None:
                 console.print(f"  recorder.mic_device = {working_mic.index}")
             else:
                 console.print("  recorder.mic_device = [dim]cleared[/dim]")
-            if working_loopback:
-                console.print(f"  recorder.loopback_device = {working_loopback.index}")
+            if new_loopback is not None:
+                console.print(f"  recorder.loopback_device = {new_loopback}")
+            elif loopback_name:
+                console.print(
+                    "  recorder.loopback_device = [dim]unset (uses WASAPI loopback)[/dim]"
+                )
             else:
                 console.print("  recorder.loopback_device = [dim]cleared[/dim]")
         else:
@@ -916,9 +972,14 @@ def record_test(save: bool) -> None:
                 console.print(
                     f"  nb config set recorder.mic_device {working_mic.index}"
                 )
-            if working_loopback:
+            if new_loopback is not None:
                 console.print(
-                    f"  nb config set recorder.loopback_device {working_loopback.index}"
+                    f"  nb config set recorder.loopback_device {new_loopback}"
+                )
+            elif loopback_name and config.recorder.loopback_device is not None:
+                console.print(
+                    "  nb config unset recorder.loopback_device  "
+                    "[dim](pinning it disables WASAPI loopback)[/dim]"
                 )
     else:
         console.print("\n[green]Config looks good![/green]")
@@ -1001,6 +1062,76 @@ def _recording_spinner_fallback(
         pass
 
     return ""
+
+
+def _mic_api_rank(dev: object) -> int:
+    """Host-API preference for microphones: WASAPI > DirectSound > MME > rest.
+
+    Mirrors `find_best_devices` so `nb record test` recommends the same device
+    auto-detection would pick.
+    """
+    name = getattr(dev, "hostapi_name", "")
+    for rank, api in enumerate(("WASAPI", "DirectSound", "MME")):
+        if api in name:
+            return rank
+    return 3
+
+
+def _report_levels(session: RecordingSession, mode: object) -> None:
+    """Report captured level per channel, flagging any dead source.
+
+    A silent channel means a source was never actually recorded (the classic
+    case: Stereo Mix while playback is on headphones). That used to be
+    invisible until you played the file back, so surface it immediately.
+    """
+    import math
+
+    stats = getattr(session, "level_stats", None)
+    if not stats:
+        return
+
+    from nb.recorder.audio import RecordingMode
+
+    if mode == RecordingMode.MIC_ONLY:
+        labels = ["mic"]
+    elif mode == RecordingMode.SYSTEM_ONLY:
+        labels = ["system", "system"]
+    else:
+        labels = ["mic", "system"]
+
+    for st in stats:
+        idx = int(st["channel"])
+        label = labels[idx] if idx < len(labels) else f"ch{idx}"
+        rms = float(st["rms"])
+        if st["silent"]:
+            console.print(
+                f"    [red]{label}: SILENT[/red] "
+                "[dim]— nothing was captured on this channel[/dim]"
+            )
+            continue
+        dbfs = 20 * math.log10(rms) if rms > 0 else -99.0
+        gain = float(st["gain"])
+        gain_str = (
+            f", normalized +{20 * math.log10(gain):.0f} dB" if gain > 1.01 else ""
+        )
+        console.print(f"    [dim]{label}: {dbfs:.0f} dBFS{gain_str}[/dim]")
+
+    switches = getattr(session, "loopback_switches", 0)
+    if switches:
+        plural = "s" if switches > 1 else ""
+        console.print(
+            f"    [dim]system: followed {switches} output device change{plural} "
+            f"(now {session.loopback_name})[/dim]"
+        )
+
+    dropped = getattr(session, "loopback_dropped_frames", 0)
+    if dropped and session.sample_rate:
+        seconds = dropped / session.sample_rate
+        if seconds >= 0.5:
+            console.print(
+                f"    [yellow]System audio: ~{seconds:.1f}s dropped[/yellow] "
+                "[dim](machine was too busy to keep up)[/dim]"
+            )
 
 
 def _format_duration(seconds: float) -> str:

@@ -777,6 +777,210 @@ class TestAudioModule:
         assert audio._validate_configured_loopback(1) == 1
 
 
+class TestBufferDraining:
+    """Capture buffers must be detached under the lock, never held across I/O.
+
+    Holding `_buffer_lock` across numpy concatenation and the disk write stalls
+    both capture threads every flush interval, overrunning the WASAPI buffer and
+    dropping audio ("data discontinuity in recording").
+    """
+
+    def _session(self, tmp_path: Path):
+        from nb.recorder.audio import RecordingSession
+
+        return RecordingSession(
+            output_path=tmp_path / "test.wav",
+            mic_device=0,
+            loopback_device=None,
+            sample_rate=16000,
+        )
+
+    def test_drain_returns_and_clears(self, tmp_path: Path):
+        from nb.recorder.audio import _drain_buffers
+
+        session = self._session(tmp_path)
+        session._mic_buffer.extend(["m1", "m2"])
+        session._loopback_buffer.extend(["l1"])
+
+        mic, loop = _drain_buffers(session)
+
+        assert mic == ["m1", "m2"]
+        assert loop == ["l1"]
+        assert session._mic_buffer == []
+        assert session._loopback_buffer == []
+
+    def test_drain_snapshot_is_independent(self, tmp_path: Path):
+        """The returned lists must not alias the live capture buffers."""
+        from nb.recorder.audio import _drain_buffers
+
+        session = self._session(tmp_path)
+        session._mic_buffer.append("m1")
+
+        mic, _loop = _drain_buffers(session)
+        session._mic_buffer.append("m2")  # capture thread keeps appending
+
+        assert mic == ["m1"]
+
+    def test_restore_preserves_capture_order(self, tmp_path: Path):
+        """Restored chunks go in front of anything captured since the drain."""
+        from nb.recorder.audio import _drain_buffers, _restore_buffers
+
+        session = self._session(tmp_path)
+        session._mic_buffer.extend(["m1", "m2"])
+        session._loopback_buffer.extend(["l1"])
+
+        mic, loop = _drain_buffers(session)
+        session._mic_buffer.append("m3")  # arrived while we were deciding
+        _restore_buffers(session, mic, loop)
+
+        assert session._mic_buffer == ["m1", "m2", "m3"]
+        assert session._loopback_buffer == ["l1"]
+
+    def test_drain_restore_roundtrip_loses_nothing(self, tmp_path: Path):
+        from nb.recorder.audio import _drain_buffers, _restore_buffers
+
+        session = self._session(tmp_path)
+        session._mic_buffer.extend(range(10))
+        session._loopback_buffer.extend(range(5))
+
+        _restore_buffers(session, *_drain_buffers(session))
+
+        assert session._mic_buffer == list(range(10))
+        assert session._loopback_buffer == list(range(5))
+
+    def test_drain_holds_lock_only_briefly(self, tmp_path: Path):
+        """The lock must be free again as soon as drain returns."""
+        from nb.recorder.audio import _drain_buffers
+
+        session = self._session(tmp_path)
+        session._mic_buffer.append("m1")
+
+        _drain_buffers(session)
+
+        assert session._buffer_lock.acquire(blocking=False) is True
+        session._buffer_lock.release()
+
+
+class TestLevelNormalization:
+    """Per-channel level correction applied when a recording is finalized."""
+
+    def test_quiet_channel_is_amplified(self):
+        import numpy as np
+
+        from nb.recorder import audio
+
+        quiet = (np.random.default_rng(0).normal(0, 0.01, 48000)).astype("float32")
+        gain, rms, silent = audio._normalize_channel_gain(quiet, np)
+
+        assert silent is False
+        assert gain > 1.0
+        assert rms == pytest.approx(0.01, abs=0.002)
+
+    def test_silent_channel_is_left_alone(self):
+        """A dead source must not be amplified into full-scale hiss.
+
+        This is the Stereo Mix-on-headphones case: the channel contains only
+        a few LSBs of idle noise, and normalizing it would produce loud static
+        that wrecks transcription.
+        """
+        import numpy as np
+
+        from nb.recorder import audio
+
+        dead = (np.random.default_rng(0).normal(0, 2e-5, 48000)).astype("float32")
+        gain, _rms, silent = audio._normalize_channel_gain(dead, np)
+
+        assert silent is True
+        assert gain == 1.0
+
+    def test_glitch_peak_does_not_defeat_normalization(self):
+        """Isolated full-scale samples must not suppress the gain.
+
+        A real capture measured peak=1.0 from 31 stray USB glitch samples while
+        p99.9 was only 0.179 — peak normalization would have made it *quieter*.
+        """
+        import numpy as np
+
+        from nb.recorder import audio
+
+        speech = (np.random.default_rng(1).normal(0, 0.02, 48000)).astype("float32")
+        speech[[10, 500, 9000]] = 1.0  # glitch spikes
+
+        gain, _rms, silent = audio._normalize_channel_gain(speech, np)
+
+        assert silent is False
+        assert gain > 2.0
+
+    def test_gain_is_capped(self):
+        import numpy as np
+
+        from nb.recorder import audio
+
+        very_quiet = (np.random.default_rng(2).normal(0, 3e-4, 48000)).astype("float32")
+        gain, _rms, silent = audio._normalize_channel_gain(very_quiet, np)
+
+        assert silent is False
+        assert gain <= audio._NORM_MAX_GAIN
+
+    def test_normalize_recording_scales_channels_independently(self, tmp_path: Path):
+        """A quiet mic must not be held back by a loud system channel."""
+        import numpy as np
+        import soundfile as sf
+
+        from nb.recorder.audio import normalize_recording
+
+        rng = np.random.default_rng(3)
+        quiet_mic = rng.normal(0, 0.01, 32000)
+        loud_system = rng.normal(0, 0.2, 32000)
+        wav = tmp_path / "rec.wav"
+        sf.write(
+            wav, np.column_stack([quiet_mic, loud_system]), 16000, subtype="PCM_16"
+        )
+
+        stats = normalize_recording(wav)
+
+        assert len(stats) == 2
+        assert stats[0]["gain"] > stats[1]["gain"]
+
+        data, sr = sf.read(wav, dtype="float32", always_2d=True)
+        assert sr == 16000
+        assert data.shape[1] == 2
+        assert np.abs(data).max() <= 1.0
+        # The quiet channel came up to a usable level
+        assert np.sqrt((data[:, 0] ** 2).mean()) > 0.03
+
+    def test_normalize_recording_preserves_dead_channel(self, tmp_path: Path):
+        import numpy as np
+        import soundfile as sf
+
+        from nb.recorder.audio import normalize_recording
+
+        rng = np.random.default_rng(4)
+        mic = rng.normal(0, 0.02, 32000)
+        dead = np.zeros(32000)
+        wav = tmp_path / "rec.wav"
+        sf.write(wav, np.column_stack([mic, dead]), 16000, subtype="PCM_16")
+
+        stats = normalize_recording(wav)
+
+        assert stats[1]["silent"] is True
+        assert stats[1]["gain"] == 1.0
+
+        data, _sr = sf.read(wav, dtype="float32", always_2d=True)
+        assert np.abs(data[:, 1]).max() == 0.0
+
+    def test_normalize_recording_handles_empty_file(self, tmp_path: Path):
+        import numpy as np
+        import soundfile as sf
+
+        from nb.recorder.audio import normalize_recording
+
+        wav = tmp_path / "empty.wav"
+        sf.write(wav, np.zeros((0, 2)), 16000, subtype="PCM_16")
+
+        assert normalize_recording(wav) == []
+
+
 # =============================================================================
 # Recorder Package Tests
 # =============================================================================

@@ -47,6 +47,10 @@ recorder = [
     "soundfile>=0.12.0",
     "numpy>=2.4.0",
     "deepgram-sdk>=3.0.0",
+    # WASAPI loopback: captures system audio from the *current* output device
+    # (USB headphones, Bluetooth, onboard) instead of relying on Realtek's
+    # Stereo Mix, which only taps the onboard chip. See nb/recorder/audio.py.
+    "soundcard>=0.4.2; sys_platform == 'win32'",
 ]
 calendar = [
     "pywin32>=306; sys_platform == 'win32'",
@@ -66,6 +70,7 @@ all = [
     "soundfile>=0.12.0",
     "numpy>=2.4.6",
     "deepgram-sdk>=3.0.0",
+    "soundcard>=0.4.2; sys_platform == 'win32'",
     "pywin32>=306; sys_platform == 'win32'",
     "watchdog>=4.0.0",
     "fastmcp>=2.0.0",
@@ -153,6 +158,7 @@ module = [
     "frontmatter",
     "sounddevice",
     "soundfile",
+    "soundcard",
     "git",
     "git.*",
     "win32com",

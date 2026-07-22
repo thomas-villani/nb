@@ -34,4 +34,27 @@ def require_recorder() -> None:
         )
 
 
-__all__ = ["is_available", "require_recorder"]
+_LOOPBACK_AVAILABLE: bool | None = None
+
+
+def is_wasapi_loopback_available() -> bool:
+    """Check if WASAPI loopback (via the `soundcard` package) can be used.
+
+    WASAPI loopback captures system audio from whichever output device Windows
+    is currently using, so it keeps working when you plug in headphones. The
+    Stereo Mix fallback only taps the onboard audio chip and records silence
+    once playback moves to a USB or Bluetooth device.
+    """
+    global _LOOPBACK_AVAILABLE
+    if _LOOPBACK_AVAILABLE is None:
+        try:
+            import soundcard  # noqa: F401
+
+            _LOOPBACK_AVAILABLE = True
+        except Exception:
+            # soundcard raises non-ImportError exceptions on unsupported platforms
+            _LOOPBACK_AVAILABLE = False
+    return _LOOPBACK_AVAILABLE
+
+
+__all__ = ["is_available", "is_wasapi_loopback_available", "require_recorder"]
