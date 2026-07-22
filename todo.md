@@ -3,15 +3,39 @@ todo_exclude: true
 ---
 # nb-cli Development Todo
 
+
+- [ ] Should improve `nb record` to use info from the notes to try to assign speakers and give a bit more context.
+
 - [x] `nb stream` convert to real stream to stdout with markup instead, with optional simpler scrolling pager.
 
-- [ ] improve `nb web`
+- [x] improve `nb web`
   - sort notebooks by date, especially daily/weekly notebooks
   - More of a "notebook" interface, perhaps we borrow from notion a bit
   - the wysiwyg editor is terrible
   - probably need to shift from basic http server to something heavier and better (fastapi)
 
 # ISSUES:
+
+Issue running `nb assistant`:
+```
+~ ❯ nb assistant "I think I wrote up a list of the ongoing NJII projects somewhere in my notes (probably my daily notebook) can you help me find it?"
+╭──────────────────────────────────────────────────────────────╮
+│ AI Executive Assistant                                       │
+│ I can help you manage todos, search notes, and more.         │
+│ Write operations require your confirmation before executing. │
+╰──────────────────────────────────────────────────────────────╯
+
+Commands: 'done'/'quit' to exit | 'clear' to discard pending actions
+
+You: I think I wrote up a list of the ongoing NJII projects somewhere in my notes (probably my daily notebook) can you help me find it?
+FAISS reconstruct_batch failed, falling back to individual calls: Error in void __cdecl faiss::Index::reconstruct_batch(__int64,const __int64 *,float *) const at D:\a\faiss\faiss\faiss\Index.cpp:78: Error in void __cdecl
+faiss::IndexIDMap2Template<struct faiss::Index>::reconstruct(__int64,float *) const at D:\a\faiss\faiss\faiss\IndexIDMap.cpp:376: key 370 not found
+No valid internal indices found for FAISS IDs: [369, 370]
+FAISS reconstruct_batch failed, falling back to individual calls: Error in void __cdecl faiss::Index::reconstruct_batch(__int64,const __int64 *,float *) const at D:\a\faiss\faiss\faiss\Index.cpp:78: Error in void __cdecl
+faiss::IndexIDMap2Template<struct faiss::Index>::reconstruct(__int64,float *) const at D:\a\faiss\faiss\faiss\IndexIDMap.cpp:376: key 580 not found
+No valid internal indices found for FAISS IDs: [569, 570, 571, 572, 573, 574, 575, 576, 577, 578, 579, 580]
+```
+
 
 [fixed]
 ## Issue while running `nb index --force`:
