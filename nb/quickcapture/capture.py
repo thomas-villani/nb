@@ -97,19 +97,24 @@ def _capture_todo(text: str, notebook: str | None) -> str:
 
 
 def _capture_plain(text: str, notebook: str | None) -> str:
-    from nb.core.notes import _reindex_note_after_edit, ensure_daily_note
+    from nb.core.notes import (
+        _reindex_note_after_edit,
+        append_to_daily_note,
+        ensure_daily_note,
+    )
 
     config = get_config()
+    today = date.today()
     if notebook is None:
-        path = ensure_daily_note(date.today())
+        path = ensure_daily_note(today)
         dest = path.name
     else:
         path = _resolve_today_note(notebook)
         dest = f"{notebook}/{path.name}"
 
     timestamp = datetime.now().strftime(f"{config.date_format} {config.time_format}")
-    with path.open("a", encoding="utf-8") as f:
-        f.write(f"\n{timestamp}: {text}\n")
+    # Targets today's section when the note is a weekly file
+    append_to_daily_note(path, f"{timestamp}: {text}", today)
 
     _reindex_note_after_edit(path, config.notes_root)
     return f"Logged to {dest}"

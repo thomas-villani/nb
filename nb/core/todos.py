@@ -1106,6 +1106,7 @@ def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
         The created Todo object.
 
     """
+    from nb.core.notebooks import find_daily_section_range
     from nb.core.notes import ensure_daily_note
 
     if dt is None:
@@ -1118,12 +1119,17 @@ def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
     content = note_path.read_text(encoding="utf-8")
     lines = content.splitlines()
 
-    # Find line number for new todo
-    line_number = len(lines) + 1
+    # In a weekly note, insert into this day's section - the end of the file
+    # belongs to whichever day was opened last, which need not be `dt`.
+    section = find_daily_section_range(note_path, dt)
+    insert_idx = section[1] if section else len(lines)
+    # Matches the heading the indexer will attribute this todo to
+    day_section = dt.strftime(get_config().daily_title_format) if section else None
 
-    # Append the todo
-    with note_path.open("a", encoding="utf-8") as f:
-        f.write(f"- [ ] {text}\n")
+    lines.insert(insert_idx, f"- [ ] {text}")
+    line_number = insert_idx + 1
+
+    note_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     # Create and return Todo object
     clean_content = clean_todo_content(text)
@@ -1151,7 +1157,7 @@ def add_todo_to_daily_note(text: str, dt: date | None = None) -> Todo:
         parent_id=None,
         children=[],
         attachments=[],
-        section=None,
+        section=day_section,
     )
 
     # Insert into database immediately

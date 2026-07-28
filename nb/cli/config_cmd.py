@@ -104,6 +104,7 @@ def config_set(key: str, value: str) -> None:
       nb config set editor code
       nb config set notebook.work.color blue
       nb config set notebook.projects.icon wrench
+      nb config set notebook.daily.date_based weekly
 
     \b
     Run 'nb config list' for the full set of configurable settings.

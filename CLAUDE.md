@@ -48,6 +48,12 @@ nb/config.py    Configuration management
 - **Date-based notebooks**: Two modes:
   - **Daily** (`date_based: true`): One file per day: `daily/2025/Nov25-Dec01/2025-11-27.md`
   - **Weekly** (`date_based: "weekly"`): One file per week with daily sections: `journal/2025/Nov25-Dec01.md`
+  - The built-in `daily` notebook has its own entry points in `nb/core/notes.py`
+    (`get_daily_note_path` / `ensure_daily_note`), used by `nb today`, quick capture, the
+    todo inbox and the AI commands. They resolve the mode via `_resolve_daily_path` — keep
+    any new daily-note code going through them rather than rebuilding the path, or weekly
+    mode silently reverts to per-day files for that command. Appends must use
+    `append_to_daily_note`: a weekly file's last line is not necessarily today's section.
 - **Hybrid search**: 70% semantic (vector embeddings) + 30% keyword (FTS5)
 - **Notebook sections**: Subfolder-based organization within notebooks (see below)
 - **Linked notes**: External files/directories indexed alongside notes (see below)

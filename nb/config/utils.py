@@ -56,7 +56,7 @@ CONFIGURABLE_SETTINGS = {
 NOTEBOOK_SETTINGS = {
     "color": "Display color (e.g., blue, green, #ff5500)",
     "icon": "Display icon/emoji (e.g., 📝, 🔧, or name like 'wrench')",
-    "date_based": "Use date-based organization (true/false)",
+    "date_based": "Date organization: none, daily (one file per day), or weekly (one file per week)",
     "todo_exclude": "Exclude from nb todo by default (true/false)",
     "template": "Default template name for new notes",
 }
@@ -144,6 +144,41 @@ def parse_bool_strict(value: str, setting_name: str) -> bool:
     raise ValueError(
         f"Invalid boolean value '{value}' for {setting_name}. Valid: {valid}"
     )
+
+
+def parse_date_based(value: str, setting_name: str) -> str | bool:
+    """Parse a notebook's date_based setting.
+
+    Accepts the mode names ("none", "daily", "weekly") as well as booleans,
+    normalizing to the values NotebookConfig.date_mode understands.
+
+    Args:
+        value: String value to parse
+        setting_name: Name of the setting (for error messages)
+
+    Returns:
+        False for flat, True for daily, or "weekly" for weekly notebooks.
+
+    Raises:
+        ValueError: If the value is not a recognized mode or boolean string.
+
+    """
+    lower = value.lower()
+    if lower == "weekly":
+        return "weekly"
+    if lower == "daily":
+        return True
+    if lower == "none":
+        return False
+    try:
+        return parse_bool_strict(value, setting_name)
+    except ValueError:
+        valid = ", ".join(
+            ("none", "daily", "weekly") + BOOL_TRUE_VALUES + BOOL_FALSE_VALUES
+        )
+        raise ValueError(
+            f"Invalid date mode '{value}' for {setting_name}. Valid: {valid}"
+        ) from None
 
 
 # Valid Rich color names (standard + bright variants)
@@ -597,10 +632,12 @@ def set_config_value(key: str, value: str) -> bool:
         if setting not in NOTEBOOK_SETTINGS:
             return False
 
-        # Handle boolean settings
-        if setting in ("date_based", "todo_exclude"):
-            bool_value = parse_bool_strict(value, f"notebook.{nb_name}.{setting}")
-            setattr(nb, setting, bool_value)
+        if setting == "date_based":
+            nb.date_based = parse_date_based(value, f"notebook.{nb_name}.date_based")
+        elif setting == "todo_exclude":
+            nb.todo_exclude = parse_bool_strict(
+                value, f"notebook.{nb_name}.todo_exclude"
+            )
         elif setting == "color":
             # Validate and set color
             if value.lower() in ("", "none"):

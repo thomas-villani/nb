@@ -630,8 +630,31 @@ class TestSetConfigValueBooleans:
         with pytest.raises(ValueError, match="Invalid boolean value"):
             set_config_value("todo.auto_complete_children", "trie")
 
-        with pytest.raises(ValueError, match="Invalid boolean value"):
+        # date_based accepts mode names as well as booleans, so it has its own message
+        with pytest.raises(ValueError, match="Invalid date mode"):
             set_config_value("notebook.daily.date_based", "nope")
+
+    def test_date_based_accepts_modes(self, mock_config: Config, temp_notes_root: Path):
+        """date_based accepts none/daily/weekly in addition to booleans."""
+        from nb.config import load_config, set_config_value
+
+        config_path = temp_notes_root / ".nb" / "config.yaml"
+
+        assert set_config_value("notebook.daily.date_based", "weekly") is True
+        cfg = load_config(config_path)
+        assert cfg.get_notebook("daily").date_mode == "weekly"
+
+        assert set_config_value("notebook.daily.date_based", "daily") is True
+        cfg = load_config(config_path)
+        assert cfg.get_notebook("daily").date_mode == "daily"
+
+        assert set_config_value("notebook.daily.date_based", "none") is True
+        cfg = load_config(config_path)
+        assert cfg.get_notebook("daily").date_mode == "none"
+
+        assert set_config_value("notebook.daily.date_based", "true") is True
+        cfg = load_config(config_path)
+        assert cfg.get_notebook("daily").date_mode == "daily"
 
 
 class TestSerializeDataclassFields:

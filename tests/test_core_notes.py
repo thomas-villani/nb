@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from nb.core.notes import (
+    append_to_daily_note,
     create_note,
     ensure_daily_note,
     get_daily_note_path,
@@ -84,6 +85,111 @@ class TestEnsureDailyNote:
         assert path.parent.exists()
         assert path.parent.parent.exists()  # Year folder
         assert path.parent.parent.parent.exists()  # daily folder
+
+
+class TestWeeklyDailyNotes:
+    """Tests for the 'daily' notebook in weekly mode."""
+
+    @pytest.fixture
+    def weekly_config(self, mock_config):
+        mock_config.get_notebook("daily").date_based = "weekly"
+        return mock_config
+
+    def test_path_is_week_file(self, weekly_config):
+        # 2025-11-26 is a Wednesday in the Nov24-Nov30 week
+        path = get_daily_note_path(date(2025, 11, 26), weekly_config.notes_root)
+
+        assert path.name == "Nov24-Nov30.md"
+        assert path.parent.name == "2025"
+        assert path.parent.parent.name == "daily"
+
+    def test_creates_week_file_with_day_section(self, weekly_config):
+        path = ensure_daily_note(date(2025, 11, 26), weekly_config.notes_root)
+
+        content = path.read_text(encoding="utf-8")
+        assert "# Week of November 24 - November 30, 2025" in content
+        assert "## Wednesday, November 26, 2025" in content
+
+    def test_days_in_same_week_share_one_file(self, weekly_config):
+        notes_root = weekly_config.notes_root
+
+        path1 = ensure_daily_note(date(2025, 11, 26), notes_root)
+        path2 = ensure_daily_note(date(2025, 11, 27), notes_root)
+
+        assert path1 == path2
+        content = path2.read_text(encoding="utf-8")
+        assert "## Wednesday, November 26, 2025" in content
+        assert "## Thursday, November 27, 2025" in content
+
+    def test_reopening_a_day_does_not_duplicate_section(self, weekly_config):
+        notes_root = weekly_config.notes_root
+        dt = date(2025, 11, 26)
+
+        ensure_daily_note(dt, notes_root)
+        path = ensure_daily_note(dt, notes_root)
+
+        content = path.read_text(encoding="utf-8")
+        assert content.count("## Wednesday, November 26, 2025") == 1
+
+    def test_existing_per_day_note_still_resolves(self, weekly_config, create_note):
+        """Notes written before the switch stay reachable at their own path."""
+        legacy = create_note(
+            "daily",
+            "2025-11-26.md",
+            "# Wednesday, November 26, 2025\n\nlegacy content\n",
+            week_folder="Nov24-Nov30",
+            year=2025,
+        )
+
+        path = ensure_daily_note(date(2025, 11, 26), weekly_config.notes_root)
+
+        assert path == legacy
+        assert "legacy content" in path.read_text(encoding="utf-8")
+
+    def test_append_targets_the_days_section(self, weekly_config):
+        notes_root = weekly_config.notes_root
+
+        path = ensure_daily_note(date(2025, 11, 26), notes_root)
+        append_to_daily_note(path, "wednesday entry", date(2025, 11, 26))
+        # Opening a later day appends its section at the end of the file
+        ensure_daily_note(date(2025, 11, 27), notes_root)
+        append_to_daily_note(path, "thursday entry", date(2025, 11, 27))
+        # ...and a second Wednesday entry must still land under Wednesday
+        append_to_daily_note(path, "later wednesday entry", date(2025, 11, 26))
+
+        lines = path.read_text(encoding="utf-8").splitlines()
+        wed = lines.index("## Wednesday, November 26, 2025")
+        thu = lines.index("## Thursday, November 27, 2025")
+
+        assert wed < lines.index("wednesday entry") < thu
+        assert wed < lines.index("later wednesday entry") < thu
+        assert lines.index("thursday entry") > thu
+
+    def test_todo_lands_in_the_days_section(self, weekly_config):
+        from nb.core.todos import add_todo_to_daily_note
+
+        notes_root = weekly_config.notes_root
+
+        path = ensure_daily_note(date(2025, 11, 26), notes_root)
+        # A later day's section is appended after Wednesday's
+        ensure_daily_note(date(2025, 11, 27), notes_root)
+        add_todo_to_daily_note("wednesday task", date(2025, 11, 26))
+
+        lines = path.read_text(encoding="utf-8").splitlines()
+        wed = lines.index("## Wednesday, November 26, 2025")
+        thu = lines.index("## Thursday, November 27, 2025")
+
+        assert wed < lines.index("- [ ] wednesday task") < thu
+
+    def test_append_to_per_day_note_appends_at_end(self, mock_config):
+        """Per-day notes have no day sections - plain append."""
+        notes_root = mock_config.notes_root
+        dt = date(2025, 11, 26)
+
+        path = ensure_daily_note(dt, notes_root)
+        append_to_daily_note(path, "an entry", dt)
+
+        assert path.read_text(encoding="utf-8").rstrip().endswith("an entry")
 
 
 class TestCreateNote:

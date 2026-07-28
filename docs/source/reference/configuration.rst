@@ -135,6 +135,19 @@ Notebook options
    * - ``sections``
      - List of section configs (each with ``name`` and optional ``todo_exclude``)
 
+Switching a notebook's date mode
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``date_based`` can be changed at any time, either by editing ``config.yaml`` or with::
+
+   nb config set notebook.daily.date_based weekly
+
+Existing notes are not moved or rewritten. They stay where they are and remain
+indexed, searchable, and editable; only newly created notes follow the new
+layout. Switching to ``weekly`` keeps any pre-existing per-day file reachable at
+its own path, so ``nb today`` on a day that already has one opens that file
+rather than starting a fresh weekly section.
+
 Section options
 ^^^^^^^^^^^^^^^
 

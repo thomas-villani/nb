@@ -12,6 +12,7 @@ from nb.cli.utils import (
     console,
     copy_to_clipboard,
     get_clipboard_content,
+    get_daily_open_line,
     get_notebook_display_info,
     get_stdin_content,
     open_or_show_note,
@@ -20,6 +21,7 @@ from nb.cli.utils import (
 )
 from nb.config import get_config
 from nb.core.notes import (
+    append_to_daily_note,
     copy_note,
     create_note,
     delete_note,
@@ -89,7 +91,7 @@ def today(ctx: click.Context, notebook: str | None) -> None:
         path = ensure_daily_note(dt)
 
     show = ctx.obj and ctx.obj.get("show")
-    open_or_show_note(path, show=show)
+    open_or_show_note(path, show=show, line=get_daily_open_line(path, dt))
 
 
 @click.command()
@@ -124,7 +126,7 @@ def yesterday(ctx: click.Context, notebook: str | None) -> None:
         path = ensure_daily_note(dt)
 
     show = ctx.obj and ctx.obj.get("show")
-    open_or_show_note(path, show=show)
+    open_or_show_note(path, show=show, line=get_daily_open_line(path, dt))
 
 
 @click.command("last")
@@ -935,9 +937,8 @@ def add_to_note(
         dt = date.today()
         path = ensure_daily_note(dt)
 
-        # Append the content
-        with path.open("a", encoding="utf-8") as f:
-            f.write(f"\n{content}\n")
+        # Append the content (under today's section in weekly notes)
+        append_to_daily_note(path, content, dt)
 
         console.print(f"[green]Added to {path.name}[/green]")
 
@@ -1039,9 +1040,8 @@ def log_to_note(
         dt = date.today()
         path = ensure_daily_note(dt)
 
-        # Append the timestamped content
-        with path.open("a", encoding="utf-8") as f:
-            f.write(f"\n{timestamped_content}\n")
+        # Append the timestamped content (under today's section in weekly notes)
+        append_to_daily_note(path, timestamped_content, dt)
 
         console.print(f"[green]Logged to {path.name}[/green]")
 

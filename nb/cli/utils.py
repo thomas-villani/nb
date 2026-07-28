@@ -22,6 +22,8 @@ from rich.progress import (
 from nb.config import get_config, init_config
 
 if TYPE_CHECKING:
+    from datetime import date
+
     from nb.models import Todo
 
 # Main console for stdout (user-facing output)
@@ -655,12 +657,13 @@ def ensure_note_path(path: str | Path, notes_root: Path | None = None) -> Path:
     return path
 
 
-def open_or_show_note(path: Path, show: bool = False) -> None:
+def open_or_show_note(path: Path, show: bool = False, line: int | None = None) -> None:
     """Open a note in editor or print to console.
 
     Args:
         path: Absolute path to the note.
         show: If True, print note to console instead of opening editor.
+        line: Optional line number to open the editor at.
     """
     from nb.core.notes import open_note
 
@@ -669,7 +672,19 @@ def open_or_show_note(path: Path, show: bool = False) -> None:
     else:
         rel_path = get_display_path(path)
         console.print(f"[dim]Opening {rel_path}...[/dim]")
-        open_note(path)
+        open_note(path, line=line)
+
+
+def get_daily_open_line(path: Path, dt: date) -> int | None:
+    """Line number to open a daily note at.
+
+    For weekly notes this is the day's section header, so the editor lands on
+    the current day rather than the top of the week. None for per-day notes.
+    """
+    from nb.core.notebooks import find_daily_section_range
+
+    section = find_daily_section_range(path, dt)
+    return section[0] + 1 if section else None
 
 
 def resolve_note_ref(

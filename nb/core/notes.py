@@ -24,30 +24,71 @@ __all__ = [
 ]
 
 
+def _resolve_daily_path(dt: date, notes_root: Path) -> tuple[Path, bool]:
+    """Resolve the file backing the daily note for a date.
+
+    Args:
+        dt: The date the note is for
+        notes_root: Root directory for notes
+
+    Returns:
+        (path, is_weekly) - is_weekly is True when the path is a weekly file
+        holding one section per day rather than a file for this day alone.
+
+    """
+    from nb.core.notebooks import get_notebook_date_mode
+    from nb.utils.dates import get_week_folder_name
+
+    week_folder = get_week_folder_name(dt)
+    year_dir = notes_root / "daily" / str(dt.year)
+    per_day_path = year_dir / week_folder / f"{dt.isoformat()}.md"
+
+    # In weekly mode a pre-existing per-day file still wins: notes written
+    # before the notebook was switched must stay reachable at their own path.
+    if get_notebook_date_mode("daily") == "weekly" and not per_day_path.exists():
+        return year_dir / f"{week_folder}.md", True
+
+    return per_day_path, False
+
+
 def get_daily_note_path(dt: date, notes_root: Path | None = None) -> Path:
     """Get the path for a daily note.
 
-    Daily notes are stored as: daily/YYYY/Nov25-Dec01/YYYY-MM-DD.md
-    (organized by work week, Monday-Sunday)
+    Honors the 'daily' notebook's configured date mode:
+      - daily:  daily/YYYY/Nov25-Dec01/YYYY-MM-DD.md (one file per day)
+      - weekly: daily/YYYY/Nov25-Dec01.md (one file per week, a section per day)
     """
-    from nb.utils.dates import get_week_folder_name
-
     if notes_root is None:
         notes_root = get_config().notes_root
 
-    week_folder = get_week_folder_name(dt)
-    return notes_root / "daily" / str(dt.year) / week_folder / f"{dt.isoformat()}.md"
+    return _resolve_daily_path(dt, notes_root)[0]
 
 
 def ensure_daily_note(dt: date, notes_root: Path | None = None) -> Path:
     """Ensure a daily note exists, creating it if necessary.
+
+    In weekly mode this ensures the week's file exists and that it contains a
+    section for `dt`.
 
     Returns the path to the note.
     """
     if notes_root is None:
         notes_root = get_config().notes_root
 
-    path = get_daily_note_path(dt, notes_root)
+    path, is_weekly = _resolve_daily_path(dt, notes_root)
+
+    if is_weekly:
+        from nb.core.notebooks import ensure_weekly_note_section
+
+        is_new = not path.exists()
+        ensure_weekly_note_section("daily", path, dt)
+
+        if is_new:
+            from nb.core.git import auto_commit_file
+
+            auto_commit_file(path, notes_root=notes_root)
+
+        return path
 
     if not path.exists():
         # Create directory structure
@@ -63,6 +104,38 @@ def ensure_daily_note(dt: date, notes_root: Path | None = None) -> Path:
         auto_commit_file(path, notes_root=notes_root)
 
     return path
+
+
+def append_to_daily_note(path: Path, content: str, dt: date | None = None) -> None:
+    """Append content to a daily note, under the day's section in weekly notes.
+
+    A weekly note holds one section per day, and the day being written is not
+    always the last one - opening a past day appends its section at the end of
+    the file. Insert into that day's section rather than blindly appending.
+
+    Args:
+        path: Path to the daily note file
+        content: Content to append (a trailing newline is added)
+        dt: The day being written to (defaults to today)
+
+    """
+    from nb.core.notebooks import find_daily_section_range
+
+    if dt is None:
+        dt = date.today()
+
+    section = find_daily_section_range(path, dt)
+
+    if section is None:
+        # Per-day note (or a weekly file with no section for this day yet)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(f"\n{content}\n")
+        return
+
+    _, end_idx = section
+    lines = path.read_text(encoding="utf-8").splitlines()
+    lines[end_idx:end_idx] = ["", content]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def create_note(

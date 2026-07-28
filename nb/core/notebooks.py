@@ -591,7 +591,7 @@ def ensure_notebook_note(
 
     # Weekly notebooks need special handling - append section if needed
     if get_notebook_date_mode(notebook) == "weekly":
-        return _ensure_weekly_note_section(notebook, path, dt, template)
+        return ensure_weekly_note_section(notebook, path, dt, template)
 
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -646,7 +646,61 @@ def ensure_notebook_note(
     return path
 
 
-def _ensure_weekly_note_section(
+def get_daily_section_header(dt: date) -> str:
+    """Return the day-section header used inside a weekly note.
+
+    e.g. "## Tuesday, July 28, 2026" (follows config.daily_title_format).
+    """
+    config = get_config()
+    return f"## {dt.strftime(config.daily_title_format)}"
+
+
+def find_daily_section_range(path: Path, dt: date) -> tuple[int, int] | None:
+    """Locate a day's section inside a weekly note.
+
+    Args:
+        path: Path to the weekly note file
+        dt: The day whose section to find
+
+    Returns:
+        (header_idx, end_idx) as 0-based line indices, where end_idx is the line
+        the section ends *before* (exclusive, trailing blank lines trimmed).
+        None if the file has no section for that day.
+
+    """
+    if not path.exists():
+        return None
+
+    header = get_daily_section_header(dt)
+    lines = path.read_text(encoding="utf-8").splitlines()
+
+    header_idx = None
+    for i, line in enumerate(lines):
+        if line.strip() == header:
+            header_idx = i
+            break
+
+    if header_idx is None:
+        return None
+
+    # The section runs until the next heading of the same or higher level (## or #)
+    end_idx = len(lines)
+    for i in range(header_idx + 1, len(lines)):
+        stripped = lines[i].lstrip()
+        if stripped.startswith("## ") or (
+            stripped.startswith("# ") and not stripped.startswith("## ")
+        ):
+            end_idx = i
+            break
+
+    # Trim trailing blank lines so inserted content sits under the last entry
+    while end_idx > header_idx + 1 and not lines[end_idx - 1].strip():
+        end_idx -= 1
+
+    return header_idx, end_idx
+
+
+def ensure_weekly_note_section(
     notebook: str,
     path: Path,
     dt: date | None = None,
@@ -674,7 +728,7 @@ def _ensure_weekly_note_section(
     path.parent.mkdir(parents=True, exist_ok=True)
 
     # Generate the daily section header using the configured format
-    daily_header = f"## {dt.strftime(config.daily_title_format)}"
+    daily_header = get_daily_section_header(dt)
 
     if not path.exists():
         # Create new weekly file with initial content
