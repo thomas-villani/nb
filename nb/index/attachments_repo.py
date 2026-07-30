@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from nb.core.attachments import is_url
 from nb.index.db import get_db
 from nb.models import Attachment
 from nb.utils.hashing import make_attachment_id, normalize_path
@@ -372,8 +373,6 @@ def extract_attachments_from_content(
     Returns:
         List of (Attachment, parent_type, parent_id) tuples.
     """
-    from nb.core.attachments import is_url
-
     attachments = []
 
     for match in ATTACH_PATTERN.finditer(content):

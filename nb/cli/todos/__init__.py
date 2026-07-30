@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from datetime import date, timedelta
 
 import click
@@ -1189,17 +1188,9 @@ def todo_edit(todo_id: str) -> None:
     open_in_editor(path, line=t.line_number, editor=config.editor)
 
     # Sync if file was modified
-    try:
-        mtime_after = path.stat().st_mtime
-        if mtime_before is None or mtime_after != mtime_before:
-            from nb.core.notes import _reindex_note_after_edit, update_note_mtime
+    from nb.core.notes import sync_note_after_edit
 
-            print("Syncing nb...", end="", file=sys.stderr, flush=True)
-            update_note_mtime(path, config.notes_root)
-            _reindex_note_after_edit(path, config.notes_root)
-            print(" done", file=sys.stderr)
-    except OSError:
-        pass
+    sync_note_after_edit(path, config.notes_root, mtime_before)
 
 
 @todo.command("delete")

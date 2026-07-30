@@ -410,3 +410,54 @@ class TestListDailyNotes:
         notes = list_daily_notes(notes_root=notes_root)
 
         assert notes == []
+
+
+class TestSyncNoteAfterEdit:
+    """Tests for sync_note_after_edit (the post-editor re-index)."""
+
+    def test_reindex_failure_does_not_raise(self, mock_config, monkeypatch, capsys):
+        """A failed re-index must not look like a lost edit - the file is already saved."""
+        from nb.core import notes as notes_mod
+
+        path = create_note(Path("projects/edited.md"), title="Edited")
+
+        def boom(*args, **kwargs):
+            raise ModuleNotFoundError("No module named 'nb.core.attachments'")
+
+        monkeypatch.setattr(notes_mod, "_reindex_note_after_edit", boom)
+
+        notes_mod.sync_note_after_edit(path, mock_config.notes_root, mtime_before=None)
+
+        err = capsys.readouterr().err
+        assert "failed" in err
+        assert "nb index" in err
+
+    def test_skips_when_file_unchanged(self, mock_config, monkeypatch):
+        from nb.core import notes as notes_mod
+
+        path = create_note(Path("projects/untouched.md"), title="Untouched")
+        called = []
+        monkeypatch.setattr(
+            notes_mod, "_reindex_note_after_edit", lambda *a, **k: called.append(a)
+        )
+
+        notes_mod.sync_note_after_edit(
+            path, mock_config.notes_root, mtime_before=path.stat().st_mtime
+        )
+
+        assert called == []
+
+    def test_reindexes_when_file_changed(self, mock_config, monkeypatch):
+        from nb.core import notes as notes_mod
+
+        path = create_note(Path("projects/changed.md"), title="Changed")
+        called = []
+        monkeypatch.setattr(
+            notes_mod, "_reindex_note_after_edit", lambda *a, **k: called.append(a)
+        )
+
+        notes_mod.sync_note_after_edit(
+            path, mock_config.notes_root, mtime_before=path.stat().st_mtime - 10
+        )
+
+        assert len(called) == 1

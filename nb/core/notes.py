@@ -777,17 +777,49 @@ def open_note(path: Path, line: int | None = None) -> None:
 
     open_in_editor(path, line=line, editor=config.editor)
 
-    # Re-index the note if file was modified
+    sync_note_after_edit(path, config.notes_root, mtime_before)
+
+
+def sync_note_after_edit(
+    path: Path, notes_root: Path, mtime_before: float | None
+) -> None:
+    """Re-index a note after an editor session, if the file changed.
+
+    Never raises. By the time this runs the editor has already written the file, so a
+    failed re-index must not surface as a traceback that looks like a lost edit - the
+    worst case is a stale index until the next ``nb index``.
+
+    Args:
+        path: Absolute path to the note
+        notes_root: Notes root directory
+        mtime_before: The file's mtime before the editor ran, or None if unknown
+
+    """
     try:
-        mtime_after = path.stat().st_mtime
-        if mtime_before is None or mtime_after != mtime_before:
-            update_note_mtime(path, config.notes_root)
-            # Re-index the note to pick up any todo changes
-            print("Syncing nb...", end="", file=sys.stderr, flush=True)
-            _reindex_note_after_edit(path, config.notes_root)
-            print(" done", file=sys.stderr)
+        mtime_after: float | None = path.stat().st_mtime
     except OSError:
-        pass
+        mtime_after = None
+
+    if (
+        mtime_after is not None
+        and mtime_before is not None
+        and mtime_after == mtime_before
+    ):
+        return
+
+    print("Syncing nb...", end="", file=sys.stderr, flush=True)
+    try:
+        update_note_mtime(path, notes_root)
+        # Re-index the note to pick up any todo changes
+        _reindex_note_after_edit(path, notes_root)
+    except Exception as e:
+        print(f" failed: {e}", file=sys.stderr)
+        print(
+            f"{path.name} was saved. Run 'nb index' to sync the index.",
+            file=sys.stderr,
+        )
+    else:
+        print(" done", file=sys.stderr)
 
 
 def _reindex_note_after_edit(path: Path, notes_root: Path) -> None:
